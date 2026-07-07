@@ -1,0 +1,3 @@
+module,skill,display-name,menu-code,description,action,args,phase,preceded-by,followed-by,required,output-location,outputs
+rdx,rdx-setup,Setup RDX Module,SU,Installs the Rust Dev eXpert module: deploys KB section files and applies Rust-expert overrides to Developer / Architect / PM agents,setup,[-H],anytime,,,true,_bmad/rust-kb,KB section files and agent TOML overrides
+rdx,rdx-setup,Update RDX Module,UP,Re-installs KB sections and refreshes agent overrides to the latest version bundled with this skill,update,[-H],anytime,rdx-setup:setup,,false,_bmad/rust-kb,Updated KB section files and agent TOML overrides

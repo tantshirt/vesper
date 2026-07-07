@@ -1,0 +1,123 @@
+# WDS Design Delivery — the contract between design and development.
+delivery:
+  id: "DD-001"
+  name: "First Investment (Scenario 01)"
+  type: "user_flow"
+  status: "ready"
+  priority: "high"
+  created_by: "freya (WDS)"
+  created_at: "2026-07-07T00:00:00Z"
+  updated_at: "2026-07-07T00:00:00Z"
+  version: "1.0"
+
+description: |
+  The end-to-end path from discovering a property to owning a fractional share of it,
+  with the crypto made invisible. Explore → Property Detail → Set up & fund (Privy/KYC/USDC)
+  → Calculator & order preview → Rights & risks acknowledgement → atomic-DvP Confirmation.
+  This is the make-or-break journey: a first-timer must be able to answer "what do I own,
+  where does the return come from, and how do I get out?" and complete a funded investment.
+
+user_value:
+  problem: "Money-app-native young adults want low-minimum, income-producing real estate but don't trust opaque, crypto-complex products."
+  solution: "A mobile-first flow that proves the asset is real (What-You-Own, diligence gates), honest about returns and exit, with wallets/USDC abstracted behind a fiat-like experience."
+  success_criteria:
+    - "≥90% of funded users can correctly answer 'what do you own?' (O3 comprehension / north-star)"
+    - "Visitor→funded-investor conversion instrumented across every step (O2)"
+    - "Zero properties reach the invest flow without all diligence gates human-signed (O1)"
+
+design_artifacts:
+  scenarios:
+    - id: "01-maya-first-investment"
+      path: "C-UX-Scenarios/01-maya-first-investment/"
+      screens: ["01.1-explore","01.2-property-detail","01.3-05-setup-fund","01.6-calculator-order-preview","01.7-risk-legal-ack","01.8-confirmation"]
+  user_flows:
+    - name: "First Investment (clickable prototype)"
+      path: "https://claude.ai/code/artifact/37470475-5e16-4689-8830-1b45b817eb4a"
+      entry: "01.1-explore"
+      exit: "01.8-confirmation"
+  design_system:
+    path: "D-Design-System/00-design-system.md"
+    source_of_truth: "Vesper Brand Direction Brief (Vesper Landing.dc.html)"
+    components:
+      - "Property card (funding bar, yield pill, tags)"
+      - "Dusk hero + glass overlay pill"
+      - "What-You-Own 01/02/03 list"
+      - "Yield breakdown (stacked bar + itemized rows)"
+      - "Liquidity Reality Box"
+      - "Trust Stack gate row (human-signed)"
+      - "Amount input (editable + slider + chips)"
+      - "Base|Downside segmented toggle"
+      - "Order preview rows"
+      - "Acknowledgement checkbox card"
+      - "Confirmation medallion (champagne star) + owner card"
+      - "Primary button (indigo, 13px), monospace eyebrow, tag pill"
+
+technical_requirements:
+  platform:
+    frontend: "Next.js (App Router) on Vercel — mobile-first PWA"
+    backend: "Convex (entitlement authority + reactive layer)"
+    auth_wallet: "Privy (consumer, passkey + embedded self-custodial Solana wallet)"
+    onchain: "Anchor (Rust) · Token-2022 · Token ACL · USDC atomic DvP"
+  integrations:
+    - {name: "Privy", purpose: "Passkey signup + pre-generated embedded wallet; JWT trusted by Convex", required: true}
+    - {name: "Persona", purpose: "KYC / identity verification at confirm-investment", required: true}
+    - {name: "Reg A+ investment-limit check", purpose: "Enforce per-investor cap (10% income/net worth) — replaces accreditation under Reg A+", required: true}
+    - {name: "Privy + Bridge (Stripe)", purpose: "Card/ACH → USDC funding in-flow", required: true}
+    - {name: "Anchor DvP program", purpose: "Atomic payment+asset settlement (settle-or-fail)", required: true}
+    - {name: "Token-2022 + Token ACL", purpose: "Frozen-by-default mint; eligibility-gated self-thaw", required: true}
+    - {name: "Helius", purpose: "Index on-chain events → Convex for reactive UI + reconciliation", required: true}
+    - {name: "Escrow / fund custody", purpose: "Hold USDC/fiat pre-settlement", required: true}   # OPEN: vendor undecided
+  data_models:
+    - {name: "User", fields: ["privyId","kycStatus","eligibility(regA+ cap usage)","walletAddress"]}
+    - {name: "Property", fields: ["id","name","location","targetNetYield","offeringSize","fundedPct","status","spvName"]}
+    - {name: "DiligenceGate", fields: ["propertyId","gateNo","status","signedBy(human)","signedAt","evidenceRef"]}
+    - {name: "Order", fields: ["userId","propertyId","amount","platformFee","status(pending|settled|failed)","dvpTxSig"]}
+    - {name: "Holding", fields: ["userId","propertyId","tokenAmount","ownershipPct","costBasis"]}
+    - {name: "Eligibility", fields: ["userId","propertyId","eligible","jurisdiction","tokenAclState"]}
+    - {name: "AuditLog", fields: ["actor","action","target","timestamp"]}
+
+acceptance_criteria:
+  functional:
+    - "Browse Explore and Property Detail with NO auth/KYC (public)."
+    - "Invest CTA gates into signup/KYC/funding only when needed, and returns the user to the calculator preserving the chosen property."
+    - "Calculator recomputes ownership %, monthly income, first-year base AND downside live on amount change."
+    - "Downside (−12%) is one tap on the projection — never hidden; first-year figure shows loss color + '−'."
+    - "One-time platform fee (0.9%) is a visible line item BEFORE confirmation; management fee stated as already inside net yield (not double-charged)."
+    - "Confirm is disabled until all three risk acknowledgements are actively checked."
+    - "Settlement is atomic DvP: payment and token delivery settle together or the whole order fails; nothing is charged on failure."
+    - "Confirmation states exact ownership %, first-distribution date, and a DvP receipt reference; offers portfolio + on-chain proof."
+  non_functional:
+    - "Mobile-first; LCP < 2.5s, INP < 200ms, CLS < 0.1 (money figures must not shift)."
+    - "WCAG 2.2 AA: visible focus, checkbox/labels, 44px targets, tabular numerals for money."
+    - "No crypto vocabulary (wallet/gas/tx/mint) in the consumer path; on-chain terms only inside the proof view."
+    - "AI never shown as approver anywhere; diligence gates always show a human signer."
+    - "Reg A+ solicitation constraints respected on any pre-auth/public offering content (counsel-gated)."
+  edge_cases:
+    - "Amount < $50 → inline 'minimum is $50', CTA disabled."
+    - "Amount > USDC balance → 'Add $X more' → 01.5 Add Money, preserving amount."
+    - "Restricted jurisdiction / ineligible → calm explainer + waitlist, never a dead-end."
+    - "Offering fully funded mid-flow → 'Fully funded' + notify-me; block settle gracefully."
+    - "DvP failure → nothing charged, clear retry, order marked failed in audit log."
+
+testing_guidance:
+  user_testing:
+    - "Post-invest, ask the user in their own words: what do you own, how are you paid, how do you exit? (O3 measure.)"
+    - "Observe whether the downside toggle is noticed and understood before confirming."
+  qa_testing:
+    - "Verify atomic DvP: force a payment failure and confirm no token is delivered and no charge persists."
+    - "Verify Token ACL: an ineligible/unthawed account cannot receive tokens."
+    - "Verify Convex↔chain reconciliation via Helius after settlement (on-chain wins)."
+    - "Verify fee math and that management fee is not re-charged."
+
+estimated_complexity:
+  size: "large"
+  effort: "6-8 weeks (consumer flow; excludes admin/sponsor + AI diligence)"
+  risk: "medium"
+  dependencies: []   # foundational; admin/diligence pipeline delivers supply separately
+
+notes: |
+  OPEN DECISIONS carried from strategy/platform: (1) escrow/custody vendor for pre-settlement funds;
+  (2) offering-size basis for ownership % (appraisal vs total raise vs share count);
+  (3) exact consumer-visible Gate 0–7 labels; (4) Reg A+ pre-auth marketing limits (counsel).
+  Design source of truth is the Brand Direction Brief; use D-Design-System tokens verbatim.
+  Pairs with DD-002 (Getting Paid) to complete the north-star arc.

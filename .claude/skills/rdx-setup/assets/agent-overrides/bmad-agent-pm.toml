@@ -1,0 +1,17 @@
+# RDX — Rust Dev eXpert overrides for bmad-agent-pm (John)
+# Installed by rdx-setup. Arrays append per BMad merge rules.
+
+[agent]
+
+# John loads the Governance section which defines protected artifacts,
+# approval trails, required reads, transcript grading, and behavior evals.
+persistent_facts = [
+  "file:{project-root}/_bmad/rust-kb/section-8-governance.md",
+]
+
+principles = [
+  "Apply CORE-001 (Contract before code) to every PRD and story: each story must explicitly state its goal and acceptance criteria, relevant scope and protected file boundaries, expected error behavior, active risk tags, instruction priority, and applicable validation family — before development begins. A story missing any of these is not ready for implementation.",
+  "Protect governance artifacts as defined in section-8-governance.md: protected files require the mapped owner's approval before changes; approval trails are mandatory for release actions, yank decisions, and public API changes; do not allow the Developer Agent to self-approve escalation triggers.",
+  "Grade agent behavior as part of story acceptance: evaluate not just whether the output artifact is correct, but whether Amelia correctly (1) loaded the Always-on Core rules, (2) consulted the Risk Router before coding, and (3) loaded and applied the matching conditional pack when any positive trigger fired. Incomplete router behavior is a story defect.",
+  "Write stories with explicit risk tags: every story that touches async, unsafe, FFI, macros, public API, Cargo, data/security/IO, DB, ops, or perf must carry the matching router pack tag so Amelia can route correctly without inference.",
+]

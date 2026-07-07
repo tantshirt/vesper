@@ -1,0 +1,16 @@
+// Convex trusts Privy-issued JWTs via the Custom JWT provider.
+// Privy access tokens: issuer "privy.io", ES256, `aud` = your Privy app id, JWKS served per-app.
+// Set PRIVY_APP_ID in the Convex dashboard (Settings → Environment Variables).
+// Architecture spine I1: Convex trusts the consumer surface's Privy JWT via customJwt.
+
+export default {
+  providers: [
+    {
+      type: "customJwt",
+      applicationID: process.env.PRIVY_APP_ID, // must equal the token `aud`
+      issuer: "privy.io",
+      jwks: `https://auth.privy.io/api/v1/apps/${process.env.PRIVY_APP_ID}/jwks.json`,
+      algorithm: "ES256",
+    },
+  ],
+};

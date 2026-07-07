@@ -1,0 +1,38 @@
+# RDX — bmad-code-review on_complete control (R1 FALLBACK ONLY)
+#
+# This file is the R1 fallback / control test artefact for the
+# Code-Review integration. The PRIMARY integration is R2: the
+# rdx-code-review wrapper installed via the CR menu code override in
+# `_bmad/custom/bmad-agent-dev.toml`. See RDX_TEST_STRATEGY.md §8.
+#
+# R1 ships as a control test (T-L4-CR-002) so we have measurable
+# evidence of the timing limitation:
+#
+#   on_complete fires AFTER bmad-code-review triage finalization and
+#   story status update. By the time rdx-judgment runs, the standard
+#   review has already produced its verdict and the story has moved
+#   to "review" state. RDX findings therefore *cannot influence* the
+#   standard review's verdict, only annotate it post hoc.
+#
+# This timing limitation is the reason R2 is primary. Do NOT install
+# this override in addition to R2 — they will double-evaluate. Use
+# this artefact only when:
+#
+#   - you are running the T-L4-CR-002 control test, OR
+#   - R2 has demonstrably failed in your environment and you accept
+#     the trade-off documented above (findings post-finalization).
+#
+# Install (manual, opt-in): copy this file to
+#   {project-root}/_bmad/custom/bmad-code-review.toml
+# and ensure the bmad-agent-dev override does NOT also rebind CR.
+#
+# Authority class: convention / LLM-cooperative (same as R2 wrapper).
+# Real enforcement remains in the pre-push hook and CI required check.
+
+[workflow]
+# bmad-code-review's documented on_complete hook accepts a single skill
+# name; this fires the RDX Rule Auditor after the standard review
+# completes. The hook IS LLM-cooperative — a non-cooperative session
+# can skip it; that is the structural difference vs R2 where the
+# wrapper itself is what gets invoked.
+on_complete = "rdx-judgment"

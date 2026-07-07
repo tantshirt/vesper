@@ -1,0 +1,5 @@
+modules:
+  rdx:
+    version: "1.0.0"
+    managed_by: rdx-setup
+    enforcement_level: MODE_1

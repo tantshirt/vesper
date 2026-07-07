@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+build/
+
+# convex generated (recreated by `npx convex dev`)
+**/convex/_generated/
+
+# env & secrets — never commit
+.env
+.env.local
+.env*.local
+
+# typescript / next
+*.tsbuildinfo
+next-env.d.ts
+
+# os / editor
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# agent tooling mirrors (reinstallable; not project source)
+.agents/
+.opencode/

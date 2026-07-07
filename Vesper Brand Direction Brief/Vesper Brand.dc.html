@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f0eee9;font-family:Inter,system-ui,sans-serif}
+a{color:#3F3D9E}a:hover{color:#1E1B4B}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 Inter,system-ui,sans-serif;color:#1a1a1a}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 Inter,system-ui,sans-serif;color:rgba(0,0,0,.55)}
+.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+.dv-next{margin:22px 0 0;font:12px/1.5 Inter,system-ui,sans-serif;color:rgba(0,0,0,.5)}
+.dv-group{font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:rgba(0,0,0,.4);margin:34px 0 14px}
+</style>
+</helmet>
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Vesper logo sheet — Architectural V, fractional blocks, developed from <a class="dv-oid" href="#1h">1h</a></span></div>
+
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>The mark — fractional blocks converging on a keystone</div>
+<div class="dv-card" style="width:640px;padding:0;display:flex">
+<div style="width:300px;background-color:#FFFFFF;background-image:linear-gradient(#F1F0F9 1px,transparent 1px),linear-gradient(90deg,#F1F0F9 1px,transparent 1px);background-size:20px 20px;display:flex;align-items:center;justify-content:center;border-right:1px solid #EEEEFB">
+<svg width="152" height="152" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg>
+</div>
+<div style="flex:1;padding:26px 28px;display:flex;flex-direction:column;gap:16px">
+<span style="font-family:Fraunces,serif;font-size:23px;font-weight:540;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">The Architectural V</span>
+<p style="font:400 13px/1.6 Inter,sans-serif;color:#6B7280;margin:0">Five rounded blocks step down two arms and converge on a single keystone — fractional shares of one asset, resolving to one point of light. Built on a 64-unit grid; the V reads clearly even while the blocks stay distinct. Structural, premium, legible to 16px.</p>
+<div style="display:flex;flex-direction:column;gap:10px;border-top:1px solid #EEEEFB;padding-top:16px">
+<div style="display:flex;align-items:center;gap:11px"><span style="width:16px;height:16px;border-radius:4px;background:#1E1B4B;flex:none"></span><span style="font:500 12.5px Inter,sans-serif;color:#14142B">Upper blocks — the dusk field</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:#6B7280;margin-left:auto">#1E1B4B</span></div>
+<div style="display:flex;align-items:center;gap:11px"><span style="width:16px;height:16px;border-radius:4px;background:#4A47B5;flex:none"></span><span style="font:500 12.5px Inter,sans-serif;color:#14142B">Lower blocks — catching light</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:#6B7280;margin-left:auto">#4A47B5</span></div>
+<div style="display:flex;align-items:center;gap:11px"><span style="width:16px;height:16px;border-radius:4px;background:#E8C88C;flex:none"></span><span style="font:500 12.5px Inter,sans-serif;color:#14142B">Keystone — the star</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:#6B7280;margin-left:auto">#E8C88C</span></div>
+</div>
+</div>
+</div></div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Lockups — horizontal, stacked, symbol</div>
+<div class="dv-card" style="width:640px;padding:0;display:flex">
+<div style="flex:1.5;padding:34px 32px;display:flex;flex-direction:column;justify-content:center;gap:6px;border-right:1px solid #EEEEFB">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">PRIMARY · HORIZONTAL</span>
+<div style="display:flex;align-items:center;gap:15px;padding:14px 0"><svg width="46" height="46" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg><span style="font-family:Fraunces,serif;font-size:38px;font-weight:540;font-variation-settings:'opsz' 100;color:#14142B;letter-spacing:-0.015em">Vesper</span></div>
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280;margin-top:14px">STACKED</span>
+<div style="display:flex;flex-direction:column;align-items:center;gap:9px;padding:14px 0"><svg width="54" height="54" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg><span style="font-family:Fraunces,serif;font-size:28px;font-weight:540;font-variation-settings:'opsz' 80;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+<div style="flex:1;background:#FBFBFD;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">SYMBOL</span>
+<svg width="72" height="72" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg>
+<span style="font:400 11px Inter,sans-serif;color:#6B7280">app icon · avatar · favicon</span>
+</div>
+</div></div>
+
+</div>
+
+<div class="dv-group">Color treatments — one-color, reversed, grayscale</div>
+<div class="dv-opts">
+<div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Reproduction across every context</div>
+<div class="dv-card" style="width:840px;padding:24px 26px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+<div style="display:flex;flex-direction:column;gap:8px;align-items:center"><div style="width:100%;height:110px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center"><svg width="58" height="58" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div><span style="font:400 11px Inter,sans-serif;color:#6B7280">Full color · light</span></div>
+<div style="display:flex;flex-direction:column;gap:8px;align-items:center"><div style="width:100%;height:110px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center"><svg width="58" height="58" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#3F3D9E"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#3F3D9E"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#3F3D9E"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#3F3D9E"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#3F3D9E"></rect></svg></div><span style="font:400 11px Inter,sans-serif;color:#6B7280">One-color · indigo</span></div>
+<div style="display:flex;flex-direction:column;gap:8px;align-items:center"><div style="width:100%;height:110px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center"><svg width="58" height="58" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#14142B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#14142B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#14142B"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#14142B"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#14142B"></rect></svg></div><span style="font:400 11px Inter,sans-serif;color:#6B7280">One-color · black</span></div>
+<div style="display:flex;flex-direction:column;gap:8px;align-items:center"><div style="width:100%;height:110px;background:#3F3D9E;border-radius:12px;display:flex;align-items:center;justify-content:center"><svg width="58" height="58" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#C9C7E8"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#C9C7E8"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div><span style="font:400 11px Inter,sans-serif;color:#6B7280">Reversed · on indigo</span></div>
+<div style="display:flex;flex-direction:column;gap:8px;align-items:center"><div style="width:100%;height:110px;background:#1E1B4B;border-radius:12px;display:flex;align-items:center;justify-content:center"><svg width="58" height="58" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div><span style="font:400 11px Inter,sans-serif;color:#6B7280">Reversed · on midnight</span></div>
+<div style="display:flex;flex-direction:column;gap:8px;align-items:center"><div style="width:100%;height:110px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center"><svg width="58" height="58" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#14142B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#14142B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#8A8D98"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#8A8D98"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#C4C7CF"></rect></svg></div><span style="font:400 11px Inter,sans-serif;color:#6B7280">Grayscale</span></div>
+</div></div>
+</div>
+
+<div class="dv-group">Clear space, minimum size & app icon</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2d"><div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Clear space + minimum size</div>
+<div class="dv-card" style="width:640px;padding:0;display:flex">
+<div style="flex:1;padding:26px 28px;border-right:1px solid #EEEEFB;display:flex;flex-direction:column;gap:14px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">CLEAR SPACE</span>
+<div style="align-self:center;padding:30px;border:1.5px dashed #C9C7E8;border-radius:10px;position:relative">
+<svg width="72" height="72" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg>
+<span style="position:absolute;top:11px;right:11px;width:15px;height:15px;border-radius:4px;background:#E8C88C"></span>
+</div>
+<span style="font:400 12px/1.5 Inter,sans-serif;color:#6B7280;text-align:center">Keep clear space ≥ one block (▪) on every side. Never let type or edges intrude.</span>
+</div>
+<div style="flex:1;padding:26px 28px;display:flex;flex-direction:column;gap:16px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">MINIMUM SIZE</span>
+<div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg><span style="font:500 12px Inter,sans-serif;color:#14142B">Symbol · 24px</span></div>
+<div style="display:flex;align-items:center;gap:12px"><svg width="16" height="16" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg><span style="font:500 12px Inter,sans-serif;color:#14142B">Symbol · 16px floor</span></div>
+<div style="display:flex;align-items:center;gap:10px;border-top:1px solid #EEEEFB;padding-top:14px"><svg width="26" height="26" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg><span style="font-family:Fraunces,serif;font-size:21px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+<span style="font:400 12px/1.5 Inter,sans-serif;color:#6B7280">Horizontal lockup · min 96px wide. Below that, use the symbol alone.</span>
+</div>
+</div></div>
+
+<div class="dv-opt" id="2e"><div class="dv-olabel"><a class="dv-oid" href="#2e">2e</a>App icon — indigo field, one point of light</div>
+<div class="dv-card" style="width:520px;padding:26px 28px;display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;gap:28px;align-items:center">
+<div style="display:flex;flex-direction:column;gap:10px;align-items:center"><div style="width:118px;height:118px;border-radius:26px;background:linear-gradient(170deg,#26226B 0%,#1E1B4B 58%,#191637 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(20,20,43,.22)"><svg width="66" height="66" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">primary · dusk field</span></div>
+<div style="display:flex;flex-direction:column;gap:10px;align-items:center"><div style="width:118px;height:118px;border-radius:26px;background:#3F3D9E;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(20,20,43,.22)"><svg width="66" height="66" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#C9C7E8"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#C9C7E8"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">flat indigo</span></div>
+<div style="display:flex;flex-direction:column;gap:8px;justify-content:center">
+<div style="display:flex;gap:12px;align-items:flex-end">
+<div style="width:60px;height:60px;border-radius:13px;background:#1E1B4B;display:flex;align-items:center;justify-content:center"><svg width="36" height="36" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div>
+<div style="width:29px;height:29px;border-radius:6.5px;background:#1E1B4B;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div>
+</div>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">60px · 29px</span>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:18px;background:repeating-linear-gradient(45deg,#ECEBF6 0 10px,#E2E0F0 10px 20px);border-radius:12px;padding:16px 20px">
+<div style="width:54px;height:54px;border-radius:12px;background:#1E1B4B;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(20,20,43,.3)"><svg width="33" height="33" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#A5A1E0"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div>
+<div style="width:54px;height:54px;border-radius:12px;background:#3F3D9E;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(20,20,43,.3)"><svg width="33" height="33" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#FBFBFD"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#C9C7E8"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#C9C7E8"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></div>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">busy-wallpaper test</span>
+</div>
+</div></div>
+
+</div>
+
+<div class="dv-group">Misuse — protect the mark</div>
+<div class="dv-opts">
+<div class="dv-opt" id="2f"><div class="dv-olabel"><a class="dv-oid" href="#2f">2f</a>Don’ts</div>
+<div class="dv-card" style="width:840px;padding:24px 26px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+<div style="display:flex;flex-direction:column;gap:8px"><div style="height:104px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative"><svg width="82" height="46" preserveAspectRatio="none" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg><span style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:99px;background:#C4553D;color:#fff;font:700 11px Inter,sans-serif;display:flex;align-items:center;justify-content:center">✕</span></div><span style="font:400 11.5px Inter,sans-serif;color:#6B7280">Don’t stretch or distort</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="height:104px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative"><svg width="48" height="48" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#7C3AED"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#7C3AED"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#DB2777"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#DB2777"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#DB2777"></rect></svg><span style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:99px;background:#C4553D;color:#fff;font:700 11px Inter,sans-serif;display:flex;align-items:center;justify-content:center">✕</span></div><span style="font:400 11.5px Inter,sans-serif;color:#6B7280">Don’t recolor into web3 purple</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="height:104px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative"><span style="filter:drop-shadow(0 0 7px #7C6BFF);display:flex"><svg width="48" height="48" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></span><span style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:99px;background:#C4553D;color:#fff;font:700 11px Inter,sans-serif;display:flex;align-items:center;justify-content:center">✕</span></div><span style="font:400 11.5px Inter,sans-serif;color:#6B7280">Don’t add glows or effects</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="height:104px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative"><span style="transform:rotate(24deg);display:flex"><svg width="48" height="48" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg></span><span style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:99px;background:#C4553D;color:#fff;font:700 11px Inter,sans-serif;display:flex;align-items:center;justify-content:center">✕</span></div><span style="font:400 11.5px Inter,sans-serif;color:#6B7280">Don’t rotate or tilt</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="height:104px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative"><svg width="48" height="48" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#E8C88C"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#E8C88C"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#EAD9A0"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#EAD9A0"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#3F3D9E"></rect></svg><span style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:99px;background:#C4553D;color:#fff;font:700 11px Inter,sans-serif;display:flex;align-items:center;justify-content:center">✕</span></div><span style="font:400 11.5px Inter,sans-serif;color:#6B7280">Don’t make the star the field</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="height:104px;background:repeating-linear-gradient(45deg,#B9B6DD 0 8px,#A5A1E0 8px 16px);border:1px solid #E5E4F0;border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative"><svg width="48" height="48" viewBox="0 0 64 64"><rect x="10.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="40.5" y="9" width="13" height="13" rx="2.5" fill="#1E1B4B"></rect><rect x="18" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="33" y="23.5" width="13" height="13" rx="2.5" fill="#4A47B5"></rect><rect x="25.5" y="38" width="13" height="13" rx="2.5" fill="#E8C88C"></rect></svg><span style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:99px;background:#C4553D;color:#fff;font:700 11px Inter,sans-serif;display:flex;align-items:center;justify-content:center">✕</span></div><span style="font:400 11.5px Inter,sans-serif;color:#6B7280">Don’t place on low-contrast, busy fields</span></div>
+</div></div>
+</div>
+
+<p class="dv-next">Try next: “roll the <a class="dv-oid" href="#2a">2a</a> block mark through the app screens” · “tighten the block gaps” · “try a 4-block V without the top row”</p>
+</section>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Vesper — identity foundations + core screens (light-first, Fraunces + Inter)</span></div>
+
+<div class="dv-group">V monogram — four directions, two takes each</div>
+<div class="dv-opts">
+
+<!-- 1a Star-point V / spark gap -->
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Star-point V — the spark IS the vertex</div>
+<div class="dv-card" style="width:300px">
+<div style="display:grid;grid-template-columns:1fr 1fr">
+<div style="background:#FFFFFF;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M32 44 L33.8 48.2 L38 50 L33.8 51.8 L32 56 L30.2 51.8 L26 50 L30.2 48.2 Z" fill="#E8C88C"></path></svg></div>
+<div style="background:#1E1B4B;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#FBFBFD" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#FBFBFD" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M32 44 L33.8 48.2 L38 50 L33.8 51.8 L32 56 L30.2 51.8 L26 50 L30.2 48.2 Z" fill="#E8C88C"></path></svg></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid #EEEEFB">
+<svg width="16" height="16" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#14142B" stroke-width="8" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#14142B" stroke-width="8" stroke-linecap="round" fill="none"></path><path d="M32 43 L34.2 47.8 L39 50 L34.2 52.2 L32 57 L29.8 52.2 L25 50 L29.8 47.8 Z" fill="#E8C88C"></path></svg>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">16px</span>
+<div style="display:flex;align-items:center;gap:9px;margin-left:auto"><svg width="26" height="26" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M32 44 L33.8 48.2 L38 50 L33.8 51.8 L32 56 L30.2 51.8 L26 50 L30.2 48.2 Z" fill="#E8C88C"></path></svg><span style="font-family:Fraunces,serif;font-size:23px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+</div></div>
+
+<!-- 1b Star-point V / star held inside the letter -->
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Star-point V — solid letter, star held inside</div>
+<div class="dv-card" style="width:300px">
+<div style="display:grid;grid-template-columns:1fr 1fr">
+<div style="background:#FFFFFF;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><path d="M12 10 L24 10 L32 32 L40 10 L52 10 L38 54 L26 54 Z" fill="#14142B"></path><path d="M32 41 L33.6 45.4 L38 47 L33.6 48.6 L32 53 L30.4 48.6 L26 47 L30.4 45.4 Z" fill="#E8C88C"></path></svg></div>
+<div style="background:#1E1B4B;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><path d="M12 10 L24 10 L32 32 L40 10 L52 10 L38 54 L26 54 Z" fill="#FBFBFD"></path><path d="M32 41 L33.6 45.4 L38 47 L33.6 48.6 L32 53 L30.4 48.6 L26 47 L30.4 45.4 Z" fill="#3F3D9E"></path></svg></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid #EEEEFB">
+<svg width="16" height="16" viewBox="0 0 64 64"><path d="M12 10 L24 10 L32 32 L40 10 L52 10 L38 54 L26 54 Z" fill="#14142B"></path><path d="M32 40 L34 45 L39 47 L34 49 L32 54 L30 49 L25 47 L30 45 Z" fill="#E8C88C"></path></svg>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">16px</span>
+<div style="display:flex;align-items:center;gap:9px;margin-left:auto"><svg width="26" height="26" viewBox="0 0 64 64"><path d="M12 10 L24 10 L32 32 L40 10 L52 10 L38 54 L26 54 Z" fill="#14142B"></path><path d="M32 41 L33.6 45.4 L38 47 L33.6 48.6 L32 53 L30.4 48.6 L26 47 L30.4 45.4 Z" fill="#E8C88C"></path></svg><span style="font-family:Fraunces,serif;font-size:23px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+</div></div>
+
+<!-- 1c Horizon V -->
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Horizon V — vertex lands on the horizon</div>
+<div class="dv-card" style="width:300px">
+<div style="display:grid;grid-template-columns:1fr 1fr">
+<div style="background:#FFFFFF;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><line x1="6" y1="42" x2="58" y2="42" stroke="#14142B" stroke-width="2.5"></line><path d="M17 12 L32 42 L47 12" stroke="#3F3D9E" stroke-width="6.5" fill="none" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="32" cy="42" r="4.2" fill="#E8C88C"></circle></svg></div>
+<div style="background:#1E1B4B;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><line x1="6" y1="42" x2="58" y2="42" stroke="#FBFBFD" stroke-width="2.5" opacity="0.55"></line><path d="M17 12 L32 42 L47 12" stroke="#FBFBFD" stroke-width="6.5" fill="none" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="32" cy="42" r="4.2" fill="#E8C88C"></circle></svg></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid #EEEEFB">
+<svg width="16" height="16" viewBox="0 0 64 64"><line x1="4" y1="42" x2="60" y2="42" stroke="#14142B" stroke-width="3"></line><path d="M16 10 L32 42 L48 10" stroke="#3F3D9E" stroke-width="8" fill="none" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="32" cy="42" r="5.5" fill="#E8C88C"></circle></svg>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">16px</span>
+<div style="display:flex;align-items:center;gap:9px;margin-left:auto"><svg width="26" height="26" viewBox="0 0 64 64"><line x1="6" y1="42" x2="58" y2="42" stroke="#14142B" stroke-width="2.5"></line><path d="M17 12 L32 42 L47 12" stroke="#3F3D9E" stroke-width="6.5" fill="none" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="32" cy="42" r="4.2" fill="#E8C88C"></circle></svg><span style="font-family:Fraunces,serif;font-size:23px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+</div></div>
+
+<!-- 1d Horizon V / dusk reflection -->
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Horizon V — dusk reflection below the line</div>
+<div class="dv-card" style="width:300px">
+<div style="display:grid;grid-template-columns:1fr 1fr">
+<div style="background:#FFFFFF;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><path d="M17 10 L31 38" stroke="#14142B" stroke-width="6.5" stroke-linecap="round" fill="none"></path><path d="M47 10 L33 38" stroke="#14142B" stroke-width="6.5" stroke-linecap="round" fill="none"></path><line x1="8" y1="38" x2="56" y2="38" stroke="#14142B" stroke-width="2"></line><path d="M25 51 L32 40 L39 51" stroke="#3F3D9E" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.32"></path><circle cx="32" cy="38" r="3.8" fill="#E8C88C"></circle></svg></div>
+<div style="background:#1E1B4B;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><path d="M17 10 L31 38" stroke="#FBFBFD" stroke-width="6.5" stroke-linecap="round" fill="none"></path><path d="M47 10 L33 38" stroke="#FBFBFD" stroke-width="6.5" stroke-linecap="round" fill="none"></path><line x1="8" y1="38" x2="56" y2="38" stroke="#FBFBFD" stroke-width="2" opacity="0.55"></line><path d="M25 51 L32 40 L39 51" stroke="#FBFBFD" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.3"></path><circle cx="32" cy="38" r="3.8" fill="#E8C88C"></circle></svg></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid #EEEEFB">
+<svg width="16" height="16" viewBox="0 0 64 64"><path d="M16 8 L31 38" stroke="#14142B" stroke-width="8" stroke-linecap="round" fill="none"></path><path d="M48 8 L33 38" stroke="#14142B" stroke-width="8" stroke-linecap="round" fill="none"></path><line x1="6" y1="38" x2="58" y2="38" stroke="#14142B" stroke-width="3"></line><circle cx="32" cy="38" r="5.5" fill="#E8C88C"></circle></svg>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">16px</span>
+<div style="display:flex;align-items:center;gap:9px;margin-left:auto"><svg width="26" height="26" viewBox="0 0 64 64"><path d="M17 10 L31 38" stroke="#14142B" stroke-width="6.5" stroke-linecap="round" fill="none"></path><path d="M47 10 L33 38" stroke="#14142B" stroke-width="6.5" stroke-linecap="round" fill="none"></path><line x1="8" y1="38" x2="56" y2="38" stroke="#14142B" stroke-width="2"></line><path d="M25 51 L32 40 L39 51" stroke="#3F3D9E" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.32"></path><circle cx="32" cy="38" r="3.8" fill="#E8C88C"></circle></svg><span style="font-family:Fraunces,serif;font-size:23px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+</div></div>
+
+<!-- 1e Aperture V / window -->
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Aperture V — a window framing the light</div>
+<div class="dv-card" style="width:300px">
+<div style="display:grid;grid-template-columns:1fr 1fr">
+<div style="background:#FFFFFF;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="14" fill="#3F3D9E"></rect><path d="M22 19 L32 41 L42 19" stroke="#FBFBFD" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="32" cy="48.5" r="3.2" fill="#E8C88C"></circle></svg></div>
+<div style="background:#1E1B4B;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="14" fill="#FBFBFD"></rect><path d="M22 19 L32 41 L42 19" stroke="#1E1B4B" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="32" cy="48.5" r="3.2" fill="#E8C88C"></circle></svg></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid #EEEEFB">
+<svg width="16" height="16" viewBox="0 0 64 64"><rect x="4" y="4" width="56" height="56" rx="16" fill="#3F3D9E"></rect><path d="M19 16 L32 42 L45 16" stroke="#FBFBFD" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="32" cy="50" r="4.5" fill="#E8C88C"></circle></svg>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">16px</span>
+<div style="display:flex;align-items:center;gap:9px;margin-left:auto"><svg width="26" height="26" viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="14" fill="#3F3D9E"></rect><path d="M22 19 L32 41 L42 19" stroke="#FBFBFD" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="32" cy="48.5" r="3.2" fill="#E8C88C"></circle></svg><span style="font-family:Fraunces,serif;font-size:23px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+</div></div>
+
+<!-- 1f Aperture V / doorway -->
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Aperture V — a doorway, dwelling lit from within</div>
+<div class="dv-card" style="width:300px">
+<div style="display:grid;grid-template-columns:1fr 1fr">
+<div style="background:#FFFFFF;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><path d="M14 58 L14 28 A18 18 0 0 1 50 28 L50 58 Z" fill="#1E1B4B"></path><path d="M24 25 L32 43 L40 25" stroke="#FBFBFD" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="32" cy="50" r="3" fill="#E8C88C"></circle></svg></div>
+<div style="background:#1E1B4B;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><path d="M14 58 L14 28 A18 18 0 0 1 50 28 L50 58 Z" fill="#FBFBFD"></path><path d="M24 25 L32 43 L40 25" stroke="#1E1B4B" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="32" cy="50" r="3" fill="#E8C88C"></circle></svg></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid #EEEEFB">
+<svg width="16" height="16" viewBox="0 0 64 64"><path d="M10 60 L10 28 A22 22 0 0 1 54 28 L54 60 Z" fill="#1E1B4B"></path><path d="M22 24 L32 45 L42 24" stroke="#FBFBFD" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="32" cy="52" r="4.2" fill="#E8C88C"></circle></svg>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">16px</span>
+<div style="display:flex;align-items:center;gap:9px;margin-left:auto"><svg width="26" height="26" viewBox="0 0 64 64"><path d="M14 58 L14 28 A18 18 0 0 1 50 28 L50 58 Z" fill="#1E1B4B"></path><path d="M24 25 L32 43 L40 25" stroke="#FBFBFD" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="32" cy="50" r="3" fill="#E8C88C"></circle></svg><span style="font-family:Fraunces,serif;font-size:23px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+</div></div>
+
+<!-- 1g Architectural facet V -->
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Architectural V — two planes, a building corner</div>
+<div class="dv-card" style="width:300px">
+<div style="display:grid;grid-template-columns:1fr 1fr">
+<div style="background:#FFFFFF;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><polygon points="12,10 24,10 38,52 26,52" fill="#1E1B4B"></polygon><polygon points="40,10 52,10 38,52 26,52" fill="#3F3D9E"></polygon><polygon points="32,54 35,57.5 32,61 29,57.5" fill="#E8C88C"></polygon></svg></div>
+<div style="background:#1E1B4B;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><polygon points="12,10 24,10 38,52 26,52" fill="#FBFBFD"></polygon><polygon points="40,10 52,10 38,52 26,52" fill="#A5A1E0"></polygon><polygon points="32,54 35,57.5 32,61 29,57.5" fill="#E8C88C"></polygon></svg></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid #EEEEFB">
+<svg width="16" height="16" viewBox="0 0 64 64"><polygon points="10,8 24,8 39,52 25,52" fill="#1E1B4B"></polygon><polygon points="40,8 54,8 39,52 25,52" fill="#3F3D9E"></polygon><polygon points="32,53 36,57.5 32,62 28,57.5" fill="#E8C88C"></polygon></svg>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">16px</span>
+<div style="display:flex;align-items:center;gap:9px;margin-left:auto"><svg width="26" height="26" viewBox="0 0 64 64"><polygon points="12,10 24,10 38,52 26,52" fill="#1E1B4B"></polygon><polygon points="40,10 52,10 38,52 26,52" fill="#3F3D9E"></polygon><polygon points="32,54 35,57.5 32,61 29,57.5" fill="#E8C88C"></polygon></svg><span style="font-family:Fraunces,serif;font-size:23px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+</div></div>
+
+<!-- 1h Architectural blocks V -->
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Architectural V — fractional blocks, gold keystone</div>
+<div class="dv-card" style="width:300px">
+<div style="display:grid;grid-template-columns:1fr 1fr">
+<div style="background:#FFFFFF;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><rect x="11" y="9" width="12" height="12" rx="2" fill="#1E1B4B"></rect><rect x="18.5" y="23.5" width="12" height="12" rx="2" fill="#3F3D9E"></rect><rect x="41" y="9" width="12" height="12" rx="2" fill="#1E1B4B"></rect><rect x="33.5" y="23.5" width="12" height="12" rx="2" fill="#3F3D9E"></rect><rect x="26" y="38" width="12" height="12" rx="2" fill="#E8C88C"></rect></svg></div>
+<div style="background:#1E1B4B;display:flex;align-items:center;justify-content:center;height:150px"><svg width="84" height="84" viewBox="0 0 64 64"><rect x="11" y="9" width="12" height="12" rx="2" fill="#FBFBFD"></rect><rect x="18.5" y="23.5" width="12" height="12" rx="2" fill="#A5A1E0"></rect><rect x="41" y="9" width="12" height="12" rx="2" fill="#FBFBFD"></rect><rect x="33.5" y="23.5" width="12" height="12" rx="2" fill="#A5A1E0"></rect><rect x="26" y="38" width="12" height="12" rx="2" fill="#E8C88C"></rect></svg></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-top:1px solid #EEEEFB">
+<svg width="16" height="16" viewBox="0 0 64 64"><rect x="9" y="7" width="14" height="14" rx="2" fill="#1E1B4B"></rect><rect x="17.5" y="23" width="14" height="14" rx="2" fill="#3F3D9E"></rect><rect x="41" y="7" width="14" height="14" rx="2" fill="#1E1B4B"></rect><rect x="32.5" y="23" width="14" height="14" rx="2" fill="#3F3D9E"></rect><rect x="25" y="39" width="14" height="14" rx="2" fill="#E8C88C"></rect></svg>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">16px</span>
+<div style="display:flex;align-items:center;gap:9px;margin-left:auto"><svg width="26" height="26" viewBox="0 0 64 64"><rect x="11" y="9" width="12" height="12" rx="2" fill="#1E1B4B"></rect><rect x="18.5" y="23.5" width="12" height="12" rx="2" fill="#3F3D9E"></rect><rect x="41" y="9" width="12" height="12" rx="2" fill="#1E1B4B"></rect><rect x="33.5" y="23.5" width="12" height="12" rx="2" fill="#3F3D9E"></rect><rect x="26" y="38" width="12" height="12" rx="2" fill="#E8C88C"></rect></svg><span style="font-family:Fraunces,serif;font-size:23px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span></div>
+</div>
+</div></div>
+
+</div>
+
+<div class="dv-group">App icon studies</div>
+<div class="dv-opts">
+<div class="dv-opt" id="1i"><div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>App icons — indigo field, one point of light (using <a class="dv-oid" href="#1a">1a</a> · <a class="dv-oid" href="#1c">1c</a> · <a class="dv-oid" href="#1g">1g</a>)</div>
+<div class="dv-card" style="width:660px;padding:26px 28px;display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;gap:36px">
+<div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+<div style="width:120px;height:120px;border-radius:27px;background:linear-gradient(170deg,#26226B 0%,#1E1B4B 55%,#191637 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(20,20,43,.22)"><svg width="72" height="72" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#FBFBFD" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#FBFBFD" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M32 44 L33.8 48.2 L38 50 L33.8 51.8 L32 56 L30.2 51.8 L26 50 L30.2 48.2 Z" fill="#E8C88C"></path></svg></div>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">1a · dusk field</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+<div style="width:120px;height:120px;border-radius:27px;background:#3F3D9E;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(20,20,43,.22)"><svg width="72" height="72" viewBox="0 0 64 64"><line x1="8" y1="42" x2="56" y2="42" stroke="#FBFBFD" stroke-width="2.5" opacity="0.5"></line><path d="M17 12 L32 42 L47 12" stroke="#FBFBFD" stroke-width="6.5" fill="none" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="32" cy="42" r="4.2" fill="#E8C88C"></circle></svg></div>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">1c · flat indigo</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+<div style="width:120px;height:120px;border-radius:27px;background:linear-gradient(170deg,#26226B 0%,#1E1B4B 60%,#191637 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(20,20,43,.22)"><svg width="72" height="72" viewBox="0 0 64 64"><polygon points="12,10 24,10 38,52 26,52" fill="#FBFBFD"></polygon><polygon points="40,10 52,10 38,52 26,52" fill="#A5A1E0"></polygon><polygon points="32,54 35,57.5 32,61 29,57.5" fill="#E8C88C"></polygon></svg></div>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">1g · dusk field</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;justify-content:center">
+<div style="display:flex;gap:12px;align-items:flex-end">
+<div style="width:60px;height:60px;border-radius:13.5px;background:#1E1B4B;display:flex;align-items:center;justify-content:center"><svg width="36" height="36" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#FBFBFD" stroke-width="7.5" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#FBFBFD" stroke-width="7.5" stroke-linecap="round" fill="none"></path><path d="M32 43 L34 47.8 L38.8 50 L34 52.2 L32 57 L30 52.2 L25.2 50 L30 47.8 Z" fill="#E8C88C"></path></svg></div>
+<div style="width:29px;height:29px;border-radius:6.5px;background:#1E1B4B;display:flex;align-items:center;justify-content:center"><svg width="19" height="19" viewBox="0 0 64 64"><path d="M14 8 L30 40" stroke="#FBFBFD" stroke-width="9" stroke-linecap="round" fill="none"></path><path d="M50 8 L34 40" stroke="#FBFBFD" stroke-width="9" stroke-linecap="round" fill="none"></path><circle cx="32" cy="50" r="7" fill="#E8C88C"></circle></svg></div>
+</div>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">60px · 29px</span>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:20px;background:repeating-linear-gradient(45deg,#ECEBF6 0 10px,#E2E0F0 10px 20px);border-radius:12px;padding:16px 20px">
+<div style="width:54px;height:54px;border-radius:12px;background:#1E1B4B;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(20,20,43,.3)"><svg width="32" height="32" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#FBFBFD" stroke-width="7.5" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#FBFBFD" stroke-width="7.5" stroke-linecap="round" fill="none"></path><path d="M32 43 L34 47.8 L38.8 50 L34 52.2 L32 57 L30 52.2 L25.2 50 L30 47.8 Z" fill="#E8C88C"></path></svg></div>
+<div style="width:54px;height:54px;border-radius:12px;background:#3F3D9E;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(20,20,43,.3)"><svg width="32" height="32" viewBox="0 0 64 64"><line x1="8" y1="42" x2="56" y2="42" stroke="#FBFBFD" stroke-width="2.5" opacity="0.5"></line><path d="M17 12 L32 42 L47 12" stroke="#FBFBFD" stroke-width="7" fill="none" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="32" cy="42" r="4.5" fill="#E8C88C"></circle></svg></div>
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">busy-wallpaper test</span>
+</div>
+</div></div>
+</div>
+
+<div class="dv-group">Color tokens + type system</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1j"><div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>Color tokens — light-first, dark-mode-ready</div>
+<div class="dv-card" style="width:460px;padding:26px 28px;display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">BRAND / INDIGO</span>
+<div style="display:flex;gap:8px">
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:58px;border-radius:8px;background:#3F3D9E"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Vesper Indigo</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#3F3D9E</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:58px;border-radius:8px;background:#1E1B4B"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Midnight</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#1E1B4B</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:58px;border-radius:8px;background:#F4F3FC;border:1px solid #E5E4F0"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Lavender tint</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#F4F3FC</span></div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">THE EVENING STAR — ONE MOMENT PER SCREEN, MAX</span>
+<div style="display:flex;gap:8px">
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#E8C88C"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Star / Champagne</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#E8C88C</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#EAD9A0"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Star / soft</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#EAD9A0</span></div>
+<div style="flex:2"></div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">NEUTRALS</span>
+<div style="display:flex;gap:8px">
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#FBFBFD;border:1px solid #E5E4F0"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Background</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#FBFBFD</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#FFFFFF;border:1px solid #E5E4F0"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Surface</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#FFFFFF</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#14142B"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Text</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#14142B</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#6B7280"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Muted</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#6B7280</span></div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">SEMANTIC — CALM, NEVER ALARMIST</span>
+<div style="display:flex;gap:8px">
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#2E9E6B;display:flex;align-items:center;justify-content:center;color:#fff;font:600 12px Inter,sans-serif;font-variant-numeric:tabular-nums">+4.8%</div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Income / gain</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#2E9E6B</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#C4553D;display:flex;align-items:center;justify-content:center;color:#fff;font:600 12px Inter,sans-serif;font-variant-numeric:tabular-nums">−1.2%</div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Loss / risk</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#C4553D</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px"><div style="height:44px;border-radius:8px;background:#C99A3F"></div><span style="font:500 10.5px Inter,sans-serif;color:#14142B">Warning</span><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">#C99A3F</span></div>
+</div>
+</div>
+<div style="border-top:1px solid #EEEEFB;padding-top:14px;font:400 11px/1.6 Inter,sans-serif;color:#6B7280">Gain and loss always pair color with a sign or arrow — never color alone. Tokens structured so dark mode is a flip (Midnight becomes the field, the star the highlight), not a rebuild.</div>
+</div></div>
+
+<div class="dv-opt" id="1k"><div class="dv-olabel"><a class="dv-oid" href="#1k">1k</a>Type system — Fraunces speaks, Inter counts</div>
+<div class="dv-card" style="width:560px;padding:30px 32px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:14px;border-bottom:1px solid #EEEEFB;padding-bottom:22px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">DISPLAY — FRAUNCES · HEADLINES, WORDMARK, BRAND MOMENTS</span>
+<div style="font-family:Fraunces,serif;font-size:52px;line-height:1.05;font-weight:480;font-variation-settings:'opsz' 144;color:#14142B;letter-spacing:-0.015em;text-wrap:balance">Own real estate income, quietly.</div>
+<div style="font-family:Fraunces,serif;font-size:28px;line-height:1.15;font-weight:520;font-variation-settings:'opsz' 80;color:#14142B">Your money works in the evening.</div>
+<div style="font-family:Fraunces,serif;font-size:19px;line-height:1.3;font-weight:500;font-style:italic;font-variation-settings:'opsz' 40;color:#3F3D9E">Real assets. Real returns. Real simple.</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;border-bottom:1px solid #EEEEFB;padding-bottom:22px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">UI + DATA — INTER · NUMBERS, TABLES, FORMS, LEGAL</span>
+<div style="font:400 15px/1.55 Inter,sans-serif;color:#14142B;max-width:44ch">This property targets 6.2% annual net income — 4.8% from rent, 1.4% from expected appreciation.</div>
+<div style="font:400 12px/1.5 Inter,sans-serif;color:#6B7280;max-width:52ch">Secondary market liquidity is not guaranteed. Your order may not fill.</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">MONEY IS ALWAYS SANS, ALWAYS TABULAR</span>
+<div style="display:grid;grid-template-columns:1fr auto auto;gap:7px 26px;font-variant-numeric:tabular-nums;font-family:Inter,sans-serif">
+<span style="font:500 12px Inter,sans-serif;color:#6B7280"></span><span style="font:600 10.5px Inter,sans-serif;color:#6B7280;letter-spacing:.05em">VALUE</span><span style="font:600 10.5px Inter,sans-serif;color:#6B7280;letter-spacing:.05em">INCOME</span>
+<span style="font-size:13px;color:#14142B">The Monroe — Tampa, FL</span><span style="font-size:13px;font-weight:600;color:#14142B">$1,284.06</span><span style="font-size:13px;font-weight:600;color:#2E9E6B">+$3.42</span>
+<span style="font-size:13px;color:#14142B">Cedar Row — Columbus, OH</span><span style="font-size:13px;font-weight:600;color:#14142B">$412.88</span><span style="font-size:13px;font-weight:600;color:#2E9E6B">+$1.07</span>
+<span style="font-size:13px;color:#14142B">Alder Court — Raleigh, NC</span><span style="font-size:13px;font-weight:600;color:#14142B">$96.20</span><span style="font-size:13px;font-weight:600;color:#6B7280">$0.00</span>
+</div>
+<div style="font:400 11px/1.6 Inter,sans-serif;color:#6B7280;margin-top:4px">Serif never touches a financial number. Inter carries tabular lining figures so columns align.</div>
+</div>
+</div></div>
+
+</div>
+
+<div class="dv-group">Core UI kit starters</div>
+<div class="dv-opts">
+<div class="dv-opt" id="1l"><div class="dv-olabel"><a class="dv-oid" href="#1l">1l</a>UI kit — buttons, property card, the ownership + income moments</div>
+<div class="dv-card" style="width:840px;padding:30px 32px;display:flex;gap:32px;background:#FBFBFD">
+<div style="display:flex;flex-direction:column;gap:22px;width:300px">
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">BUTTONS</span>
+<div style="display:flex;flex-direction:column;gap:9px">
+<button style="height:48px;border-radius:12px;background:#3F3D9E;color:#FFFFFF;border:none;font:600 15px Inter,sans-serif;cursor:pointer" style-hover="background:#35338A">Invest in this property</button>
+<button style="height:48px;border-radius:12px;background:#FFFFFF;color:#3F3D9E;border:1px solid #C9C7E8;font:600 15px Inter,sans-serif;cursor:pointer" style-hover="background:#F4F3FC">View documents</button>
+<button style="height:40px;border-radius:10px;background:transparent;color:#6B7280;border:none;font:500 14px Inter,sans-serif;cursor:pointer" style-hover="color:#14142B">How income works</button>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">PROPERTY CARD</span>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;overflow:hidden">
+<div style="height:150px;background:repeating-linear-gradient(45deg,#ECEBF6 0 12px,#E2E0F0 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">dusk-hour property photo</span><span style="position:absolute;top:12px;left:12px;background:rgba(20,20,43,.78);color:#FFFFFF;font:600 10.5px Inter,sans-serif;padding:4px 9px;border-radius:99px">Funding · 74%</span></div>
+<div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-family:Fraunces,serif;font-size:19px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">The Monroe</span><span style="font:400 12px Inter,sans-serif;color:#6B7280">Tampa, FL · Multifamily · 8 units</span></div>
+<div style="display:flex;gap:14px;font-variant-numeric:tabular-nums">
+<div style="display:flex;flex-direction:column;gap:1px"><span style="font:600 15px Inter,sans-serif;color:#14142B">6.2%</span><span style="font:400 10.5px Inter,sans-serif;color:#6B7280">target net</span></div>
+<div style="display:flex;flex-direction:column;gap:1px"><span style="font:600 15px Inter,sans-serif;color:#14142B">$50</span><span style="font:400 10.5px Inter,sans-serif;color:#6B7280">minimum</span></div>
+<div style="display:flex;flex-direction:column;gap:1px"><span style="font:600 15px Inter,sans-serif;color:#14142B">Monthly</span><span style="font:400 10.5px Inter,sans-serif;color:#6B7280">income</span></div>
+</div>
+<div style="display:flex;gap:6px"><span style="font:500 10.5px Inter,sans-serif;color:#3F3D9E;background:#F4F3FC;padding:4px 9px;border-radius:99px">Moderate risk</span><span style="font:500 10.5px Inter,sans-serif;color:#6B7280;background:#F3F3F6;padding:4px 9px;border-radius:99px">Liquidity 3/5</span><span style="font:500 10.5px Inter,sans-serif;color:#2E9E6B;background:#EAF6F0;padding:4px 9px;border-radius:99px">8/8 gates ✓</span></div>
+</div>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:22px;flex:1">
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">THE “WHAT YOU OWN” CARD</span>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:12px">
+<span style="font-family:Fraunces,serif;font-size:20px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">What you own</span>
+<div style="display:flex;flex-direction:column;gap:8px;font:400 13px/1.5 Inter,sans-serif;color:#14142B">
+<div style="display:flex;gap:10px"><span style="color:#3F3D9E;font-weight:600;min-width:16px">1</span><span>Tokens in <strong style="font-weight:600">Monroe Tampa SPV, LLC</strong> — the entity that owns the building.</span></div>
+<div style="display:flex;gap:10px"><span style="color:#3F3D9E;font-weight:600;min-width:16px">2</span><span>A right to your share of net rental income, paid monthly in USDC.</span></div>
+<div style="display:flex;gap:10px"><span style="color:#3F3D9E;font-weight:600;min-width:16px">3</span><span>A share of sale proceeds if the property is sold, after debts and fees.</span></div>
+</div>
+<div style="display:flex;gap:8px;align-items:center;border-top:1px solid #EEEEFB;padding-top:12px"><span style="font:400 12px Inter,sans-serif;color:#6B7280">Not a deed. Not a promise of liquidity.</span><a href="#1l" style="font:500 12px Inter,sans-serif;color:#3F3D9E;margin-left:auto;text-decoration:none">Read the legal docs →</a></div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">THE INCOME MOMENT — THE STAR’S ONE APPEARANCE</span>
+<div style="background:#1E1B4B;border-radius:16px;padding:22px;display:flex;align-items:center;gap:18px">
+<svg width="34" height="34" viewBox="0 0 64 64"><path d="M32 12 L36 28 L52 32 L36 36 L32 52 L28 36 L12 32 L28 28 Z" fill="#E8C88C"></path></svg>
+<div style="display:flex;flex-direction:column;gap:3px">
+<span style="font-family:Fraunces,serif;font-size:21px;font-weight:500;font-variation-settings:'opsz' 40;color:#FBFBFD">Rent arrived while you slept.</span>
+<span style="font:400 13.5px Inter,sans-serif;color:#B9B6DD;font-variant-numeric:tabular-nums">Your share of this month’s rent: <strong style="color:#E8C88C;font-weight:600">$3.42</strong> · Lifetime income: <strong style="color:#FBFBFD;font-weight:600">$41.80</strong></span>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#6B7280">NUMBER / DATA TREATMENT</span>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:18px 22px;display:flex;gap:28px;font-variant-numeric:tabular-nums">
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Portfolio value</span><span style="font:600 24px Inter,sans-serif;color:#14142B;letter-spacing:-0.01em">$1,793.14</span></div>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Lifetime income</span><span style="font:600 24px Inter,sans-serif;color:#2E9E6B;letter-spacing:-0.01em">↑ $41.80</span></div>
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Est. monthly</span><span style="font:600 24px Inter,sans-serif;color:#14142B;letter-spacing:-0.01em">$9.12</span></div>
+</div>
+</div>
+</div>
+</div></div>
+</div>
+
+<div class="dv-group">Brand mini-guide</div>
+<div class="dv-opts">
+<div class="dv-opt" id="1m"><div class="dv-olabel"><a class="dv-oid" href="#1m">1m</a>One-page do’s and don’ts + the story</div>
+<div class="dv-card" style="width:780px;padding:36px 40px;display:flex;flex-direction:column;gap:26px">
+<div style="display:flex;align-items:center;gap:12px;border-bottom:1px solid #EEEEFB;padding-bottom:20px">
+<svg width="30" height="30" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M32 44 L33.8 48.2 L38 50 L33.8 51.8 L32 56 L30.2 51.8 L26 50 L30.2 48.2 Z" fill="#E8C88C"></path></svg>
+<span style="font-family:Fraunces,serif;font-size:26px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">Vesper</span>
+<span style="font:400 12px Inter,sans-serif;color:#6B7280;margin-left:auto">Brand mini-guide · v1</span>
+</div>
+<div style="font-family:Fraunces,serif;font-size:24px;line-height:1.3;font-weight:460;font-variation-settings:'opsz' 60;color:#14142B;max-width:34ch;text-wrap:balance">Vesper is the evening star: a fixed, reliable point of light at dusk. Income that quietly works while you rest.</div>
+<div style="display:flex;gap:8px;align-items:center">
+<div style="height:34px;flex:3;background:#FBFBFD;border:1px solid #E5E4F0;border-radius:7px"></div>
+<div style="height:34px;flex:2;background:#F4F3FC;border-radius:7px"></div>
+<div style="height:34px;flex:2;background:#3F3D9E;border-radius:7px"></div>
+<div style="height:34px;flex:1.4;background:#1E1B4B;border-radius:7px"></div>
+<div style="height:34px;flex:0.6;background:#E8C88C;border-radius:7px"></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px">
+<div style="display:flex;flex-direction:column;gap:9px">
+<span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#2E9E6B">DO</span>
+<div style="display:flex;flex-direction:column;gap:7px;font:400 13px/1.5 Inter,sans-serif;color:#14142B">
+<span>Let white space and one indigo accent carry the design.</span>
+<span>Serif for headlines and brand moments; sans for every number.</span>
+<span>Use the warm star as a single, rare point of light.</span>
+<span>Make the mark work tiny, in grayscale, light and dark.</span>
+<span>Keep everything calm, premium, trustworthy. When in doubt, remove something.</span>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<span style="font:600 11px ui-monospace,Menlo,monospace;letter-spacing:.1em;color:#C4553D">DON’T</span>
+<div style="display:flex;flex-direction:column;gap:7px;font:400 13px/1.5 Inter,sans-serif;color:#14142B">
+<span>No web3-purple gradients, glows, or neon.</span>
+<span>No crypto clichés — 3D coins, rockets, degen energy.</span>
+<span>No second loud color; the star is a highlight, not a co-star.</span>
+<span>Never set financial numbers in the serif.</span>
+<span>Twilight, not midnight — never dark, heavy, or aggressive.</span>
+</div>
+</div>
+</div>
+<div style="border-top:1px solid #EEEEFB;padding-top:16px;display:flex;gap:24px;font:400 12px/1.6 Inter,sans-serif;color:#6B7280">
+<span style="flex:1"><strong style="color:#14142B;font-weight:600">Type.</strong> Fraunces (display, opsz high) + Inter (UI/data, tabular figures). 1–2 fonts, no more.</span>
+<span style="flex:1"><strong style="color:#14142B;font-weight:600">Motion.</strong> Eased, settled, no bounce. If anything twinkles, it’s the star — once, quietly.</span>
+<span style="flex:1"><strong style="color:#14142B;font-weight:600">Imagery.</strong> Real properties, warm dusk light. No handshakes, no skyscraper glass, no coins.</span>
+</div>
+</div></div>
+</div>
+
+<div class="dv-group">Core screens — mobile (390) + desktop signature screen</div>
+<div class="dv-opts">
+
+<!-- 1n Property Detail mobile -->
+<div class="dv-opt" id="1n"><div class="dv-olabel"><a class="dv-oid" href="#1n">1n</a>Property Detail — the signature screen</div>
+<div class="dv-card" style="width:390px;background:#FBFBFD" data-screen-label="Property Detail (mobile)">
+<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:#FFFFFF;border-bottom:1px solid #EEEEFB">
+<span style="font:400 18px Inter,sans-serif;color:#14142B">←</span>
+<span style="font:600 14px Inter,sans-serif;color:#14142B">Property</span>
+<span style="font:500 11px Inter,sans-serif;color:#2E9E6B;background:#EAF6F0;padding:4px 9px;border-radius:99px;margin-left:auto">8/8 gates passed ✓</span>
+</div>
+<div style="height:210px;background:repeating-linear-gradient(45deg,#ECEBF6 0 12px,#E2E0F0 12px 24px);display:flex;align-items:center;justify-content:center;position:relative">
+<span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">property photo · warm dusk light</span>
+<div style="position:absolute;bottom:10px;left:0;right:0;display:flex;justify-content:center;gap:5px"><span style="width:14px;height:4px;border-radius:99px;background:#3F3D9E"></span><span style="width:4px;height:4px;border-radius:99px;background:#C9C7E8"></span><span style="width:4px;height:4px;border-radius:99px;background:#C9C7E8"></span></div>
+</div>
+<div style="padding:18px 18px 0;display:flex;flex-direction:column;gap:4px">
+<span style="font-family:Fraunces,serif;font-size:27px;font-weight:520;font-variation-settings:'opsz' 60;color:#14142B;letter-spacing:-0.01em">The Monroe</span>
+<span style="font:400 13px Inter,sans-serif;color:#6B7280">Tampa, FL · Multifamily · 8 units · Built 2019</span>
+<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+<div style="flex:1;height:6px;border-radius:99px;background:#EEEEFB;overflow:hidden"><div style="width:74%;height:100%;background:#3F3D9E"></div></div>
+<span style="font:600 12px Inter,sans-serif;color:#14142B;font-variant-numeric:tabular-nums">74% funded</span>
+</div>
+<p style="font:400 14px/1.55 Inter,sans-serif;color:#14142B;margin:10px 0 0">You buy a share of the company that owns this building, and receive your share of its net rent each month.</p>
+</div>
+<div style="display:flex;gap:7px;padding:14px 18px;overflow:hidden">
+<span style="font:600 12px Inter,sans-serif;color:#FFFFFF;background:#14142B;padding:7px 13px;border-radius:99px;white-space:nowrap">Overview</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">Returns</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">Risks</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">Legal</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">On-Chain</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">Diligence</span>
+</div>
+<div style="padding:0 18px;display:flex;flex-direction:column;gap:12px">
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px">
+<span style="font-family:Fraunces,serif;font-size:18px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">Where the 6.2% comes from</span>
+<div style="display:flex;flex-direction:column;gap:7px;font-variant-numeric:tabular-nums">
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#14142B"><span>Gross rental yield</span><span style="font-weight:600">8.1%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Vacancy assumption</span><span>−0.6%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Operating expenses</span><span>−0.8%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Management + platform fees</span><span>−0.3%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Reserve contribution</span><span>−0.2%</span></div>
+<div style="display:flex;justify-content:space-between;font:600 14px Inter,sans-serif;color:#14142B;border-top:1px solid #EEEEFB;padding-top:8px"><span>Target net income</span><span>6.2%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Appreciation scenario</span><span>+1.4%</span></div>
+</div>
+<div style="font:400 12px/1.5 Inter,sans-serif;color:#C4553D;background:#FBF1EF;border-radius:9px;padding:9px 12px">Downside case: extended vacancy or a major repair could reduce income to 2.9% or pause distributions.</div>
+</div>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:9px">
+<span style="font-family:Fraunces,serif;font-size:18px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">Can you sell?</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-variant-numeric:tabular-nums">
+<div style="display:flex;flex-direction:column"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Best bid</span><span style="font:600 14px Inter,sans-serif;color:#14142B">$49.10</span></div>
+<div style="display:flex;flex-direction:column"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Last sale</span><span style="font:600 14px Inter,sans-serif;color:#14142B">$50.25</span></div>
+<div style="display:flex;flex-direction:column"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Est. exit time</span><span style="font:600 14px Inter,sans-serif;color:#14142B">2–6 weeks</span></div>
+<div style="display:flex;flex-direction:column"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Lockup</span><span style="font:600 14px Inter,sans-serif;color:#14142B">None</span></div>
+</div>
+<span style="font:400 12px/1.5 Inter,sans-serif;color:#6B7280">Secondary market liquidity is not guaranteed. Your order may not fill.</span>
+</div>
+</div>
+<div style="padding:16px 18px;background:linear-gradient(to top,#FBFBFD 70%,rgba(251,251,253,0))">
+<button style="width:100%;height:52px;border-radius:14px;background:#3F3D9E;color:#FFFFFF;border:none;font:600 16px Inter,sans-serif;cursor:pointer" style-hover="background:#35338A">Invest from $50</button>
+</div>
+</div></div>
+
+<!-- 1o Home mobile -->
+<div class="dv-opt" id="1o"><div class="dv-olabel"><a class="dv-oid" href="#1o">1o</a>Home — “How am I doing?”</div>
+<div class="dv-card" style="width:390px;background:#FBFBFD" data-screen-label="Home (mobile)">
+<div style="display:flex;align-items:center;gap:9px;padding:18px 20px 6px">
+<svg width="22" height="22" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M32 43 L34 47.8 L38.8 50 L34 52.2 L32 57 L30 52.2 L25.2 50 L30 47.8 Z" fill="#E8C88C"></path></svg>
+<span style="font-family:Fraunces,serif;font-size:19px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B">Vesper</span>
+<span style="width:32px;height:32px;border-radius:99px;background:#F4F3FC;margin-left:auto;display:flex;align-items:center;justify-content:center;font:600 12px Inter,sans-serif;color:#3F3D9E">JD</span>
+</div>
+<div style="padding:12px 20px 0">
+<span style="font-family:Fraunces,serif;font-size:24px;font-weight:480;font-variation-settings:'opsz' 60;color:#14142B">Good evening, Jordan.</span>
+</div>
+<div style="margin:14px 20px 0;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:400 12px Inter,sans-serif;color:#6B7280">Net position</span>
+<span style="font:600 34px Inter,sans-serif;color:#14142B;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">$1,793.14</span>
+<span style="font:500 13px Inter,sans-serif;color:#2E9E6B;font-variant-numeric:tabular-nums">↑ $41.80 lifetime income</span>
+</div>
+<div style="display:flex;gap:0;border-top:1px solid #EEEEFB;padding-top:14px;font-variant-numeric:tabular-nums">
+<div style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Pending</span><span style="font:600 15px Inter,sans-serif;color:#14142B">$3.42</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Est. monthly</span><span style="font:600 15px Inter,sans-serif;color:#14142B">$9.12</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Target yield</span><span style="font:600 15px Inter,sans-serif;color:#14142B">6.1%</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Cash</span><span style="font:600 15px Inter,sans-serif;color:#14142B">$25.00</span></div>
+</div>
+</div>
+<div style="margin:12px 20px 0;background:#1E1B4B;border-radius:18px;padding:18px 20px;display:flex;align-items:center;gap:14px">
+<svg width="26" height="26" viewBox="0 0 64 64"><path d="M32 12 L36 28 L52 32 L36 36 L32 52 L28 36 L12 32 L28 28 Z" fill="#E8C88C"></path></svg>
+<div style="display:flex;flex-direction:column;gap:2px;flex:1">
+<span style="font:600 14px Inter,sans-serif;color:#FBFBFD">Income available</span>
+<span style="font:400 12.5px Inter,sans-serif;color:#B9B6DD;font-variant-numeric:tabular-nums">$3.42 from The Monroe arrived overnight.</span>
+</div>
+<span style="font:600 12px Inter,sans-serif;color:#1E1B4B;background:#FBFBFD;padding:8px 14px;border-radius:99px">View</span>
+</div>
+<div style="margin:12px 20px 18px;background:#FFFFFF;border:1px solid #E5E4F0;border-radius:18px;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<span style="font-family:Fraunces,serif;font-size:17px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">Risk signal</span>
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;align-items:center;gap:10px"><span style="font:400 12px Inter,sans-serif;color:#6B7280;width:86px">By market</span><div style="flex:1;height:6px;border-radius:99px;background:#EEEEFB;overflow:hidden;display:flex"><span style="width:58%;background:#3F3D9E"></span><span style="width:27%;background:#A5A1E0"></span><span style="width:15%;background:#D9D7F1"></span></div></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="font:400 12px Inter,sans-serif;color:#6B7280;width:86px">By type</span><div style="flex:1;height:6px;border-radius:99px;background:#EEEEFB;overflow:hidden;display:flex"><span style="width:70%;background:#3F3D9E"></span><span style="width:30%;background:#A5A1E0"></span></div></div>
+<div style="display:flex;align-items:center;gap:10px"><span style="font:400 12px Inter,sans-serif;color:#6B7280;width:86px">Occupancy</span><div style="flex:1;height:6px;border-radius:99px;background:#EEEEFB;overflow:hidden"><span style="display:block;width:94%;height:100%;background:#2E9E6B"></span></div></div>
+</div>
+<span style="font:400 12px/1.5 Inter,sans-serif;color:#6B7280">58% of your portfolio is in Tampa. Consider a second market.</span>
+</div>
+<div style="display:flex;border-top:1px solid #EEEEFB;background:#FFFFFF;padding:10px 8px 14px">
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="8" rx="1.5" fill="none" stroke="#3F3D9E" stroke-width="1.8"></rect><path d="M3 9 L10 3.5 L17 9" fill="none" stroke="#3F3D9E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 10px Inter,sans-serif;color:#3F3D9E">Home</span></div>
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="9" cy="9" r="5.5" fill="none" stroke="#9CA0AB" stroke-width="1.8"></circle><line x1="13.5" y1="13.5" x2="17" y2="17" stroke="#9CA0AB" stroke-width="1.8" stroke-linecap="round"></line></svg><span style="font:500 10px Inter,sans-serif;color:#9CA0AB">Explore</span></div>
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><svg width="20" height="20" viewBox="0 0 20 20"><rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1.2" fill="none" stroke="#9CA0AB" stroke-width="1.6"></rect><rect x="11" y="3.5" width="5.5" height="5.5" rx="1.2" fill="none" stroke="#9CA0AB" stroke-width="1.6"></rect><rect x="3.5" y="11" width="5.5" height="5.5" rx="1.2" fill="none" stroke="#9CA0AB" stroke-width="1.6"></rect><rect x="11" y="11" width="5.5" height="5.5" rx="1.2" fill="none" stroke="#9CA0AB" stroke-width="1.6"></rect></svg><span style="font:500 10px Inter,sans-serif;color:#9CA0AB">Portfolio</span></div>
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M4 15 L4 9 M10 15 L10 5 M16 15 L16 11" stroke="#9CA0AB" stroke-width="1.8" stroke-linecap="round"></path></svg><span style="font:500 10px Inter,sans-serif;color:#9CA0AB">Market</span></div>
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5" fill="none" stroke="#9CA0AB" stroke-width="1.8"></circle><path d="M10 13.4 L10 13.5 M8.4 7.6 C8.4 6.6 9.1 6 10 6 C10.9 6 11.6 6.7 11.6 7.6 C11.6 9 10 9 10 10.8" fill="none" stroke="#9CA0AB" stroke-width="1.7" stroke-linecap="round"></path></svg><span style="font:500 10px Inter,sans-serif;color:#9CA0AB">Learn</span></div>
+</div>
+</div></div>
+
+<!-- 1p Explore mobile -->
+<div class="dv-opt" id="1p"><div class="dv-olabel"><a class="dv-oid" href="#1p">1p</a>Explore — “What can I buy?”</div>
+<div class="dv-card" style="width:390px;background:#FBFBFD" data-screen-label="Explore (mobile)">
+<div style="padding:18px 20px 0;display:flex;flex-direction:column;gap:12px">
+<span style="font-family:Fraunces,serif;font-size:24px;font-weight:500;font-variation-settings:'opsz' 60;color:#14142B">Explore</span>
+<div style="height:44px;border-radius:12px;background:#FFFFFF;border:1px solid #E5E4F0;display:flex;align-items:center;gap:9px;padding:0 14px"><svg width="15" height="15" viewBox="0 0 20 20"><circle cx="9" cy="9" r="5.5" fill="none" stroke="#9CA0AB" stroke-width="1.8"></circle><line x1="13.5" y1="13.5" x2="17" y2="17" stroke="#9CA0AB" stroke-width="1.8" stroke-linecap="round"></line></svg><span style="font:400 13px Inter,sans-serif;color:#9CA0AB">City, market, or property</span></div>
+<div style="display:flex;gap:7px;overflow:hidden">
+<span style="font:600 12px Inter,sans-serif;color:#FFFFFF;background:#14142B;padding:7px 13px;border-radius:99px;white-space:nowrap">All</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">Under $100</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">6%+ yield</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">Monthly</span>
+<span style="font:500 12px Inter,sans-serif;color:#6B7280;background:#FFFFFF;border:1px solid #E5E4F0;padding:7px 13px;border-radius:99px;white-space:nowrap">Funding</span>
+</div>
+</div>
+<div style="padding:14px 20px 20px;display:flex;flex-direction:column;gap:14px">
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;overflow:hidden">
+<div style="height:170px;background:repeating-linear-gradient(45deg,#ECEBF6 0 12px,#E2E0F0 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">property photo · dusk</span><span style="position:absolute;top:12px;left:12px;background:rgba(20,20,43,.78);color:#FFFFFF;font:600 10.5px Inter,sans-serif;padding:4px 9px;border-radius:99px">Funding · 74%</span></div>
+<div style="padding:15px 17px;display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:Fraunces,serif;font-size:19px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">The Monroe</span><span style="font:400 12px Inter,sans-serif;color:#6B7280">Tampa, FL</span><span style="font:600 15px Inter,sans-serif;color:#14142B;margin-left:auto;font-variant-numeric:tabular-nums">6.2%</span></div>
+<div style="display:flex;gap:6px"><span style="font:500 10.5px Inter,sans-serif;color:#6B7280;background:#F3F3F6;padding:4px 9px;border-radius:99px">$50 min</span><span style="font:500 10.5px Inter,sans-serif;color:#6B7280;background:#F3F3F6;padding:4px 9px;border-radius:99px">Monthly income</span><span style="font:500 10.5px Inter,sans-serif;color:#3F3D9E;background:#F4F3FC;padding:4px 9px;border-radius:99px">Moderate risk</span></div>
+</div>
+</div>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;overflow:hidden">
+<div style="height:170px;background:repeating-linear-gradient(45deg,#EAE9F3 0 12px,#DFDDEE 12px 24px);display:flex;align-items:center;justify-content:center;position:relative"><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">property photo · golden hour</span><span style="position:absolute;top:12px;left:12px;background:rgba(46,158,107,.9);color:#FFFFFF;font:600 10.5px Inter,sans-serif;padding:4px 9px;border-radius:99px">New</span></div>
+<div style="padding:15px 17px;display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:Fraunces,serif;font-size:19px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">Cedar Row</span><span style="font:400 12px Inter,sans-serif;color:#6B7280">Columbus, OH</span><span style="font:600 15px Inter,sans-serif;color:#14142B;margin-left:auto;font-variant-numeric:tabular-nums">5.7%</span></div>
+<div style="display:flex;gap:6px"><span style="font:500 10.5px Inter,sans-serif;color:#6B7280;background:#F3F3F6;padding:4px 9px;border-radius:99px">$50 min</span><span style="font:500 10.5px Inter,sans-serif;color:#6B7280;background:#F3F3F6;padding:4px 9px;border-radius:99px">Monthly income</span><span style="font:500 10.5px Inter,sans-serif;color:#2E9E6B;background:#EAF6F0;padding:4px 9px;border-radius:99px">Lower risk</span></div>
+</div>
+</div>
+</div>
+</div></div>
+
+<!-- 1q Invest success mobile -->
+<div class="dv-opt" id="1q"><div class="dv-olabel"><a class="dv-oid" href="#1q">1q</a>Investment success — the milestone moment</div>
+<div class="dv-card" style="width:390px;background:#1E1B4B" data-screen-label="Invest success (mobile)">
+<div style="padding:64px 30px 40px;display:flex;flex-direction:column;align-items:center;gap:20px;text-align:center">
+<svg width="52" height="52" viewBox="0 0 64 64"><path d="M32 8 L36.5 27.5 L56 32 L36.5 36.5 L32 56 L27.5 36.5 L8 32 L27.5 27.5 Z" fill="#E8C88C"></path></svg>
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:Fraunces,serif;font-size:30px;line-height:1.15;font-weight:480;font-variation-settings:'opsz' 80;color:#FBFBFD;letter-spacing:-0.01em;text-wrap:balance">You now own 0.0214% of The Monroe, Tampa.</span>
+<span style="font:400 14px/1.6 Inter,sans-serif;color:#B9B6DD;font-variant-numeric:tabular-nums">$100.00 invested · est. $0.52/month · first distribution Aug 1</span>
+</div>
+<div style="width:100%;background:rgba(251,251,253,.06);border:1px solid rgba(251,251,253,.14);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;text-align:left;font-variant-numeric:tabular-nums">
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#B9B6DD"><span>Tokens received</span><span style="color:#FBFBFD;font-weight:600">2.00 MONROE</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#B9B6DD"><span>Legal entity</span><span style="color:#FBFBFD;font-weight:600">Monroe Tampa SPV, LLC</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#B9B6DD"><span>Settlement</span><span style="color:#FBFBFD;font-weight:600">USDC · atomic DvP</span></div>
+</div>
+<div style="width:100%;display:flex;flex-direction:column;gap:10px;margin-top:6px">
+<button style="height:50px;border-radius:13px;background:#FBFBFD;color:#1E1B4B;border:none;font:600 15px Inter,sans-serif;cursor:pointer">View your property</button>
+<button style="height:46px;border-radius:13px;background:transparent;color:#B9B6DD;border:1px solid rgba(251,251,253,.2);font:500 14px Inter,sans-serif;cursor:pointer">How income works</button>
+</div>
+</div>
+</div></div>
+
+<!-- 1r Portfolio mobile -->
+<div class="dv-opt" id="1r"><div class="dv-olabel"><a class="dv-oid" href="#1r">1r</a>Portfolio + income — “What do I own and earn?”</div>
+<div class="dv-card" style="width:390px;background:#FBFBFD" data-screen-label="Portfolio (mobile)">
+<div style="padding:18px 20px 0;display:flex;flex-direction:column;gap:14px">
+<span style="font-family:Fraunces,serif;font-size:24px;font-weight:500;font-variation-settings:'opsz' 60;color:#14142B">Portfolio</span>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:18px;padding:18px 20px;display:flex;gap:0;font-variant-numeric:tabular-nums">
+<div style="flex:1.2;display:flex;flex-direction:column;gap:1px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Value</span><span style="font:600 20px Inter,sans-serif;color:#14142B;letter-spacing:-0.01em">$1,793.14</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Lifetime income</span><span style="font:600 20px Inter,sans-serif;color:#2E9E6B;letter-spacing:-0.01em">$41.80</span></div>
+<div style="flex:0.8;display:flex;flex-direction:column;gap:1px"><span style="font:400 11px Inter,sans-serif;color:#6B7280">Yield</span><span style="font:600 20px Inter,sans-serif;color:#14142B;letter-spacing:-0.01em">6.1%</span></div>
+</div>
+</div>
+<div style="padding:14px 20px 0;display:flex;flex-direction:column;gap:11px">
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:14px 16px;display:flex;gap:13px;align-items:center">
+<div style="width:58px;height:58px;border-radius:12px;background:repeating-linear-gradient(45deg,#ECEBF6 0 8px,#E2E0F0 8px 16px);flex:none"></div>
+<div style="display:flex;flex-direction:column;gap:2px;flex:1">
+<span style="font-family:Fraunces,serif;font-size:16px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">The Monroe</span>
+<span style="font:400 11.5px Inter,sans-serif;color:#6B7280;font-variant-numeric:tabular-nums">0.0214% owned · next payout Aug 1</span>
+</div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums"><span style="font:600 15px Inter,sans-serif;color:#14142B">$1,284.06</span><span style="font:500 12px Inter,sans-serif;color:#2E9E6B">↑ $32.10</span></div>
+</div>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:14px 16px;display:flex;gap:13px;align-items:center">
+<div style="width:58px;height:58px;border-radius:12px;background:repeating-linear-gradient(45deg,#EAE9F3 0 8px,#DFDDEE 8px 16px);flex:none"></div>
+<div style="display:flex;flex-direction:column;gap:2px;flex:1">
+<span style="font-family:Fraunces,serif;font-size:16px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">Cedar Row</span>
+<span style="font:400 11.5px Inter,sans-serif;color:#6B7280;font-variant-numeric:tabular-nums">0.0090% owned · next payout Aug 1</span>
+</div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums"><span style="font:600 15px Inter,sans-serif;color:#14142B">$412.88</span><span style="font:500 12px Inter,sans-serif;color:#2E9E6B">↑ $9.70</span></div>
+</div>
+</div>
+<div style="padding:16px 20px 22px;display:flex;flex-direction:column;gap:10px">
+<span style="font-family:Fraunces,serif;font-size:17px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">Income calendar</span>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;text-align:center">
+<div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="font:400 10.5px Inter,sans-serif;color:#6B7280">Mar</span><span style="width:8px;height:8px;border-radius:99px;background:#2E9E6B"></span></div>
+<div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="font:400 10.5px Inter,sans-serif;color:#6B7280">Apr</span><span style="width:8px;height:8px;border-radius:99px;background:#2E9E6B"></span></div>
+<div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="font:400 10.5px Inter,sans-serif;color:#6B7280">May</span><span style="width:8px;height:8px;border-radius:99px;background:#2E9E6B"></span></div>
+<div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="font:400 10.5px Inter,sans-serif;color:#6B7280">Jun</span><span style="width:8px;height:8px;border-radius:99px;background:#2E9E6B"></span></div>
+<div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="font:600 10.5px Inter,sans-serif;color:#14142B">Jul</span><span style="width:8px;height:8px;border-radius:99px;background:#E8C88C"></span></div>
+<div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="font:400 10.5px Inter,sans-serif;color:#9CA0AB">Aug</span><span style="width:8px;height:8px;border-radius:99px;border:1.5px solid #C9C7E8;box-sizing:border-box"></span></div>
+</div>
+<div style="display:flex;justify-content:space-between;font:400 12px Inter,sans-serif;color:#6B7280;border-top:1px solid #EEEEFB;padding-top:11px;font-variant-numeric:tabular-nums"><span>July · pending</span><span style="font-weight:600;color:#14142B">$3.42</span></div>
+</div>
+</div>
+</div></div>
+
+<!-- 1s Property Detail desktop -->
+<div class="dv-opt" id="1s"><div class="dv-olabel"><a class="dv-oid" href="#1s">1s</a>Property Detail — desktop web</div>
+<div class="dv-card" style="width:1180px;background:#FBFBFD" data-screen-label="Property Detail (desktop)">
+<div style="display:flex;align-items:center;gap:36px;padding:16px 40px;background:#FFFFFF;border-bottom:1px solid #EEEEFB">
+<div style="display:flex;align-items:center;gap:9px"><svg width="22" height="22" viewBox="0 0 64 64"><path d="M15 10 L29.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M49 10 L34.5 40" stroke="#14142B" stroke-width="7" stroke-linecap="round" fill="none"></path><path d="M32 43 L34 47.8 L38.8 50 L34 52.2 L32 57 L30 52.2 L25.2 50 L30 47.8 Z" fill="#E8C88C"></path></svg><span style="font-family:Fraunces,serif;font-size:19px;font-weight:560;font-variation-settings:'opsz' 60;color:#14142B">Vesper</span></div>
+<div style="display:flex;gap:26px;font:500 13.5px Inter,sans-serif;color:#6B7280"><span style="color:#14142B;font-weight:600">Explore</span><span>Portfolio</span><span>Market</span><span>Learn</span></div>
+<div style="margin-left:auto;display:flex;align-items:center;gap:16px"><span style="font:500 13px Inter,sans-serif;color:#6B7280;font-variant-numeric:tabular-nums">$25.00 cash</span><span style="width:34px;height:34px;border-radius:99px;background:#F4F3FC;display:flex;align-items:center;justify-content:center;font:600 12px Inter,sans-serif;color:#3F3D9E">JD</span></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 360px;gap:32px;padding:32px 40px 40px">
+<div style="display:flex;flex-direction:column;gap:20px">
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+<div style="height:300px;border-radius:16px;background:repeating-linear-gradient(45deg,#ECEBF6 0 12px,#E2E0F0 12px 24px);display:flex;align-items:center;justify-content:center"><span style="font:400 11px ui-monospace,Menlo,monospace;color:#6B7280">hero photo · warm dusk light</span></div>
+<div style="display:grid;grid-template-rows:1fr 1fr;gap:10px">
+<div style="border-radius:16px;background:repeating-linear-gradient(45deg,#EAE9F3 0 10px,#DFDDEE 10px 20px);display:flex;align-items:center;justify-content:center"><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">interior</span></div>
+<div style="border-radius:16px;background:repeating-linear-gradient(45deg,#ECEBF6 0 10px,#E2E0F0 10px 20px);display:flex;align-items:center;justify-content:center"><span style="font:400 10px ui-monospace,Menlo,monospace;color:#6B7280">neighborhood</span></div>
+</div>
+</div>
+<div style="display:flex;align-items:baseline;gap:14px">
+<span style="font-family:Fraunces,serif;font-size:38px;font-weight:500;font-variation-settings:'opsz' 100;color:#14142B;letter-spacing:-0.015em">The Monroe</span>
+<span style="font:400 15px Inter,sans-serif;color:#6B7280">Tampa, FL · Multifamily · 8 units · Built 2019</span>
+<span style="font:500 12px Inter,sans-serif;color:#2E9E6B;background:#EAF6F0;padding:5px 11px;border-radius:99px;margin-left:auto">8/8 gates passed ✓</span>
+</div>
+<div style="display:flex;gap:8px;border-bottom:1px solid #E5E4F0;padding-bottom:0">
+<span style="font:600 13.5px Inter,sans-serif;color:#14142B;padding:10px 4px;border-bottom:2px solid #3F3D9E">Overview</span>
+<span style="font:500 13.5px Inter,sans-serif;color:#6B7280;padding:10px 14px">Returns</span>
+<span style="font:500 13.5px Inter,sans-serif;color:#6B7280;padding:10px 14px">Risks</span>
+<span style="font:500 13.5px Inter,sans-serif;color:#6B7280;padding:10px 14px">Legal</span>
+<span style="font:500 13.5px Inter,sans-serif;color:#6B7280;padding:10px 14px">On-Chain</span>
+<span style="font:500 13.5px Inter,sans-serif;color:#6B7280;padding:10px 14px">Diligence</span>
+<span style="font:500 13.5px Inter,sans-serif;color:#6B7280;padding:10px 14px">Updates</span>
+<span style="font:500 13.5px Inter,sans-serif;color:#6B7280;padding:10px 14px">Market</span>
+</div>
+<p style="font:400 15px/1.6 Inter,sans-serif;color:#14142B;margin:0;max-width:62ch">You buy a share of the company that owns this building, and receive your share of its net rent each month. This property targets 6.2% annual net income — 4.8% from rent, 1.4% from expected appreciation.</p>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:10px">
+<span style="font-family:Fraunces,serif;font-size:19px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">Where the 6.2% comes from</span>
+<div style="display:flex;flex-direction:column;gap:7px;font-variant-numeric:tabular-nums">
+<div style="display:flex;justify-content:space-between;font:400 13.5px Inter,sans-serif;color:#14142B"><span>Gross rental yield</span><span style="font-weight:600">8.1%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13.5px Inter,sans-serif;color:#6B7280"><span>Vacancy assumption</span><span>−0.6%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13.5px Inter,sans-serif;color:#6B7280"><span>Opex + fees + reserves</span><span>−1.3%</span></div>
+<div style="display:flex;justify-content:space-between;font:600 14.5px Inter,sans-serif;color:#14142B;border-top:1px solid #EEEEFB;padding-top:8px"><span>Target net income</span><span>6.2%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13.5px Inter,sans-serif;color:#6B7280"><span>Appreciation scenario</span><span>+1.4%</span></div>
+</div>
+<div style="font:400 12.5px/1.5 Inter,sans-serif;color:#C4553D;background:#FBF1EF;border-radius:9px;padding:9px 12px">Downside: extended vacancy or major repair could reduce income to 2.9%.</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:10px">
+<span style="font-family:Fraunces,serif;font-size:19px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">What you own</span>
+<div style="display:flex;flex-direction:column;gap:7px;font:400 13.5px/1.5 Inter,sans-serif;color:#14142B">
+<div style="display:flex;gap:10px"><span style="color:#3F3D9E;font-weight:600">1</span><span>Tokens in Monroe Tampa SPV, LLC.</span></div>
+<div style="display:flex;gap:10px"><span style="color:#3F3D9E;font-weight:600">2</span><span>Your share of net rent, monthly, in USDC.</span></div>
+<div style="display:flex;gap:10px"><span style="color:#3F3D9E;font-weight:600">3</span><span>Your share of sale proceeds, after debts and fees.</span></div>
+</div>
+</div>
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:16px;padding:20px 22px;display:flex;flex-direction:column;gap:9px">
+<span style="font-family:Fraunces,serif;font-size:19px;font-weight:540;font-variation-settings:'opsz' 40;color:#14142B">Can you sell?</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px 16px;font-variant-numeric:tabular-nums">
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Best bid</span><span style="font-weight:600;color:#14142B">$49.10</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Last sale</span><span style="font-weight:600;color:#14142B">$50.25</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Est. exit</span><span style="font-weight:600;color:#14142B">2–6 wks</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Lockup</span><span style="font-weight:600;color:#14142B">None</span></div>
+</div>
+<span style="font:400 12px/1.5 Inter,sans-serif;color:#6B7280">Liquidity is not guaranteed. Your order may not fill.</span>
+</div>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:14px">
+<div style="background:#FFFFFF;border:1px solid #E5E4F0;border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:16px;position:sticky;top:20px">
+<div style="display:flex;flex-direction:column;gap:3px">
+<span style="font:400 12px Inter,sans-serif;color:#6B7280">Target net income</span>
+<span style="font:600 34px Inter,sans-serif;color:#14142B;letter-spacing:-0.02em;font-variant-numeric:tabular-nums">6.2%</span>
+<span style="font:400 13px Inter,sans-serif;color:#6B7280">paid monthly in USDC</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<div style="flex:1;height:6px;border-radius:99px;background:#EEEEFB;overflow:hidden"><div style="width:74%;height:100%;background:#3F3D9E"></div></div>
+<span style="font:600 12px Inter,sans-serif;color:#14142B;font-variant-numeric:tabular-nums">74%</span>
+</div>
+<div style="display:flex;gap:8px">
+<span style="flex:1;text-align:center;font:600 13px Inter,sans-serif;color:#3F3D9E;background:#F4F3FC;padding:11px 0;border-radius:11px">$50</span>
+<span style="flex:1;text-align:center;font:600 13px Inter,sans-serif;color:#3F3D9E;background:#F4F3FC;padding:11px 0;border-radius:11px">$100</span>
+<span style="flex:1;text-align:center;font:600 13px Inter,sans-serif;color:#FFFFFF;background:#3F3D9E;padding:11px 0;border-radius:11px">$250</span>
+<span style="flex:1;text-align:center;font:600 13px Inter,sans-serif;color:#3F3D9E;background:#F4F3FC;padding:11px 0;border-radius:11px">$500</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums;border-top:1px solid #EEEEFB;padding-top:14px">
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Ownership</span><span style="font-weight:600;color:#14142B">0.0535%</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Est. monthly income</span><span style="font-weight:600;color:#14142B">$1.29</span></div>
+<div style="display:flex;justify-content:space-between;font:400 13px Inter,sans-serif;color:#6B7280"><span>Fees</span><span style="font-weight:600;color:#14142B">$2.50</span></div>
+</div>
+<button style="height:52px;border-radius:13px;background:#3F3D9E;color:#FFFFFF;border:none;font:600 15px Inter,sans-serif;cursor:pointer" style-hover="background:#35338A">Invest $250</button>
+<span style="font:400 11.5px/1.5 Inter,sans-serif;color:#6B7280;text-align:center">KYC verified · settles via atomic DvP</span>
+</div>
+</div>
+</div>
+</div></div>
+
+</div>
+
+<p class="dv-next">Try next: “develop <a class="dv-oid" href="#1a">1a</a> into a full logo sheet” · “try the wordmark lowercase” · “show the dark-mode dusk teaser”</p>
+</section>
+</x-dc>
+</body>
+</html>

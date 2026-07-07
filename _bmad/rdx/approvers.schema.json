@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alfaRazieL/Rust_bmad_dev/schemas/approvers.v1.schema.json",
+  "title": "RDX Approvers v1",
+  "description": "Canonical schema for _bmad/rdx/approvers.yaml — the in-repo source of truth for Cat-4 specialist approval routing (A3 hybrid). Maps rule-pattern → role → list of allowed identities (git author emails OR GitHub @teams/@users). The validator consumes this file directly; `rdx-setup sync-codeowners` projects it into .github/CODEOWNERS for GitHub UX.",
+  "type": "object",
+  "required": ["schema_version", "roles"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "roles": {
+      "type": "object",
+      "description": "Map of role name (e.g. unsafe-reviewers, crypto-reviewers, governance) to its identity list.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["identities"],
+        "additionalProperties": false,
+        "properties": {
+          "description": {"type": "string"},
+          "identities": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Either an email address (`user@example.com`) or an @-prefixed GitHub handle / team (`@user`, `@org/team`)."
+            }
+          }
+        }
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "description": "Path-pattern → role mapping. `path` is a glob (fnmatch with `**` recursion). `rule_id` is the synthetic Cat-4 rule the validator emits when the pattern matches. `role` must exist in the `roles` map.",
+      "items": {
+        "type": "object",
+        "required": ["path", "rule_id", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "rule_id": {"type": "string", "minLength": 1, "pattern": "^[A-Z][A-Z0-9_-]+$"},
+          "role": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

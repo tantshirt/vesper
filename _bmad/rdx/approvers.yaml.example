@@ -1,0 +1,97 @@
+---
+# RDX Cat-4 specialist approvers — A3 hybrid (canonical YAML).
+#
+# Edit this file to enable Cat-4 specialist approval gating in your project,
+# then run `rdx-setup sync-codeowners` to project these rules into
+# `.github/CODEOWNERS` for GitHub auto-request behaviour.
+#
+# Schema: see _bmad/rdx/approvers.schema.json
+# Documentation: README.md "Specialist approvals (Cat-4)" section
+#
+# Concepts:
+#   roles    — named groups of approver identities (emails OR @-handles)
+#   patterns — path globs that require a role's approval
+#
+# Identity formats accepted:
+#   - email: alice@example.com (validator matches the approval JSON's
+#            approver_identity field directly)
+#   - @-handle: @user or @org/team (used as-is in CODEOWNERS; for non-GitHub
+#              CI providers, the validator matches the approval JSON's
+#              approver_identity field literally including the @)
+#
+# Per-diff approval workflow:
+#   1. PR opens with a change matching a pattern below → validator emits
+#      APPROVAL_REQUIRED, exit 3, CI blocks.
+#   2. Authorised specialist commits an approval JSON to
+#      `_bmad/rdx/approvals/<diff_digest>.json` (schema:
+#      _bmad/rdx/approval.v1.schema.json).
+#   3. Validator finds the file, validates schema, confirms identity ∈ role,
+#      downgrades the rule to PASS.
+#   4. If the diff changes, the digest changes, and the old approval file is
+#      orphaned — validator re-blocks until a fresh approval is committed.
+
+schema_version: v1
+
+roles:
+  unsafe-reviewers:
+    description: Approve `unsafe` Rust surface additions and modifications.
+    identities:
+      - REPLACE_ME@example.com
+      - "@your-org/unsafe-team"
+
+  ffi-reviewers:
+    description: Approve FFI bindings (extern blocks, libc usage, C interop).
+    identities:
+      - REPLACE_ME@example.com
+      - "@your-org/ffi-team"
+
+  security-reviewers:
+    description: Approve cryptography, authentication, secret handling.
+    identities:
+      - REPLACE_ME@example.com
+      - "@your-org/security-team"
+
+  api-reviewers:
+    description: Approve public API surface changes (semver-affecting).
+    identities:
+      - REPLACE_ME@example.com
+      - "@your-org/api-team"
+
+  governance:
+    description: Owners of RDX rules / validator / CI workflow files.
+    identities:
+      - REPLACE_ME@example.com
+      - "@your-org/governance"
+
+patterns:
+  - path: "src/unsafe/**"
+    rule_id: RP-UNSAFE-001
+    role: unsafe-reviewers
+
+  - path: "src/ffi/**"
+    rule_id: RP-FFI-001
+    role: ffi-reviewers
+
+  - path: "src/crypto/**"
+    rule_id: RP-CRYPTO-001
+    role: security-reviewers
+
+  - path: "src/auth/**"
+    rule_id: RP-AUTH-001
+    role: security-reviewers
+
+  # Public API surface — adjust path to match your crate layout
+  - path: "src/lib.rs"
+    rule_id: RP-API-001
+    role: api-reviewers
+
+  # RDX-protected governance paths (T-L8-GOV-001) — recommended defaults.
+  - path: "_bmad/rust-kb/**"
+    rule_id: GOV-KB-001
+    role: governance
+  - path: "_bmad/rdx/**"
+    rule_id: GOV-RDX-001
+    role: governance
+  - path: ".github/workflows/rdx-gate.yml"
+    rule_id: GOV-WORKFLOW-001
+    role: governance

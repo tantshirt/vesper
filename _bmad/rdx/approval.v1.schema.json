@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alfaRazieL/Rust_bmad_dev/schemas/approval.v1.schema.json",
+  "title": "RDX Approval v1",
+  "description": "Canonical schema for an individual Cat-4 approval artifact, committed to _bmad/rdx/approvals/<diff_digest>.json (B1 in-repo JSON storage). The file name binds the approval to a specific diff via diff_digest — any diff change orphans the file and the validator re-blocks.",
+  "type": "object",
+  "required": [
+    "approval_schema_version",
+    "rule_id",
+    "approver_identity",
+    "approver_role",
+    "head_sha",
+    "diff_digest",
+    "timestamp",
+    "scope",
+    "decision"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "approval_schema_version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "rule_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Z][A-Z0-9_-]+$",
+      "description": "Identifier of the rule being approved (e.g. RP-UNSAFE-001, GOV-KB-001). Must match a rule emitted by the validator for this diff."
+    },
+    "approver_identity": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Approver email or @-prefixed GitHub handle. Validator verifies it appears in approvers.yaml under the role named below."
+    },
+    "approver_role": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Role from approvers.yaml. Validator confirms identity ∈ role.identities."
+    },
+    "head_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,64}$",
+      "description": "Commit SHA the approval was issued against. Audit field; the diff_digest is the actual binding."
+    },
+    "diff_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32,128}$",
+      "description": "SHA-256 (or stronger) digest of the diff this approval covers. MUST equal the file's basename stem in _bmad/rdx/approvals/<diff_digest>.json."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths"],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["approved", "denied"]
+    },
+    "conditions": {
+      "type": "string",
+      "description": "Free-text justification or conditions attached to the decision."
+    },
+    "signature": {
+      "type": "string",
+      "description": "Reserved for Phase 9 HA: HMAC / detached signature over the approval body. NOT required in V6."
+    }
+  }
+}

@@ -1,0 +1,84 @@
+# WDS Workflow Status
+project_name: Vesper
+methodology_version: wds-v6
+config:
+  brief_level: complete
+  design_system_mode: none
+  design_experience: intermediate
+
+phases:
+  "1-strategy":
+    project-brief:
+      status: complete   # decisions resolved 2026-07-07
+      artifact: A-Product-Brief/project-brief.md
+      owner: saga
+    trigger-mapping:
+      status: complete   # 2026-07-07
+      artifacts:
+        - B-Trigger-Map/trigger-map.md
+        - B-Trigger-Map/feature-impact-analysis.md
+        - B-Trigger-Map/personas/ (4)
+      owner: saga
+      persona_priority: [P1-first-job, P4-passive-income, P3-rent-trapped, P2-crypto-native]
+    platform-requirements:
+      status: complete   # 2026-07-07
+      artifact: A-Product-Brief/platform-requirements.md
+      owner: saga
+      open_items:
+        - escrow/custody vendor (v5 OQ#4)
+        - post-launch maintenance owner
+        - Reg A+ investment-limit enforcement (replaces accreditation checks) — confirm w/ counsel
+  "2-design":
+    status: in-progress
+    owner: freya
+    outline-scenarios:
+      status: complete   # 2026-07-07
+      artifacts:
+        - C-UX-Scenarios/00-ux-scenarios.md
+        - C-UX-Scenarios/01-06 (6 scenarios)
+      coverage: 17/17 views
+    conceptual-specs:
+      status: in-progress
+      specified:
+        - "01.1-explore ✓"
+        - "01.2-property-detail (signature) ✓"
+        - "01.3-05-setup-fund ✓"
+        - "01.6-calculator-order-preview ✓"
+        - "01.7-risk-legal-ack ✓"
+        - "01.8-confirmation ✓"
+      scenario-01: FULLY SPECIFIED (all 6 steps)
+      scenario-02: FULLY SPECIFIED (02.1 home, 02.2 portfolio, 02.3 income, 02.4 updates)
+      next_screens: [design-delivery, S4-onchain-proof, S5-learn]
+    visual-design:
+      status: in-progress
+      done:
+        - "01.2-property-detail (v2, matches Brand Direction Brief) ✓"
+        - "01.6-calculator-order-preview (live calculator) ✓"
+        - "SCENARIO 01 end-to-end clickable flow (all 6 screens) ✓"
+        - "SCENARIO 02 clickable flow (home/portfolio/income/updates) ✓"
+      artifacts:
+        first-investment-flow: https://claude.ai/code/artifact/37470475-5e16-4689-8830-1b45b817eb4a
+        getting-paid-flow: https://claude.ai/code/artifact/fe2f5c4b-adb9-4b29-b0d8-8a52061720c4
+        property-detail: https://claude.ai/code/artifact/dda7bb14-c0c0-4d05-a403-f57c0a9b63e7
+        calculator: https://claude.ai/code/artifact/4cb09cf9-ea6c-4f1d-a20c-79142d7262f7
+    design-system:
+      status: established   # tokens extracted from Brand Direction Brief
+      doc: D-Design-System/00-design-system.md
+      note: brand brief is source of truth; all screens inherit these tokens
+    design-delivery:
+      status: delivered   # north-star arc packaged for dev
+      handoff: E-Development/00-handoff.md
+      deliveries:
+        - DD-001-first-investment.yaml (Scenario 01)
+        - DD-002-getting-paid.yaml (Scenario 02)
+      open_decisions: [escrow-vendor, ownership-pct-basis, regA+-marketing-limits, gate-labels, sponsor-fee-independence]
+
+resolved_decisions:
+  - id: jurisdiction-investor-class
+    decision: "US Reg A+ (retail)"
+    date: 2026-07-07
+    implications: [keeps-low-minimums, all-4-personas, sec-qualification, ongoing-reporting, offering-caps]
+  - id: business-revenue-model
+    decision: ["platform fee", "management/servicing fee", "secondary-market fee", "sponsor listing fee"]
+    date: 2026-07-07
+    guardrail: "sponsor listing fee must stay independent of Gate 0-7 diligence sign-off"

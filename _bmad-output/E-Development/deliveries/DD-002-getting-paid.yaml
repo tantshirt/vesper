@@ -1,0 +1,103 @@
+# WDS Design Delivery — the contract between design and development.
+delivery:
+  id: "DD-002"
+  name: "Getting Paid & Trust (Scenario 02)"
+  type: "user_flow"
+  status: "ready"
+  priority: "high"
+  created_by: "freya (WDS)"
+  created_at: "2026-07-07T00:00:00Z"
+  updated_at: "2026-07-07T00:00:00Z"
+  version: "1.0"
+
+description: |
+  The retention half of the north-star: an existing investor returns, sees rent arrive,
+  understands exactly where it came from, and reads the monthly operator update.
+  Home (payout hero + balance) → Portfolio (allocation + concentration honesty) →
+  Income (distribution breakdown → matches target) → Property Updates (monthly, even when quiet).
+
+user_value:
+  problem: "Investors fear distributions won't come, won't match what was promised, or that silence hides trouble (the RealT failure)."
+  solution: "Make the payout the hero, explain it to the cent, confirm it matches the target, and publish a monthly update every month — especially the boring ones."
+  success_criteria:
+    - "≥90% of users understand their payout (O3) — the income breakdown + 'matches target' confirmation"
+    - "≥25% repeat-investment rate; 100% on-time distributions when cash flow permits (O4)"
+    - "≥95% on-time monthly property updates; no market > 35% exposure surfaced (O5)"
+
+design_artifacts:
+  scenarios:
+    - id: "02-maya-checkin-payout"
+      path: "C-UX-Scenarios/02-maya-checkin-payout/"
+      screens: ["02.1-home-dashboard","02.2-portfolio","02.3-income-distributions","02.4-property-updates"]
+  user_flows:
+    - name: "Getting Paid (clickable prototype)"
+      path: "https://claude.ai/code/artifact/fe2f5c4b-adb9-4b29-b0d8-8a52061720c4"
+      entry: "02.1-home-dashboard"
+      exit: "02.4-property-updates"
+  design_system:
+    path: "D-Design-System/00-design-system.md"
+    components:
+      - "Rent-landed dusk card (champagne star)"
+      - "Balance card + SVG sparkline (champagne endpoint)"
+      - "Holding row (thumbnail, ownership %, value, this-month)"
+      - "Allocation bar + legend + concentration warning"
+      - "Income breakdown rows + 'matches target' chip"
+      - "Income calendar / history rows"
+      - "Monthly update card (operator, stats, plain note)"
+      - "Bottom tab bar (Home/Explore/Portfolio/Market/Learn)"
+
+technical_requirements:
+  platform:
+    frontend: "Next.js / Vercel (PWA)"
+    backend: "Convex (reactive queries + scheduled functions)"
+    onchain: "USDC distributions (Anchor distribution ledger) · Helius indexing"
+  integrations:
+    - {name: "Anchor distribution ledger", purpose: "On-chain record of USDC distributions per property", required: true}
+    - {name: "Convex scheduled functions", purpose: "Distribution runs, update-cadence reminders (O5), reconciliation", required: true}
+    - {name: "Helius", purpose: "Confirm distributions on-chain → reactive UI", required: true}
+    - {name: "Push notifications", purpose: "'Your rent from X has arrived' (drives the return visit)", required: false}
+    - {name: "Tax export (placeholder)", purpose: "P4 reporting; full tax center post-MVP", required: false}
+  data_models:
+    - {name: "IncomeLedger", fields: ["userId","propertyId","period","grossShare","costs","mgmtFee","reserve","netPaid","txSig","status"]}
+    - {name: "Distribution", fields: ["propertyId","period","totalNet","perTokenAmount","paidAt","onTime"]}
+    - {name: "PropertyUpdate", fields: ["propertyId","period","occupancy","reservesMonths","rentOnTime","note","operator","publishedAt"]}
+    - {name: "PortfolioSnapshot", fields: ["userId","totalValue","invested","incomeToDate","allocationByMarket"]}
+
+acceptance_criteria:
+  functional:
+    - "Home surfaces a fresh distribution as the hero ('Rent just landed +$X') when one exists; otherwise shows next-distribution date."
+    - "Balance card shows value, all-time return (signed), and income-to-date; sparkline renders without layout shift."
+    - "Portfolio shows per-holding value + this-month income and an allocation-by-market breakdown."
+    - "Concentration > 35% in any single market triggers a visible, calm warning + diversify nudge (never hidden)."
+    - "Income screen itemizes a distribution (gross → costs → mgmt fee → reserve → net) and confirms it matches the target yield."
+    - "Income history lists prior months with a next-distribution date."
+    - "A property update is available for every month, including uneventful ones, with a named operator."
+  non_functional:
+    - "Reactive: distribution + portfolio values update live from Convex (no manual refresh)."
+    - "LCP < 2.5s, CLS < 0.1; tabular numerals; gains/losses paired with sign or arrow (never color alone)."
+    - "WCAG 2.2 AA; sparkline has an accessible text equivalent."
+  edge_cases:
+    - "Missed/paused distribution → honest banner explaining why + link to the update; never silent."
+    - "Below-target distribution → calm variance explanation, not an alarm."
+    - "Value down → loss color + '−', framed calmly."
+    - "No distributions yet → 'first distribution expected [date]' state."
+
+testing_guidance:
+  user_testing:
+    - "After viewing Income, ask the user to explain where their payout came from (O3)."
+    - "Test the missed-distribution state — does the honesty preserve trust rather than spark panic?"
+  qa_testing:
+    - "Verify income breakdown math nets to the paid amount and matches the on-chain distribution."
+    - "Verify update-cadence scheduled function flags any property overdue for a monthly update (O5)."
+    - "Verify concentration calc and the 35% threshold trigger."
+
+estimated_complexity:
+  size: "medium"
+  effort: "3-4 weeks"
+  risk: "low"
+  dependencies: ["DD-001"]   # needs holdings/orders + distributions to exist
+
+notes: |
+  The 'matches your target' confirmation and the always-on monthly update are the trust product —
+  do not cut them for MVP. Push notifications materially drive the return visit but are optional for launch.
+  Pairs with DD-001; together they deliver the north-star: funded users who receive AND understand their first payout.

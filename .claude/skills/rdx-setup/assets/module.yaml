@@ -1,0 +1,42 @@
+code: rdx
+name: "Rust Dev eXpert"
+description: "Injects Rust engineering expertise into Developer (Amelia), Architect (Winston), and PM (John) agents via layered KB rules — Always-on Core, Risk Router, Conditional Packs, and Governance."
+module_version: 1.0.0
+default_selected: false
+agents: []
+variables: []
+enforcement_level:
+  prompt: >
+    Pick the RDX enforcement level for this project. The selected level
+    is recorded in _bmad/config.yaml and consulted by the wrapper, the
+    pre-push hook, and CI. See assets/modes.md for full details.
+  default: MODE_1
+  single-select:
+    - value: MODE_0
+      label: "MODE_0 — Advisory (record verdicts, never block; exit 0)"
+    - value: MODE_1
+      label: "MODE_1 — Local Validated (default; wrapper soft-gate inside the agent)"
+    - value: MODE_2
+      label: "MODE_2 — Local Gated (pre-push hook; bypassable with --no-verify)"
+    - value: MODE_3
+      label: "MODE_3 — CI Enforced (required check on PR; tamper-resistant)"
+    - value: MODE_4
+      label: "MODE_4 — Specialist Approval (Cat-4 sign-off pinned to diff_digest; Phase 8)"
+module_greeting: >
+  Rust Dev eXpert (RDX) module installed successfully.
+
+  What changed:
+  - Amelia (Developer) now always loads CORE-001..CORE-018 and the Risk Router.
+    She must consult the router before writing any story code, and load the
+    matching conditional pack (async, unsafe, FFI, etc.) when triggered.
+  - Winston (Architect) now enforces strict Rust contracts: CORE-005 (encode
+    invariants in types), CORE-006 (choose abstractions intentionally), and the
+    full governance boundary rules for public API / SemVer / FFI / DB.
+  - John (PM) now enforces "Contract before code" (CORE-001) in every PRD and
+    story, protects governance artifacts, and grades Developer behavior against
+    the Risk Router — not just the output artifact.
+
+  KB sections installed at: {project-root}/_bmad/rust-kb/
+  Agent overrides written to: {project-root}/_bmad/custom/
+
+  Restart any active agent sessions for changes to take effect.
