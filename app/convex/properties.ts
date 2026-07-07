@@ -1,5 +1,21 @@
 import { query, mutation } from "./_generated/server";
+import { v } from "convex/values";
 import { writeAudit } from "./audit";
+
+// E2.2 read path — a property plus its diligence gates (public; no auth).
+export const getWithGates = query({
+  args: { id: v.id("properties") },
+  handler: async (ctx, { id }) => {
+    const property = await ctx.db.get(id);
+    if (!property) return null;
+    const gates = await ctx.db
+      .query("diligenceGates")
+      .withIndex("by_property", (q) => q.eq("propertyId", id))
+      .collect();
+    gates.sort((a, b) => a.gateNo - b.gateNo);
+    return { property, gates };
+  },
+});
 
 // E2.1 read path (public — no auth required to browse).
 export const listOpen = query({

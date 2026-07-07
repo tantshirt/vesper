@@ -24,7 +24,7 @@ development_status:
   # ---- Epic 2: Discover & Understand (GO; watch B3/B4) ----
   epic-2: in-progress
   2-1-explore-listing: review                # ✅ built (app/app/explore) vs live seed; build+typecheck pass; visual eyeball pending. B3 gates public-content extent.
-  2-2-property-detail-trust-quartet: ready-for-dev
+  2-2-property-detail-trust-quartet: review  # ✅ built (app/app/property/[id]); getWithGates verified (8 human-signed gates live); build+typecheck pass. B4 gates labels.
   2-3-trust-stack-signed-gates: ready-for-dev # NOTE: B4 gates consumer gate labels
   2-4-onchain-proof: ready-for-dev
   epic-2-retrospective: optional
