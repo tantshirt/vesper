@@ -13,7 +13,7 @@ export default defineSchema({
     walletAddress: v.optional(v.string()), // Privy embedded Solana wallet
     regAInvestedThisYear: v.optional(v.number()), // for Reg A+ cap (I5)
     createdAt: v.number(),
-  }).index("by_privyId", ["privyId"]),
+  }).index("by_privyId", ["privyId"]).index("by_wallet", ["walletAddress"]), // by_wallet: E1.3 chain-event routing
 
   // Append-only. Every money/ownership/eligibility/diligence mutation writes here (FR16 / spine I3).
   auditLog: defineTable({
@@ -36,7 +36,8 @@ export default defineSchema({
     status: v.union(v.literal("open"), v.literal("funded"), v.literal("closed")),
     spvName: v.string(),
     minInvestment: v.number(),
-  }).index("by_status", ["status"]),
+    mint: v.optional(v.string()), // E1.3: on-chain token address → routes chain events to this property
+  }).index("by_status", ["status"]).index("by_mint", ["mint"]), // by_mint: E1.3 chain-event routing
 
   diligenceGates: defineTable({
     propertyId: v.id("properties"),
@@ -86,6 +87,20 @@ export default defineSchema({
     txSig: v.optional(v.string()),
     status: v.union(v.literal("scheduled"), v.literal("paid"), v.literal("missed")),
   }).index("by_user", ["userId"]).index("by_property_period", ["propertyId", "period"]),
+
+  // --- E1.3: on-chain reconciliation (chain-wins mirror sync) ---
+  // Append-only record of every processed on-chain event. `by_signature` is the idempotency key
+  // (a tx signature is applied at most once) and the store for any Convex↔chain discrepancy.
+  reconciliations: defineTable({
+    signature: v.string(), // on-chain tx signature — unique per processed event
+    eventType: v.string(), // "mint" | "transfer" | "distribution"
+    mint: v.optional(v.string()),
+    slot: v.optional(v.number()),
+    status: v.union(v.literal("applied"), v.literal("unresolved")),
+    discrepancy: v.optional(v.any()), // {before, after} when chain overwrote a divergent Convex value
+    raw: v.optional(v.any()), // the normalized/enriched source event, for audit
+    processedAt: v.number(),
+  }).index("by_signature", ["signature"]),
 
   propertyUpdates: defineTable({
     propertyId: v.id("properties"),

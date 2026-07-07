@@ -10,7 +10,8 @@
     "lint": "next lint",
     "convex": "convex dev",
     "seed": "convex run properties:seedTheMonroe",
-    "check:tokens": "node scripts/check-tokens.mjs"
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@privy-io/react-auth": "^2.4.0",
@@ -25,6 +26,9 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0"
+    "@edge-runtime/vm": "^4.0.0",
+    "convex-test": "^0.0.35",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
   }
 }

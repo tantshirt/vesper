@@ -17,7 +17,7 @@ development_status:
   epic-1: in-progress
   1-1-reactive-backbone: done                # ✅ deployed to local Convex; schema+indexes live; seed OK; typecheck clean
   1-2-design-system-tokens: done    # D-Design-System as theme (Fraunces+Inter, light/dark flip)
-  1-3-onchain-reconciliation: ready-for-dev  # Helius → Convex; chain wins
+  1-3-onchain-reconciliation: done  # Helius → Convex; chain wins
   1-4-core-schema-seed: done                 # ✅ schema + The Monroe seed (8 signed gates) deployed with 1-1
   epic-1-retrospective: optional
 
