@@ -20,7 +20,7 @@ export function Providers({ children }: { children: ReactNode }) {
         },
         appearance: {
           theme: "light",
-          accentColor: "#3F3D9E", // design-system indigo
+          accentColor: "#3F3D9E", /* token-guard-allow */ // Privy needs a literal; mirrors --accent
           logo: undefined,
         },
       }}

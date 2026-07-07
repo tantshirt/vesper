@@ -1,19 +1,87 @@
 /* Vesper design tokens — from D-Design-System/00-design-system.md (Brand Direction Brief).
-   E1.2 will self-host Fraunces (variable, opsz) + Inter as @font-face; using stacks for now. */
+   Fraunces (variable, opsz) + Inter (variable) are self-hosted via next/font/local in
+   layout.tsx and bound below to --font-serif / --font-sans. Light-first; dark = midnight-field flip. */
 
 :root {
+  color-scheme: light;
+
+  /* Color — brand ground + text */
   --bg: #FBFBFD; --ink: #14142B; --sub: #5B5B6B; --muted: #6B7280;
-  --accent: #3F3D9E; --accent-press: #35338A; --midnight: #1E1B4B;
-  --chip: #F4F3FC; --champagne: #E8C88C; --hair: #ECEBF6; --hair2: #E5E4F0;
-  --surface: #FFFFFF; --gain: #2E9E6B; --loss: #C4553D; --warning: #C99A3F;
-  --serif: "Fraunces", "Hoefler Text", "Iowan Old Style", Georgia, serif;
-  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Color — indigo family */
+  --accent: #3F3D9E; --accent-press: #35338A;
+  --block-mid: #4A47B5; --block-mid-press: #3E3C9C;
+  --midnight: #1E1B4B; --midnight-press: #15132F;
+
+  /* Color — surfaces, chips, hairlines */
+  --chip: #F4F3FC; --surface: #FFFFFF;
+  --hairline: #ECEBF6; --hairline-2: #E5E4F0;
+
+  /* Color — champagne accent (small accent only, never a fill) */
+  --champagne: #E8C88C; --champagne-soft: #EAD9A0;
+
+  /* Color — semantic (always paired with a sign) */
+  --gain: #2E9E6B; --loss: #C4553D; --warning: #C99A3F;
+
+  /* Dusk hero gradient (mode-independent) */
+  --dusk: linear-gradient(180deg, #26226B 0%, #1E1B4B 62%, #191637 100%);
+  --dusk-fg: #FBFBFD; --dusk-eyebrow: #C9C7E8; --dusk-sub: #B9B6DD;
+  --dusk-hairline: rgba(251,251,253,.16);
+
+  /* Elevation */
+  --shadow: 0 1px 2px rgba(30,27,75,.05), 0 10px 30px rgba(30,27,75,.06);
+
+  /* Spacing scale (4px base) */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-7: 32px; --space-8: 40px;
+  --space-9: 48px; --space-10: 64px;
+
+  /* Radius scale (buttons ~13px · cards ~20px · pills/chips 99px) */
+  --radius-sm: 11px; --radius-md: 13px; --radius-lg: 20px; --radius-pill: 99px;
+
+  /* Type — bound to the self-hosted variable fonts, brand stacks retained as fallback */
+  --serif: var(--font-serif, "Hoefler Text"), "Hoefler Text", "Iowan Old Style", Georgia, serif;
+  --sans: var(--font-sans, system-ui), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+/* Dark = flip: midnight becomes the field, champagne holds as the highlight (per brief). */
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --bg: #141033; --ink: #F3F2FB; --sub: #B7B4D6; --muted: #A9A6C8;
-    --accent: #9B98EA; --accent-press: #8683E0; --chip: #231F52;
-    --hair: rgba(244,243,252,.10); --hair2: rgba(244,243,252,.13); --surface: #201C4C;
+    --accent: #9B98EA; --accent-press: #8683E0;
+    --chip: #231F52; --surface: #201C4C;
+    --hairline: rgba(244,243,252,.10); --hairline-2: rgba(244,243,252,.13);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 34px rgba(0,0,0,.5);
+  }
+}
+
+/* Explicit theme choice wins over the OS query: the [data-theme] attribute selector
+   (specificity 0,2,0) outranks the media block's :root (0,1,0); source order also keeps it last. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #141033; --ink: #F3F2FB; --sub: #B7B4D6; --muted: #A9A6C8;
+  --accent: #9B98EA; --accent-press: #8683E0;
+  --chip: #231F52; --surface: #201C4C;
+  --hairline: rgba(244,243,252,.10); --hairline-2: rgba(244,243,252,.13);
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 34px rgba(0,0,0,.5);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #FBFBFD; --ink: #14142B; --sub: #5B5B6B; --muted: #6B7280;
+  --accent: #3F3D9E; --accent-press: #35338A;
+  --chip: #F4F3FC; --surface: #FFFFFF;
+  --hairline: #ECEBF6; --hairline-2: #E5E4F0;
+  --shadow: 0 1px 2px rgba(30,27,75,.05), 0 10px 30px rgba(30,27,75,.06);
+}
+
+/* Respect reduced-motion (I/O matrix). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -21,7 +89,7 @@
 html, body { margin: 0; padding: 0; }
 body {
   background: var(--bg); color: var(--ink); font-family: var(--sans);
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: antialiased; font-optical-sizing: auto;
 }
 ::selection { background: var(--champagne); color: #14142B; }
 
@@ -37,7 +105,7 @@ h1 {
 }
 .muted { color: var(--muted); font-size: 15px; line-height: 1.6; }
 .card {
-  margin-top: 24px; background: var(--surface); border: 1px solid var(--hair2);
+  margin-top: 24px; background: var(--surface); border: 1px solid var(--hairline-2);
   border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 12px;
 }
 .ok { color: var(--gain); font-weight: 600; margin: 0; }
@@ -53,17 +121,17 @@ h1 {
   padding: 14px 26px; border-radius: 13px;
 }
 .cta:hover { background: var(--accent-press); }
-.cta.ghost { background: transparent; color: var(--accent); border: 1px solid var(--hair2); }
+.cta.ghost { background: transparent; color: var(--accent); border: 1px solid var(--hairline-2); }
 .cta:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
 
 /* ---- E2.1 Explore ---- */
 .ex { max-width: 440px; margin: 0 auto; padding-bottom: 80px; min-height: 100vh; }
 .ex-head { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--hair); }
+  border-bottom: 1px solid var(--hairline); }
 .wm { font-family: var(--serif); font-weight: 560; font-size: 20px; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
-.wm i { width: 8px; height: 8px; transform: rotate(45deg); background: linear-gradient(135deg, var(--champagne), #EAD9A0); border-radius: 2px; }
-.avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #4A47B5);
+.wm i { width: 8px; height: 8px; transform: rotate(45deg); background: linear-gradient(135deg, var(--champagne), var(--champagne-soft)); border-radius: 2px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--block-mid));
   color: #fff; display: grid; place-items: center; font: 600 13px var(--sans); }
 .ex-greet { padding: 20px 18px 2px; }
 .ex-greet .k { font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
@@ -71,16 +139,16 @@ h1 {
 .ex-chips { display: flex; gap: 8px; padding: 16px 18px 4px; overflow-x: auto; }
 .ex-chips::-webkit-scrollbar { height: 0; }
 .chip { white-space: nowrap; font: 500 12.5px var(--sans); color: var(--muted); background: var(--surface);
-  border: 1px solid var(--hair2); padding: 8px 14px; border-radius: 99px; }
+  border: 1px solid var(--hairline-2); padding: 8px 14px; border-radius: 99px; }
 .chip.on { color: #fff; background: var(--accent); border-color: var(--accent); }
 .ex-list { padding: 6px 18px; display: flex; flex-direction: column; gap: 14px; }
 .ex-empty { padding: 40px 18px; color: var(--muted); font-size: 15px; text-align: center; }
-.pcard { display: block; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--hair2);
+.pcard { display: block; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--hairline-2);
   border-radius: 20px; overflow: hidden; box-shadow: var(--shadow, 0 1px 2px rgba(30,27,75,.05)); }
 .pcard.skel { height: 250px; opacity: .5; background: linear-gradient(100deg, var(--chip) 30%, var(--surface) 50%, var(--chip) 70%); }
-.pcard-img { position: relative; height: 132px; background: linear-gradient(180deg, #26226B 0%, #1E1B4B 62%, #191637 100%); }
+.pcard-img { position: relative; height: 132px; background: var(--dusk); }
 .pcard-img .lit { position: absolute; left: 150px; bottom: 62px; width: 6px; height: 8px; border-radius: 1px;
-  background: linear-gradient(180deg, var(--champagne), #EAD9A0); box-shadow: 0 0 10px 2px rgba(232,200,140,.6); }
+  background: linear-gradient(180deg, var(--champagne), var(--champagne-soft)); box-shadow: 0 0 10px 2px rgba(232,200,140,.6); }
 .badge { position: absolute; left: 12px; top: 12px; font: 600 10px ui-monospace, Menlo, monospace; letter-spacing: .08em;
   color: #fff; background: rgba(20,20,43,.5); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.14); padding: 5px 9px; border-radius: 99px; }
 .yield { position: absolute; right: 12px; top: 12px; font: 600 15px var(--sans); font-variant-numeric: tabular-nums; color: #fff;
@@ -90,12 +158,12 @@ h1 {
 .ps { font: 400 12.5px var(--sans); color: var(--muted); margin: 3px 0 10px; }
 .ptags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .ptag { font: 500 10.5px var(--sans); color: var(--accent); background: var(--chip); padding: 4px 9px; border-radius: 99px; }
-.fundbar { height: 5px; border-radius: 99px; background: var(--hair2); overflow: hidden; }
+.fundbar { height: 5px; border-radius: 99px; background: var(--hairline-2); overflow: hidden; }
 .fundbar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
 .fundmeta { display: flex; justify-content: space-between; font: 500 11px var(--sans); color: var(--muted); margin-top: 7px; font-variant-numeric: tabular-nums; }
 .tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 440px;
   display: flex; justify-content: space-around; padding: 10px 8px calc(12px + env(safe-area-inset-bottom, 0));
-  border-top: 1px solid var(--hair); background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(14px); }
+  border-top: 1px solid var(--hairline); background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(14px); }
 .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font: 500 10px var(--sans); color: var(--muted); }
 .tab.on { color: var(--accent); } .tab b { font-size: 16px; line-height: 1; }
 
@@ -103,15 +171,15 @@ h1 {
 .pd { max-width: 440px; margin: 0 auto; padding-bottom: 96px; min-height: 100vh; }
 .pd-loading { padding: 60px 20px; color: var(--muted); text-align: center; }
 .pd-head { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between;
-  padding: 13px 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--hair); }
-.ibtn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--hair2); background: var(--surface); color: var(--ink);
+  padding: 13px 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--hairline); }
+.ibtn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--hairline-2); background: var(--surface); color: var(--ink);
   display: grid; place-items: center; font-size: 16px; text-decoration: none; }
 .pd-hero { position: relative; height: 200px; overflow: hidden;
-  background: linear-gradient(180deg, #26226B 0%, #1E1B4B 62%, #191637 100%); }
+  background: var(--dusk); }
 .pd-glow { position: absolute; right: -30px; top: -40px; width: 190px; height: 190px; border-radius: 50%;
   background: radial-gradient(circle, rgba(232,200,140,.26), transparent 62%); }
 .pd-lit { position: absolute; left: 156px; bottom: 92px; width: 7px; height: 9px; border-radius: 1px;
-  background: linear-gradient(180deg, var(--champagne), #EAD9A0); box-shadow: 0 0 12px 2px rgba(232,200,140,.7); }
+  background: linear-gradient(180deg, var(--champagne), var(--champagne-soft)); box-shadow: 0 0 12px 2px rgba(232,200,140,.7); }
 .pd-hero-b { position: absolute; left: 16px; right: 16px; bottom: 13px; display: flex; justify-content: flex-end; }
 .fund-pill { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .08em; color: #fff;
   background: rgba(20,20,43,.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.14); padding: 6px 10px; border-radius: 99px; }
@@ -127,29 +195,29 @@ h1 {
 .metric { font: 600 40px var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1; color: var(--ink); }
 .metric small { font: 500 15px var(--sans); color: var(--muted); }
 .pd-note { font: 400 12.5px/1.5 var(--sans); color: var(--muted); margin: 8px 0 0; }
-.pd-blk { padding: 22px 16px; border-top: 1px solid var(--hair); }
+.pd-blk { padding: 22px 16px; border-top: 1px solid var(--hairline); }
 .pd-h { font-family: var(--serif); font-weight: 500; font-size: 19px; letter-spacing: -.018em; line-height: 1.12; margin: 0 0 14px; }
-.own-item { display: flex; gap: 13px; padding: 13px 0; border-top: 1px solid var(--hair); }
+.own-item { display: flex; gap: 13px; padding: 13px 0; border-top: 1px solid var(--hairline); }
 .own-item:first-child { border-top: 0; padding-top: 2px; }
 .own-num { font: 600 12px ui-monospace, Menlo, monospace; color: var(--accent); flex: none; padding-top: 2px; }
 .own-item h4 { font-family: var(--serif); font-weight: 500; font-size: 15px; margin: 0 0 3px; }
 .own-item p { font: 400 12.5px/1.55 var(--sans); color: var(--muted); margin: 0; }
-.liq { background: var(--surface); border: 1px solid var(--hair2); border-radius: 14px; padding: 2px 14px; }
-.lrow { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--hair); font: 400 13px var(--sans); }
+.liq { background: var(--surface); border: 1px solid var(--hairline-2); border-radius: 14px; padding: 2px 14px; }
+.lrow { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--hairline); font: 400 13px var(--sans); }
 .lrow:last-child { border-bottom: 0; } .lrow b { font-variant-numeric: tabular-nums; }
 .liq-foot { font: 400 11.5px/1.5 var(--sans); color: var(--muted); padding: 11px 2px 0; }
 .pd-thead { font: 400 12.5px/1.5 var(--sans); color: var(--muted); margin: -8px 0 13px; } .pd-thead b { color: var(--ink); font-weight: 600; }
-.gate { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hair); font: 400 13px var(--sans); }
+.gate { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hairline); font: 400 13px var(--sans); }
 .gate:last-child { border-bottom: 0; }
 .gate-ck { width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 11px var(--sans); color: #fff; background: var(--gain); }
 .gate-name { font-weight: 500; } .gate-sign { color: var(--muted); font-size: 11.5px; margin-top: 1px; } .gate-sign b { color: var(--ink); font-weight: 600; }
-.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 14px; overflow: hidden; }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden; }
 .fact { background: var(--surface); padding: 13px 14px; }
 .fk { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .fv { font: 500 14px var(--sans); margin-top: 4px; font-variant-numeric: tabular-nums; }
 .pd-spacer { height: 20px; }
 .pd-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 440px;
   display: flex; align-items: center; gap: 12px; padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0));
-  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); border-top: 1px solid var(--hair); }
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); border-top: 1px solid var(--hairline); }
 .pd-bar-meta { font: 400 12px var(--sans); color: var(--muted); } .pd-bar-meta b { display: block; color: var(--ink); font: 600 15px var(--sans); font-variant-numeric: tabular-nums; margin-top: 1px; }
 .pd-bar .cta { margin-left: auto; }
