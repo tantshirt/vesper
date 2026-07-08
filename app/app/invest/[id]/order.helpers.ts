@@ -56,6 +56,5 @@ export const ORDER_COPY = {
   platformFeeLabel: "One-time platform fee",
   totalLabel: "Total charged today",
   backLabel: "‹ Back to adjust your amount",
-  continueCta: "Continue",
-  comingSoonNote: "The next step is coming soon — we'll pick up right here when it's ready.",
+  continueCta: "Continue to acknowledge risks →",
 } as const;

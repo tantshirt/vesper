@@ -39,6 +39,11 @@ import {
   formatMgmtFeeNote,
   ORDER_COPY,
 } from "./order.helpers";
+import {
+  RIGHTS_ACKS,
+  allAcknowledged,
+  RIGHTS_COPY,
+} from "./rights.helpers";
 
 // Whole-dollar add-money bounds — client-side mirror of convex/funding.ts MIN_FUNDING/MAX_FUNDING.
 // The mutation is the authoritative validator; these gate the form (required + submit-disabled).
@@ -86,11 +91,14 @@ export default function InvestPage() {
   // Story 4.1 · Calculator view — a local, button-driven toggle off the funded screen (same idiom
   // as `showAddMore`; the reactive gate-state machine is unchanged). `investAmount` is the raw input
   // string (default "100" for a live projection on first paint); `projection` flips the first-year
-  // figure between the base and the −12% downside case; `reviewOpened` reveals the calm 4.2 handoff.
-  const [view, setView] = useState<"funded" | "calculator" | "order">("funded");
+  // figure between the base and the −12% downside case. Story 4.3 adds the `rights` view: `acks`
+  // holds the per-order checkbox state (reset fresh each entry so consent is deliberate per order),
+  // and `confirmOpened` reveals the calm 4.4 coming-soon note once all three are acknowledged.
+  const [view, setView] = useState<"funded" | "calculator" | "order" | "rights">("funded");
   const [investAmount, setInvestAmount] = useState("100");
   const [projection, setProjection] = useState<"base" | "downside">("base");
-  const [reviewOpened, setReviewOpened] = useState(false);
+  const [acks, setAcks] = useState<Record<string, boolean>>({});
+  const [confirmOpened, setConfirmOpened] = useState(false);
 
   // Resolve the embedded Solana address. Select ONLY the Privy-embedded wallet (its
   // `walletClientType` is "privy"). Never fall back to `solanaWallets[0]`: with "wallet" in
@@ -545,12 +553,7 @@ export default function InvestPage() {
           className="cta"
           disabled={!valid}
           aria-disabled={!valid}
-          onClick={() => {
-            // Enter the order preview fresh: clear any prior Continue-reveal so the 4.3 coming-soon
-            // note never pre-shows for an order the user hasn't re-confirmed on this visit.
-            setReviewOpened(false);
-            setView("order");
-          }}
+          onClick={() => setView("order")}
         >
           {CALC_COPY.reviewCta}
         </button>
@@ -559,12 +562,13 @@ export default function InvestPage() {
   }
 
   // state === "funded", view === "order" — Story 4.2 fee-transparent order preview: a local `view`
-  // between the calculator and the future rights step (4.3), same idiom as 4.1's funded → calculator.
+  // between the calculator and the rights step (4.3), same idiom as 4.1's funded → calculator.
   // Shows the investment, the one-time 0.9% platform fee, and the total charged today, plus the
   // no-double-charge management-fee note. Reuses the calculator's `projAmount` clamp; the fee rate and
   // yield derive from PLATFORM_FEE_RATE / property.targetNetYield (no hardcoded digits). No order
   // record or persistence here — the order is created and settled atomically in Story 4.4. Back
-  // returns to the calculator with the amount intact; Continue reveals the honest 4.3 coming-soon note.
+  // returns to the calculator with the amount intact; Continue advances into the rights step (4.3),
+  // entered fresh (all boxes unchecked) so consent is deliberate per order.
   if (state === "funded" && view === "order" && p) {
     const targetNetYield = p.targetNetYield;
     const amountNum = Number(investAmount);
@@ -600,11 +604,71 @@ export default function InvestPage() {
 
         <p className="muted">{formatMgmtFeeNote(targetNetYield)}</p>
 
-        <button type="button" className="cta" onClick={() => setReviewOpened(true)}>
+        <button
+          type="button"
+          className="cta"
+          onClick={() => {
+            setAcks({});
+            setConfirmOpened(false);
+            setView("rights");
+          }}
+        >
           {ORDER_COPY.continueCta}
         </button>
-        {reviewOpened && (
-          <p className="muted" role="status">{ORDER_COPY.comingSoonNote}</p>
+      </main>
+    );
+  }
+
+  // state === "funded", view === "rights" — Story 4.3 active-consent gate: a local `view` between the
+  // order preview and the future settlement step (4.4), same idiom as 4.1/4.2. Renders the three
+  // RIGHTS_ACKS as accessible checkbox rows; Confirm is enabled ONLY when `allAcknowledged(acks)` is
+  // true (both `disabled` and `aria-disabled` mirror the gate — FR9). No consent record, mutation, or
+  // persistence — consent is captured atomically with the purchase in Story 4.4. Entered fresh from
+  // the order Continue (acks reset to {}), so a returning investor must actively re-check. Back returns
+  // to the order preview with the amount and fees intact; Confirm reveals the honest 4.4 coming-soon note.
+  if (state === "funded" && view === "rights" && p) {
+    const acknowledged = allAcknowledged(acks);
+    return (
+      <main className="wrap">
+        <button type="button" className="calc-back" onClick={() => setView("order")}>
+          {RIGHTS_COPY.backLabel}
+        </button>
+        <p className="eyebrow"><span className="dot" /> {RIGHTS_COPY.eyebrow}</p>
+        <h1>{RIGHTS_COPY.title}</h1>
+        <p className="muted">{p.name} · {p.location}</p>
+        <p className="muted">{RIGHTS_COPY.intro}</p>
+
+        <div className="card">
+          <div className="ack-list" role="group" aria-label={RIGHTS_COPY.title}>
+            {RIGHTS_ACKS.map((ack) => (
+              <label className="ack-item" key={ack.id}>
+                <input
+                  type="checkbox"
+                  checked={acks[ack.id] === true}
+                  onChange={(e) => {
+                    // Reset the Confirm-reveal on any toggle so the 4.4 coming-soon note never
+                    // lingers over a re-disabled gate (mirrors 4.2's fresh-reveal fix).
+                    setConfirmOpened(false);
+                    setAcks((prev) => ({ ...prev, [ack.id]: e.target.checked }));
+                  }}
+                />
+                <span>{ack.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="cta"
+          disabled={!acknowledged}
+          aria-disabled={!acknowledged}
+          onClick={() => setConfirmOpened(true)}
+        >
+          {RIGHTS_COPY.confirmCta}
+        </button>
+        {confirmOpened && (
+          <p className="muted" role="status">{RIGHTS_COPY.comingSoonNote}</p>
         )}
       </main>
     );
