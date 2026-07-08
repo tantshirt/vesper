@@ -48,7 +48,7 @@ development_status:
   # ---- Epic 5: Earn & Trust ----
   epic-5: in-progress
   5-1-home-payout-hero: done                 # ✅ recovered from preserved bmad-loop attempt (0ceba1e); dev+review complete, typecheck clean
-  5-2-portfolio-concentration: ready-for-dev
+  5-2-portfolio-concentration: done
   5-3-income-breakdown: ready-for-dev
   5-4-property-updates: ready-for-dev
   epic-5-retrospective: optional

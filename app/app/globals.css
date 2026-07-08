@@ -345,3 +345,28 @@ h1 {
 .spark { margin-top: 4px; }
 .spark svg { display: block; width: 100%; height: 56px; }
 .home-empty { margin-top: 12px; }
+
+/* ---- E5.2 Portfolio — per-holding rows, allocation-by-market bars, and the calm concentration
+   nudge. Token-driven only (tabular money figures, the .fundbar bar idiom, the .pd-verified
+   soft-tint idiom on --warning for the nudge). ---- */
+/* Per-holding row: a two-line block (name + value / market + this-month income), hairline-separated,
+   with stable tabular figures so a reactive value update never shifts layout. */
+.port-holding { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-top: 1px solid var(--hairline); }
+.port-holding:first-of-type { border-top: 0; padding-top: 2px; }
+.port-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.port-name { font: 500 15px var(--sans); color: var(--ink); }
+.port-sub { font-size: 13px; }
+/* Allocation row: a market label + its whole-percent share above the token bar track. */
+.alloc-row { display: flex; flex-direction: column; gap: 7px; padding: 10px 0; border-top: 1px solid var(--hairline); }
+.alloc-row:first-of-type { border-top: 0; padding-top: 2px; }
+.alloc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+/* Bar track + fill — extends the .fundbar 5px idiom (rounded track, accent fill), width set inline. */
+.alloc-bar { height: 5px; border-radius: 99px; background: var(--hairline-2); overflow: hidden; }
+.alloc-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+/* Concentration nudge — calm --warning soft-tint (mirrors the .pd-verified idiom): never alarming. */
+.port-nudge { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent); border-radius: 14px; padding: 16px 18px; }
+.port-nudge-title { margin: 0; font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.port-nudge-body { margin: 0; font: 400 13.5px/1.55 var(--sans); color: var(--ink); }
+.port-nudge .cta.ghost { margin-top: 4px; }

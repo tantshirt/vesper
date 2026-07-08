@@ -22,8 +22,8 @@ import {
 // balance sparkline (with a text equivalent). The whole model comes from `api.home.summary`, an
 // auth-scoped read over the reconciled mirror — `null` when signed out, so nobody sees another owner's
 // stats. All copy/formatting/geometry live in pure, tested helpers (home.helpers.ts). No crypto
-// vocabulary and no raw distribution receipt ever surface here. Portfolio affordance links to /explore
-// (interim, matching Story 4.5 — the dedicated /portfolio route is Story 5.2).
+// vocabulary and no raw distribution receipt ever surface here. The balance card's portfolio affordance
+// links to the dedicated /portfolio route (Story 5.2); the empty/signed-out Explore CTA stays genuine.
 
 // Sparkline canvas dimensions (unitless SVG user space; the element scales responsively via CSS).
 const SPARK_W = 280;
@@ -159,6 +159,7 @@ export default function Home() {
         </div>
       )}
 
+      <Link className="cta" href="/portfolio">{HOME_COPY.portfolioCta}</Link>
       <Link className="cta ghost" href="/explore">{HOME_COPY.exploreCta}</Link>
     </main>
   );

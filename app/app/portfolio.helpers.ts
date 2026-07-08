@@ -1,0 +1,110 @@
+// Story 5.2 · Portfolio ("value + this-month income + allocation, with concentration honesty") —
+// pure copy + formatters (no JSX/React/DOM), so the view-state decision, the allocation/percent
+// formatting, the concentration-nudge text, and the no-crypto-vocabulary invariant are all unit-
+// testable without a browser harness (mirrors home.helpers.ts + invest.helpers.ts + vitest pattern).
+//
+// Consumer surface rule (spine I6 / NFR3): NONE of PORTFOLIO_COPY nor any value this module produces
+// may contain crypto vocabulary (the shared `hasCryptoVocabulary` guard asserts this). Portfolio never
+// surfaces a raw distribution txSig or any wallet/token/on-chain term. Money uses tabular numerals via
+// the existing `formatUsd`.
+
+import { formatUsd } from "./invest/[id]/invest.helpers";
+
+// A single holding row as returned by `api.portfolio.summary`: per-property value (cost basis) + this
+// month's income (Σ paid netPaid for the current period on that property).
+export interface PortfolioHolding {
+  propertyId: string;
+  name: string;
+  market: string;
+  value: number;
+  monthIncome: number;
+}
+
+// One market's slice of the allocation-by-market model: total cost basis in that market + its share
+// (fraction 0..1) of the whole portfolio.
+export interface PortfolioAllocation {
+  market: string;
+  value: number;
+  pct: number;
+}
+
+// The reactive Portfolio model as returned by `api.portfolio.summary` (a superset is fine). `null` =
+// the query resolved to no caller (unauthenticated / unprovisioned); `undefined` (loading) is handled
+// in the view.
+export interface PortfolioSummary {
+  hasHoldings: boolean;
+  holdings: PortfolioHolding[];
+  allocations: PortfolioAllocation[];
+  totalValue: number;
+  totalMonthIncome: number;
+  // The top market whose share strictly exceeds 35%, else null. Present → render the calm nudge.
+  concentration: { market: string; pct: number } | null;
+}
+
+// Which Portfolio surface a provisioned owner sees:
+//   • "holdings" — has at least one holding → per-holding rows + allocation bars (+ nudge if concentrated).
+//   • "empty"    — provisioned but no holdings yet → the calm start state.
+export type PortfolioViewState = "empty" | "holdings";
+
+export function portfolioViewState(summary: PortfolioSummary): PortfolioViewState {
+  return summary.hasHoldings ? "holdings" : "empty";
+}
+
+// Unsigned whole-percent label for an allocation share (fraction input, e.g. 0.72 → "72%"). Clamped to
+// [0, 1] and guarded so a non-finite or out-of-range fraction never renders "NaN%"/"140%".
+export function formatAllocationPct(fraction: number): string {
+  const f = Number.isFinite(fraction) ? fraction : 0;
+  const clamped = Math.min(1, Math.max(0, f));
+  return `${Math.round(clamped * 100)}%`;
+}
+
+// The width for an allocation bar's fill, as a clamped "NN%" CSS length (fraction input). This is by
+// design the SAME clamped whole-percent as the label — delegating to `formatAllocationPct` guarantees
+// the bar and its label can never drift apart (both guard non-finite/over-1/negative to a safe "NN%").
+export function allocationBarWidth(fraction: number): string {
+  return formatAllocationPct(fraction);
+}
+
+// The calm, constructive concentration sentence (FR13): names the market and its share, then invites
+// diversification — never alarming, never hidden. Crypto-clean (the market string is a free-text
+// location like "Tampa, FL"; the surrounding copy carries no crypto vocabulary).
+export function formatConcentrationNudge(market: string, fraction: number): string {
+  return `${formatAllocationPct(fraction)} of your money sits in ${market}. Spreading across more places can steady your income over time.`;
+}
+
+// A short, tabular text equivalent for a per-holding row (WCAG — the visual figures also read as text
+// to assistive tech). Crypto-clean. Reuses `formatUsd` for both figures.
+export function describeHolding(holding: PortfolioHolding): string {
+  return `${holding.name} in ${holding.market}: ${formatUsd(holding.value)}, ${formatUsd(holding.monthIncome)} this month.`;
+}
+
+// --- Consumer-visible copy. Crypto-clean (asserted by hasCryptoVocabulary over every value). --------
+export const PORTFOLIO_COPY = {
+  eyebrow: "Vesper",
+  title: "Your portfolio",
+
+  // Section labels.
+  totalValueLabel: "Portfolio value",
+  holdingsHeading: "Your homes",
+  allocationHeading: "Where your money is",
+  valueLabel: "Value",
+  monthIncomeLabel: "This month",
+
+  // Empty / start state (provisioned owner, no holdings yet).
+  emptyTitle: "Your portfolio is waiting",
+  emptyBody:
+    "You haven't invested yet. Browse the homes on offer and start earning your share of the rent.",
+
+  // Signed-out welcome.
+  signedOutTitle: "Your portfolio, in one place",
+  signedOutBody:
+    "Sign in to see the homes you own, the income they paid this month, and how your money is spread across places.",
+  signInCta: "Sign in",
+
+  // Concentration nudge (title only — the body is generated by formatConcentrationNudge).
+  nudgeTitle: "A note on balance",
+  diversifyCta: "Explore more homes",
+
+  // Onward affordance.
+  exploreCta: "Explore properties",
+} as const;

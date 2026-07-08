@@ -139,6 +139,7 @@ export const HOME_COPY = {
     "Invest in a share of a real home and earn your part of the rent — no landlording, no fuss.",
   signInCta: "Sign in",
 
-  // Onward affordance (interim portfolio link → Explore, matching Story 4.5).
+  // Onward affordances.
   exploreCta: "Explore properties",
+  portfolioCta: "View portfolio",
 } as const;

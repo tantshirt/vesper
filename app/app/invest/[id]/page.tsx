@@ -375,7 +375,7 @@ export default function InvestPage() {
             <b className="calc-figure">{confirmationRef}</b>
           </div>
         </div>
-        <Link className="cta" href="/explore">{CONFIRMATION_COPY.portfolioCta}</Link>
+        <Link className="cta" href="/portfolio">{CONFIRMATION_COPY.portfolioCta}</Link>
         <p className="muted">
           <Link href={`/property/${p._id}/proof`}>{CONFIRMATION_COPY.proofLinkLabel}</Link>
         </p>
