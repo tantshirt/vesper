@@ -86,6 +86,14 @@ export function formatBelowTarget(realizedYield: number, targetYield: number): s
 // The waterfall's accessible text equivalent (WCAG — the visual rows also read as one sentence to
 // assistive tech). Cents precision, DD-002 order, crypto-clean. Reuses formatUsdCents for every figure.
 export function describeWaterfall(distribution: IncomeDistribution): string {
+  // A non-paid distribution (missed today; a future "paused" state reads identically) has all-zero
+  // itemized fields — describing it as a "$0.00 net payment" would tell assistive tech a $0 payment was
+  // made. Give the honest equivalent of the visible banner instead, so the text never asserts a payout.
+  if (isMissed(distribution.status)) {
+    return `This period's distribution ${
+      distribution.status === "missed" ? "didn't arrive" : "hasn't been paid yet"
+    } — no payment reached you.`;
+  }
   return (
     `Gross rent share ${formatUsdCents(distribution.grossShare)}, ` +
     `less operating costs ${formatUsdCents(distribution.costs)}, ` +

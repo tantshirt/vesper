@@ -94,6 +94,15 @@ describe("describeWaterfall — accessible text equivalent, DD-002 order, cents"
     expect(text.indexOf("$100.00")).toBeLessThan(text.indexOf("$24.00"));
     expect(text.indexOf("$24.00")).toBeLessThan(text.indexOf("$62.00"));
   });
+
+  test("a missed distribution reads as no-payment — never asserts a $0.00 payout to assistive tech", () => {
+    const text = describeWaterfall(
+      distribution({ status: "missed", grossShare: 0, costs: 0, mgmtFee: 0, reserve: 0, netPaid: 0 }),
+    );
+    expect(text.toLowerCase()).toContain("didn't arrive");
+    expect(text).not.toContain("$0.00");
+    expect(text.toLowerCase()).not.toContain("net payment to you");
+  });
 });
 
 describe("describeHistoryRow / STATUS_LABEL", () => {

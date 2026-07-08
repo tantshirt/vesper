@@ -49,7 +49,7 @@ development_status:
   epic-5: in-progress
   5-1-home-payout-hero: done                 # ✅ recovered from preserved bmad-loop attempt (0ceba1e); dev+review complete, typecheck clean
   5-2-portfolio-concentration: done
-  5-3-income-breakdown: done                 # ✅ recovered from bmad-loop dev-4 (killed pre-finalize); 486 tests green, typecheck clean; independent review pending
+  5-3-income-breakdown: done                 # ✅ recovered from bmad-loop dev-4 (killed pre-finalize); independent review done — fixed paid-$0 waterfall + a11y miss text; #3-5 deferred
   5-4-property-updates: done
   epic-5-retrospective: optional
 

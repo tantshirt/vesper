@@ -10,6 +10,7 @@ import {
   evaluateTarget,
   selectLatestDistribution,
   buildHistory,
+  isSurfaceableDistribution,
 } from "./income";
 import { periodFor } from "./home";
 
@@ -169,6 +170,19 @@ describe("selectLatestDistribution — most recent by period, then paidAt", () =
   });
 });
 
+describe("isSurfaceableDistribution — a paid-but-$0 rounding artifact is not a real latest payout", () => {
+  test("paid with netPaid > 0 → surfaceable", () => {
+    expect(isSurfaceableDistribution({ status: "paid", netPaid: 62 })).toBe(true);
+  });
+  test.each([0, -1, NaN, Infinity])("paid with netPaid %s → NOT surfaceable (mirrors home freshness)", (n) => {
+    expect(isSurfaceableDistribution({ status: "paid", netPaid: n })).toBe(false);
+  });
+  test("a non-paid row stays surfaceable regardless of $0 (its honest banner is the point)", () => {
+    expect(isSurfaceableDistribution({ status: "missed", netPaid: 0 })).toBe(true);
+    expect(isSurfaceableDistribution({ status: "scheduled", netPaid: 0 })).toBe(true);
+  });
+});
+
 describe("buildHistory — most-recent-first, non-mutating", () => {
   test("orders by period desc then paidAt desc without mutating input", () => {
     const rows = [
@@ -256,6 +270,52 @@ describe("income.summary — auth-scoped reactive model", () => {
     const res = await asUser(t).query(api.income.summary, {});
     expect(res!.latest!.target.matchesTarget).toBe(false);
     expect(res!.latest!.target.realizedYield).toBeLessThan(0.062);
+  });
+
+  test("paid-but-$0 rounding artifact (sub-dollar holding, e.g. the $50 minimum): no surfaceable latest → empty state, not an all-zeros waterfall + false below-target note", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await seedUser(t);
+    const propertyId = await seedProperty(t, { targetNetYield: 0.062 });
+    // A $50 holding at 6.2%: round(50 × 0.062 / 12) = round(0.258) = 0 → the seed writes a paid $0 row.
+    await seedHolding(t, userId, propertyId, 50);
+    await seedIncome(t, userId, propertyId, {
+      grossShare: 0,
+      costs: 0,
+      mgmtFee: 0,
+      reserve: 0,
+      netPaid: 0,
+      status: "paid",
+      paidAt: Date.now(),
+    });
+
+    const res = await asUser(t).query(api.income.summary, {});
+    // Latest is filtered out → the view falls to the calm "first income on the way" empty state (holdings
+    // present), never a $0.00 waterfall asserting a below-target payout.
+    expect(res!.latest).toBeNull();
+    expect(res!.hasHoldings).toBe(true);
+  });
+
+  test("a real paid distribution still wins over a later paid-$0 artifact", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await seedUser(t);
+    const propertyId = await seedProperty(t, { targetNetYield: 0.062 });
+    await seedHolding(t, userId, propertyId, 12_000);
+    await seedIncome(t, userId, propertyId, { period: "2026-06", netPaid: 62, paidAt: Date.now() - 1 });
+    // A later period that rounded to $0 must not become the surfaced latest.
+    await seedIncome(t, userId, propertyId, {
+      period: "2026-07",
+      grossShare: 0,
+      costs: 0,
+      mgmtFee: 0,
+      reserve: 0,
+      netPaid: 0,
+      status: "paid",
+      paidAt: Date.now(),
+    });
+
+    const res = await asUser(t).query(api.income.summary, {});
+    expect(res!.latest!.netPaid).toBe(62);
+    expect(res!.latest!.period).toBe("2026-06");
   });
 
   test("missed distribution: latest status missed → still returned (banner keys off it), appears in history", async () => {

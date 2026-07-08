@@ -84,6 +84,17 @@ export function buildHistory<T extends { period: string; paidAt?: number }>(rows
   return [...rows].sort((a, b) => compareRecency(b, a));
 }
 
+// Whether a distribution is worth surfacing as the itemized "latest" waterfall. A PAID row that rounded
+// to $0 net (a sub-dollar monthly payout on a very small holding — e.g. the $50 minimum at a single-digit
+// yield, where round(costBasis × targetNetYield / 12) = 0) is not a real payout: surfacing it renders an
+// all-zeros gross→net waterfall AND a misleading "came in around 0.0%, a little under your target" note.
+// Mirrors home.selectFreshDistribution's `netPaid > 0` guard. A non-paid row (missed/scheduled) stays
+// eligible — its honest banner, not a dollar figure, is the point, so the owner is never left in silence.
+export function isSurfaceableDistribution<T extends { status: string; netPaid: number }>(row: T): boolean {
+  if (row.status !== "paid") return true;
+  return Number.isFinite(row.netPaid) && row.netPaid > 0;
+}
+
 // --- Query ------------------------------------------------------------------------------------
 
 // The reactive Income model for the authenticated caller. Resolves the caller from the JWT and derives
@@ -150,7 +161,10 @@ export const summary = query({
       if (firstDistributionDate === null || d < firstDistributionDate) firstDistributionDate = d;
     }
 
-    const latestRow = selectLatestDistribution(income);
+    // A paid distribution that rounded to $0 is not a real payout (see isSurfaceableDistribution): drop
+    // it from the "latest" selection so a sub-dollar holder sees the calm "first income on the way" empty
+    // state, not an all-zeros waterfall + a false below-target note. Missed rows stay eligible.
+    const latestRow = selectLatestDistribution(income.filter(isSurfaceableDistribution));
     const latest = latestRow
       ? {
           // propertyId is route-safe (already used in /property/[id] URLs) — the interim missed-
