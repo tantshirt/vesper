@@ -39,3 +39,15 @@ Tracks intentionally out-of-scope follow-ups surfaced during story implementatio
 - source_spec: `spec-1-3-onchain-reconciliation.md`
   summary: The httpAction calls `await req.json()` with no maximum content-length check, parsing arbitrary-size JSON before any semantic validation — a memory-pressure/DoS lever for anyone who obtains the shared secret.
   evidence: Real but low severity and gated behind knowing `HELIUS_WEBHOOK_SECRET`; the spec does not require a size cap and no real endpoint is provisioned here. Cheap to add (reject bodies over a fixed byte/element cap before parsing) when the live webhook is wired.
+
+- source_spec: `spec-2-3-trust-stack-signed-gates.md`
+  summary: The Trust Stack header copy ("A named human signed every gate." / "signed by people.") is an absolute claim rendered whenever any gates exist, but the schema permits `status: "pending" | "failed"` with `signedByHuman` optional — so a property with unsigned/pending/failed gates would still proclaim every gate was human-signed.
+  evidence: Real overclaim on a trust surface, but the live/seed data (The Monroe) has all 8 gates passed and human-signed, so it never triggers today; the assurance wording is also compliance-governed under blocker B4 (consumer gate copy, owner product+compliance), making unilateral rewrite inappropriate. Revisit when non-all-passed properties become renderable and B4 copy is finalized.
+
+- source_spec: `spec-2-3-trust-stack-signed-gates.md`
+  summary: A `failed` gate is visually indistinguishable from a `pending` one — both render the same muted "•" glyph; only the low-emphasis `--muted` text label differs ("Not passed" vs "In review"). A `--loss` token exists and is unused, so a material negative diligence signal has no distinct visual treatment.
+  evidence: The text-equivalent (WCAG) requirement is met, so this is a visual-hierarchy enhancement, not an a11y defect; it also never manifests on seed data (all gates pass) and is beyond this story's scope (passed-gate trust display). Distinct failed-state styling should be designed when failed/pending gates can actually occur on a live property.
+
+- source_spec: `spec-2-3-trust-stack-signed-gates.md`
+  summary: The load-bearing invariant "no gate is ever attributed to an AI" and the empty-state/heading behavior live in `TrustStack.tsx`, which has no test coverage — only the four pure helpers are unit-tested. A render-level test asserting the invariant (and empty/pending rendering) is missing.
+  evidence: The invariant is structurally guaranteed in code today (the component only ever emits `signerText(signedByHuman)` plus static human copy, with no AI code path), so risk is low, but it is asserted only by comments. Adding a component render test requires new dev tooling (jsdom + @testing-library/react + vitest config) that is out of scope for this story; track as its own focused task.

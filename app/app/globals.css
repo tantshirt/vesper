@@ -207,10 +207,18 @@ h1 {
 .lrow:last-child { border-bottom: 0; } .lrow b { font-variant-numeric: tabular-nums; }
 .liq-foot { font: 400 11.5px/1.5 var(--sans); color: var(--muted); padding: 11px 2px 0; }
 .pd-thead { font: 400 12.5px/1.5 var(--sans); color: var(--muted); margin: -8px 0 13px; } .pd-thead b { color: var(--ink); font-weight: 600; }
-.gate { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hairline); font: 400 13px var(--sans); }
+.gate-list { list-style: none; margin: 0; padding: 0; }
+.gate { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hairline); font: 400 13px var(--sans); }
 .gate:last-child { border-bottom: 0; }
-.gate-ck { width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 11px var(--sans); color: #fff; background: var(--gain); }
-.gate-name { font-weight: 500; } .gate-sign { color: var(--muted); font-size: 11.5px; margin-top: 1px; } .gate-sign b { color: var(--ink); font-weight: 600; }
+.gate-ck { width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 11px var(--sans); color: #fff; background: var(--gain); margin-top: 2px; }
+.gate-ck-pending { color: var(--muted); background: transparent; border: 1px solid var(--hairline-2); }
+.gate-body { min-width: 0; }
+.gate-no { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-variant-numeric: tabular-nums; }
+.gate-name { font-weight: 500; margin-top: 2px; }
+.gate-status { font: 600 11px var(--sans); color: var(--muted); margin-top: 2px; letter-spacing: .01em; }
+.gate-sign { color: var(--muted); font-size: 11.5px; margin-top: 1px; } .gate-sign b { color: var(--ink); font-weight: 600; }
+.gate-empty { font: 400 12.5px/1.5 var(--sans); color: var(--muted); margin: 0; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden; }
 .fact { background: var(--surface); padding: 13px 14px; }
 .fk { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }

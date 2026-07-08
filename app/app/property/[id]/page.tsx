@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import TrustStack from "./TrustStack";
 
 // E2.2 · Property Detail — the signature trust screen (public). Live property + diligence gates.
 export default function PropertyPage() {
@@ -17,7 +18,6 @@ export default function PropertyPage() {
   const { property: p, gates } = data;
   const pct = (n: number) => `${(n * 100).toFixed(n * 100 % 1 === 0 ? 0 : 1)}%`;
   const funded = Math.round(p.fundedPct * 100);
-  const date = (ms?: number) => ms ? new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
 
   return (
     <main className="pd">
@@ -74,20 +74,7 @@ export default function PropertyPage() {
         <p className="liq-foot">⚠ Liquidity is never guaranteed — your order may not fill right away. No “Sell now” button that isn't true.</p>
       </section>
 
-      <section className="pd-blk">
-        <p className="pd-eb">Who checked it</p>
-        <h2 className="pd-h">An {gates.length}-point diligence gate — signed by people.</h2>
-        <p className="pd-thead">AI accelerated the review. <b>A named human signed every gate.</b></p>
-        {gates.map((g) => (
-          <div className="gate" key={g._id}>
-            <span className="gate-ck">{g.status === "passed" ? "✓" : "…"}</span>
-            <div>
-              <div className="gate-name">{g.label}</div>
-              <div className="gate-sign">Signed <b>{g.signedByHuman ?? "—"}</b>{g.signedAt ? ` · ${date(g.signedAt)}` : ""}</div>
-            </div>
-          </div>
-        ))}
-      </section>
+      <TrustStack gates={gates} />
 
       <section className="pd-blk">
         <p className="pd-eb">The property</p>
