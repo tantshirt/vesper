@@ -109,6 +109,7 @@ export default defineSchema({
     reserve: v.number(),
     netPaid: v.number(),
     txSig: v.optional(v.string()),
+    paidAt: v.optional(v.number()), // E5.1: epoch ms a distribution row was observed paid — gives "fresh" a recency signal. Optional → no migration; pre-existing rows degrade to not-fresh.
     status: v.union(v.literal("scheduled"), v.literal("paid"), v.literal("missed")),
   }).index("by_user", ["userId"]).index("by_property_period", ["propertyId", "period"]),
 

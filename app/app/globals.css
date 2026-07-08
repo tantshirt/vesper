@@ -321,3 +321,27 @@ h1 {
 .proof-foot { padding: 20px 16px 0; }
 .proof-back { font: 500 12px ui-monospace, Menlo, monospace; letter-spacing: .04em; color: var(--accent); text-decoration: none; }
 .proof-back:hover { text-decoration: underline; }
+
+/* ---- E5.1 Home — the payout is the hero (dusk fresh-distribution card + balance card;
+   token-driven, tabular money figures, one champagne accent — the star). ---- */
+/* Dusk hero: the mode-independent --dusk gradient with its paired foreground tokens. */
+.home-hero { position: relative; margin-top: 20px; background: var(--dusk); color: var(--dusk-fg);
+  border: 1px solid var(--dusk-hairline); border-radius: 20px; padding: 22px 22px 20px; overflow: hidden; }
+/* The single champagne accent — a small lit star, mirroring the .wm/.pd-lit champagne-diamond idiom. */
+.home-star { position: absolute; right: 22px; top: 22px; width: 9px; height: 9px; transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--champagne), var(--champagne-soft)); border-radius: 2px;
+  box-shadow: 0 0 12px 2px rgba(232, 200, 140, .55); }
+.home-star-label { margin: 0; font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--dusk-eyebrow); }
+.home-lead { margin: 10px 0 0; font-family: var(--serif); font-weight: 500; font-size: clamp(24px, 6vw, 32px);
+  letter-spacing: -.02em; line-height: 1.08; font-variant-numeric: tabular-nums; color: var(--dusk-fg); }
+.home-hero-sub { margin: 8px 0 0; font: 400 13.5px/1.5 var(--sans); color: var(--dusk-sub); }
+/* Balance card — fixed rows + tabular figures so a reactive value update never shifts layout. */
+.balance-card { margin-top: 18px; gap: 14px; }
+.stat-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 14px; }
+.stat-figure { font: 600 18px var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--ink); }
+/* Sparkline — honest cumulative cost basis; the polyline stroke is the brand accent, the text
+   equivalent lives in the visually-hidden sibling (WCAG). Scales to the card width, fixed height. */
+.spark { margin-top: 4px; }
+.spark svg { display: block; width: 100%; height: 56px; }
+.home-empty { margin-top: 12px; }

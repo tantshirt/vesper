@@ -179,8 +179,10 @@ async function applyDistribution(ctx: MutationCtx, event: ChainEvent) {
   // Only settle rows not already paid — a later, distinct-signature distribution for the same period
   // must not clobber the on-chain txSig that already recorded the actual paying transaction.
   const unpaid = rows.filter((r) => r.status !== "paid");
+  // Stamp `paidAt` (E5.1) alongside the txSig: the moment this distribution was reconciled as paid,
+  // so Home's "just landed" hero can tell a recent distribution from an old one.
   for (const row of unpaid) {
-    await ctx.db.patch(row._id, { status: "paid", txSig: event.txSig });
+    await ctx.db.patch(row._id, { status: "paid", txSig: event.txSig, paidAt: Date.now() });
   }
 
   await writeAudit(ctx, {
