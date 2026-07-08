@@ -39,7 +39,7 @@ development_status:
   # ---- Epic 4: Invest ----
   epic-4: backlog
   4-1-calculator-projection: done         # BLOCKED by B2 (ownership-% basis) — UI shell can build vs mock
-  4-2-order-preview-fee: ready-for-dev
+  4-2-order-preview-fee: done
   4-3-rights-acknowledgement: ready-for-dev
   4-4-atomic-dvp-settlement: backlog         # BLOCKED by B1 (escrow) — settlement wiring waits
   4-5-confirmation: ready-for-dev            # UI ready; live data after E4.4

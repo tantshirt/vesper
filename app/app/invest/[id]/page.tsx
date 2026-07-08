@@ -32,6 +32,13 @@ import {
   formatMinHint,
   CALC_COPY,
 } from "./calculator.helpers";
+import {
+  PLATFORM_FEE_RATE,
+  platformFee,
+  totalChargedToday,
+  formatMgmtFeeNote,
+  ORDER_COPY,
+} from "./order.helpers";
 
 // Whole-dollar add-money bounds — client-side mirror of convex/funding.ts MIN_FUNDING/MAX_FUNDING.
 // The mutation is the authoritative validator; these gate the form (required + submit-disabled).
@@ -80,7 +87,7 @@ export default function InvestPage() {
   // as `showAddMore`; the reactive gate-state machine is unchanged). `investAmount` is the raw input
   // string (default "100" for a live projection on first paint); `projection` flips the first-year
   // figure between the base and the −12% downside case; `reviewOpened` reveals the calm 4.2 handoff.
-  const [view, setView] = useState<"funded" | "calculator">("funded");
+  const [view, setView] = useState<"funded" | "calculator" | "order">("funded");
   const [investAmount, setInvestAmount] = useState("100");
   const [projection, setProjection] = useState<"base" | "downside">("base");
   const [reviewOpened, setReviewOpened] = useState(false);
@@ -538,12 +545,66 @@ export default function InvestPage() {
           className="cta"
           disabled={!valid}
           aria-disabled={!valid}
-          onClick={() => setReviewOpened(true)}
+          onClick={() => {
+            // Enter the order preview fresh: clear any prior Continue-reveal so the 4.3 coming-soon
+            // note never pre-shows for an order the user hasn't re-confirmed on this visit.
+            setReviewOpened(false);
+            setView("order");
+          }}
         >
           {CALC_COPY.reviewCta}
         </button>
-        {reviewOpened && valid && (
-          <p className="muted" role="status">{CALC_COPY.comingSoonNote}</p>
+      </main>
+    );
+  }
+
+  // state === "funded", view === "order" — Story 4.2 fee-transparent order preview: a local `view`
+  // between the calculator and the future rights step (4.3), same idiom as 4.1's funded → calculator.
+  // Shows the investment, the one-time 0.9% platform fee, and the total charged today, plus the
+  // no-double-charge management-fee note. Reuses the calculator's `projAmount` clamp; the fee rate and
+  // yield derive from PLATFORM_FEE_RATE / property.targetNetYield (no hardcoded digits). No order
+  // record or persistence here — the order is created and settled atomically in Story 4.4. Back
+  // returns to the calculator with the amount intact; Continue reveals the honest 4.3 coming-soon note.
+  if (state === "funded" && view === "order" && p) {
+    const targetNetYield = p.targetNetYield;
+    const amountNum = Number(investAmount);
+    const projAmount = Number.isFinite(amountNum) ? Math.max(0, amountNum) : 0;
+
+    return (
+      <main className="wrap">
+        <button type="button" className="calc-back" onClick={() => setView("calculator")}>
+          {ORDER_COPY.backLabel}
+        </button>
+        <p className="eyebrow"><span className="dot" /> {ORDER_COPY.eyebrow}</p>
+        <h1>{ORDER_COPY.title}</h1>
+        <p className="muted">
+          {p.name} · {formatYieldPct(targetNetYield)} · {p.location}
+        </p>
+
+        <div className="card">
+          <div className="calc-row">
+            <span className="muted">{ORDER_COPY.investmentLabel}</span>
+            <b className="calc-figure">{formatUsdCents(projAmount)}</b>
+          </div>
+          <div className="calc-row">
+            <span className="muted">
+              {ORDER_COPY.platformFeeLabel} ({formatYieldPct(PLATFORM_FEE_RATE)})
+            </span>
+            <b className="calc-figure">{formatUsdCents(platformFee(projAmount))}</b>
+          </div>
+          <div className="calc-row order-total">
+            <span className="muted">{ORDER_COPY.totalLabel}</span>
+            <b className="calc-figure">{formatUsdCents(totalChargedToday(projAmount))}</b>
+          </div>
+        </div>
+
+        <p className="muted">{formatMgmtFeeNote(targetNetYield)}</p>
+
+        <button type="button" className="cta" onClick={() => setReviewOpened(true)}>
+          {ORDER_COPY.continueCta}
+        </button>
+        {reviewOpened && (
+          <p className="muted" role="status">{ORDER_COPY.comingSoonNote}</p>
         )}
       </main>
     );

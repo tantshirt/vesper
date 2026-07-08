@@ -164,6 +164,9 @@ h1 {
 .calc-pos { color: var(--ink); }
 .calc-neg { color: var(--loss); }
 .calc-fy { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+/* Story 4.2 · order total — the sum row reads as the total: hairline rule above + heavier ink weight. */
+.order-total { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.order-total .calc-figure { font-weight: 700; color: var(--ink); }
 /* Base | Downside segmented toggle — both options always visible/one-tap. */
 .calc-seg { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px;
   background: var(--chip); border: 1px solid var(--hairline-2); border-radius: 99px; }

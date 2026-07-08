@@ -138,6 +138,5 @@ export const CALC_COPY = {
   // DOWNSIDE_VALUE_LABEL), so the headline percentage isn't misread as the first-year dollar figure.
   downsideExplainer: `Downside models a ${DOWNSIDE_VALUE_LABEL} drop in the property's value. It's an illustrative first-year assumption — not a promise or a forecast.`,
 
-  reviewCta: "Review rights & risks →",
-  comingSoonNote: "The review step is coming soon — we'll pick up right here when it's ready.",
+  reviewCta: "Review your order →",
 } as const;
