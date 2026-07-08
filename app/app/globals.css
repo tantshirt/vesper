@@ -399,3 +399,24 @@ h1 {
 /* History rows — the .port-holding two-line idiom (month + net / status), hairline-separated. */
 .income-row { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-top: 1px solid var(--hairline); }
 .income-row:first-of-type { border-top: 0; padding-top: 2px; }
+
+/* ---- E5.4 Property updates — one card per owned home: operator + occupancy/reserve/rent stat rows,
+   a plain note, and a calm overdue/awaiting note. Token-driven only (no hex); extends the .port-holding
+   / .stat-row idioms and the .income-banner --warning soft-tint for the calm note. ---- */
+.update-card { margin-top: 16px; gap: 2px; }
+/* Property name + market header line. */
+.update-card .port-row { padding-bottom: 4px; }
+/* Named operator — the person behind the update (calm, muted). */
+.update-operator { margin: 0 0 4px; font-size: 13px; }
+/* Occupancy / reserve fund / rent-collection stat rows — hairline-separated, stable tabular figures. */
+.update-stats { margin-top: 2px; }
+.update-line { padding: 11px 0; border-top: 1px solid var(--hairline); }
+.update-line:first-child { border-top: 0; }
+/* The plain-language note — the heart of the update, easy to read. */
+.update-note { margin: 12px 0 0; font: 400 14px/1.6 var(--sans); color: var(--ink); }
+/* Calm overdue / awaiting note — --warning soft-tint (mirrors the .income-banner idiom): never silent,
+   never alarming. Reassures that the update is simply on the way. */
+.update-flag { margin: 14px 0 0; font: 400 13.5px/1.55 var(--sans); color: var(--ink);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent);
+  border-radius: 14px; padding: 14px 16px; }

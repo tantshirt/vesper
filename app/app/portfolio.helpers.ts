@@ -109,4 +109,6 @@ export const PORTFOLIO_COPY = {
   exploreCta: "Explore properties",
   // The natural onward step from this-month income → the itemized breakdown (Story 5.3).
   incomeCta: "See your income breakdown",
+  // Reaches the monthly property-updates surface (Story 5.4) — how each owned home is doing.
+  updatesCta: "See property updates",
 } as const;

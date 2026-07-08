@@ -121,13 +121,13 @@ export default function Income() {
       <h1>{INCOME_COPY.title}</h1>
 
       {/* Honest banner — a latest distribution that did not pay. Never hidden, never silent: it explains
-          the miss and links onward toward the home's update (interim target; the /updates route is 5.4).
-          Keyed off status !== "paid" so a future "paused" state is covered identically. */}
+          the miss and links onward to the property-updates surface (Story 5.4), where the latest operator
+          note on the home lives. Keyed off status !== "paid" so a future "paused" state is covered too. */}
       {isMissed(latest.status) && (
         <div className="income-banner" role="note">
           <p className="income-banner-title">{INCOME_COPY.bannerTitle}</p>
           <p className="income-banner-body">{INCOME_COPY.bannerBody}</p>
-          <Link className="cta ghost" href={`/property/${latest.propertyId}`}>
+          <Link className="cta ghost" href="/updates">
             {INCOME_COPY.updateCta}
           </Link>
         </div>

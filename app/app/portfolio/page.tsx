@@ -157,6 +157,7 @@ export default function Portfolio() {
       </div>
 
       <Link className="cta" href="/income">{PORTFOLIO_COPY.incomeCta}</Link>
+      <Link className="cta ghost" href="/updates">{PORTFOLIO_COPY.updatesCta}</Link>
       <Link className="cta ghost" href="/explore">{PORTFOLIO_COPY.exploreCta}</Link>
     </main>
   );

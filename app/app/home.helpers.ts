@@ -144,4 +144,6 @@ export const HOME_COPY = {
   portfolioCta: "View portfolio",
   // Reaches the itemized income breakdown (Story 5.3) — the fresh hero's onward step to its detail.
   incomeCta: "See your income",
+  // Reaches the monthly property-updates surface (Story 5.4) — how each owned home is doing.
+  updatesCta: "See property updates",
 } as const;

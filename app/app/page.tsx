@@ -161,6 +161,7 @@ export default function Home() {
 
       <Link className="cta" href="/portfolio">{HOME_COPY.portfolioCta}</Link>
       <Link className="cta ghost" href="/income">{HOME_COPY.incomeCta}</Link>
+      <Link className="cta ghost" href="/updates">{HOME_COPY.updatesCta}</Link>
       <Link className="cta ghost" href="/explore">{HOME_COPY.exploreCta}</Link>
     </main>
   );
