@@ -47,7 +47,9 @@ export function allAcknowledged(checked: Record<string, boolean>): boolean {
   return RIGHTS_ACKS.length > 0 && RIGHTS_ACKS.every((a) => checked[a.id] === true);
 }
 
-// --- Consumer copy. No crypto vocabulary; no settlement/payment language (settlement is Story 4.4). ---
+// --- Consumer copy. No crypto vocabulary (the `hasCryptoVocabulary` guard asserts this) — the
+// settlement-outcome strings stay fiat-native; the on-chain DvP receipt reference lives only in the
+// pull-only proof view, never here. ---
 export const RIGHTS_COPY = {
   eyebrow: "Before you invest",
   title: "A few things to acknowledge",
@@ -55,5 +57,15 @@ export const RIGHTS_COPY = {
     "Please read and confirm each of these. They matter — checking them means you understand the risks of this investment.",
   backLabel: "‹ Back to review your order",
   confirmCta: "Confirm and continue",
-  comingSoonNote: "The final step is coming soon — we'll pick up right here when it's ready.",
+
+  // Story 4.4 · settlement outcome. Shown while the purchase settles, then a minimal factual
+  // acknowledgement on success (the celebratory owner screen is Story 4.5) or a calm "nothing was
+  // charged" note on any failure. Deliberately free of settlement/payment jargon; the failure note is
+  // reason-neutral (it never promises an imminent retry will succeed — a cap/eligibility block won't).
+  submittingLabel: "Completing your investment…",
+  settledEyebrow: "Done",
+  settledTitle: "Your investment is complete",
+  ownedLabel: "You now own",
+  failedNote:
+    "We couldn't complete this, and nothing was charged. No harm done — please review your details and try again.",
 } as const;

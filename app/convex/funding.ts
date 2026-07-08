@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
+import { settledOrdersTotal } from "./settlement";
 import type { Doc } from "./_generated/dataModel";
 
 // Story 3.3 — Add money (fiat → USDC).
@@ -58,9 +59,12 @@ export function availableBalance(
 
 // --- Query ------------------------------------------------------------------------------------
 
-// The caller's account-level available balance in dollars (0 if unauthenticated / no user / no
-// deposits — never null). Reactive: the invest page holds on `loading` until this resolves so
-// `funding` never flashes for an already-funded user.
+// The caller's account-level SPENDABLE balance in dollars (0 if unauthenticated / no user / no
+// deposits — never null): settled deposits MINUS the total of prior settled orders (each order's
+// amount + platform fee). Story 4.4 settlement is the first debit — netting it here keeps the
+// displayed/gated balance honest after a purchase (balance stays fully derived; no balance table).
+// Reactive: the invest page holds on `loading` until this resolves so `funding` never flashes for an
+// already-funded user.
 export const getFundedBalance = query({
   args: {},
   handler: async (ctx): Promise<number> => {
@@ -78,7 +82,12 @@ export const getFundedBalance = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    return availableBalance(fundings);
+    const orders = await ctx.db
+      .query("orders")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    return availableBalance(fundings) - settledOrdersTotal(orders);
   },
 });
 

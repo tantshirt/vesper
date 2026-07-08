@@ -72,6 +72,7 @@ export default function InvestPage() {
   const recordEligibility = useMutation(api.eligibility.recordEligibility);
   const joinWaitlist = useMutation(api.eligibility.joinWaitlist);
   const addMoney = useMutation(api.funding.addMoney);
+  const confirmPurchase = useMutation(api.settlement.confirmPurchase);
 
   // Local form/submission state for the identity-check + waitlist steps (client-only; the
   // authoritative record lives in Convex). `country` maps to the jurisdiction the mutation records.
@@ -92,13 +93,22 @@ export default function InvestPage() {
   // as `showAddMore`; the reactive gate-state machine is unchanged). `investAmount` is the raw input
   // string (default "100" for a live projection on first paint); `projection` flips the first-year
   // figure between the base and the −12% downside case. Story 4.3 adds the `rights` view: `acks`
-  // holds the per-order checkbox state (reset fresh each entry so consent is deliberate per order),
-  // and `confirmOpened` reveals the calm 4.4 coming-soon note once all three are acknowledged.
+  // holds the per-order checkbox state (reset fresh each entry so consent is deliberate per order).
+  // Story 4.4 wires Confirm to the atomic settlement mutation: `settling` disables the CTA in flight,
+  // and `settleResult`/`settleError` drive the minimal factual settled acknowledgement vs the calm
+  // "nothing was charged" note (a thrown mutation lands in `settleError`, a committed business failure
+  // in `settleResult.status === "failed"`).
   const [view, setView] = useState<"funded" | "calculator" | "order" | "rights">("funded");
   const [investAmount, setInvestAmount] = useState("100");
   const [projection, setProjection] = useState<"base" | "downside">("base");
   const [acks, setAcks] = useState<Record<string, boolean>>({});
-  const [confirmOpened, setConfirmOpened] = useState(false);
+  const [settling, setSettling] = useState(false);
+  // The on-chain DvP receipt (`dvpTxSig`) is deliberately NOT held here: it is recorded server-side
+  // (order + audit) and surfaces only in the pull-only proof view, never on the consumer screen.
+  const [settleResult, setSettleResult] = useState<
+    { status: "settled"; ownershipPct: number } | { status: "failed" } | null
+  >(null);
+  const [settleError, setSettleError] = useState(false);
 
   // Resolve the embedded Solana address. Select ONLY the Privy-embedded wallet (its
   // `walletClientType` is "privy"). Never fall back to `solanaWallets[0]`: with "wallet" in
@@ -216,6 +226,44 @@ export default function InvestPage() {
     }
   }
 
+  // Clear a prior settlement outcome so a lingering "nothing was charged" note never sits over a
+  // re-armed Confirm (mirrors the fresh-entry resets on the order/rights transitions).
+  function resetSettleOutcome() {
+    setSettleResult(null);
+    setSettleError(false);
+  }
+
+  // Story 4.4 · the atomic purchase. Turn active consent into ownership through the settlement
+  // mutation: one all-or-nothing transaction gates eligibility/cap/balance, routes the DvP seam, and
+  // records the settled order + holding + audit — or commits a `failed` order with nothing charged. A
+  // committed business failure returns `{status:"failed"}`; only an auth/arg bug throws (→ settleError).
+  // Either way the reactive balance reflects the truth and the screen shows a calm, non-dead-end state.
+  async function submitPurchase(pid: Id<"properties">, amountUsd: number) {
+    if (settling || !allAcknowledged(acks)) return;
+    setSettling(true);
+    resetSettleOutcome();
+    try {
+      const result = await confirmPurchase({
+        propertyId: pid,
+        amountUsd,
+        acknowledgedRiskIds: RIGHTS_ACKS.filter((a) => acks[a.id] === true).map((a) => a.id),
+      });
+      if (result.status === "settled") {
+        setSettleResult({
+          status: "settled",
+          ownershipPct: result.ownershipPct,
+        });
+      } else {
+        setSettleResult({ status: "failed" });
+      }
+    } catch {
+      // A thrown mutation (auth/arg bug) — treat as a calm failure; nothing was charged.
+      setSettleError(true);
+    } finally {
+      setSettling(false);
+    }
+  }
+
   const addMoneyForm = (
     <form className="card inv-form" onSubmit={submitAddMoney}>
       <label className="inv-field">
@@ -272,6 +320,27 @@ export default function InvestPage() {
     ) : null;
 
   const p = property?.property ?? null;
+
+  // Story 4.4 · settled acknowledgement — TERMINAL and rendered BEFORE the reactive gate-state
+  // switches. A full-balance purchase drives the derived `fundedBalance` to 0, which would otherwise
+  // flip `state` back to "funding" and pre-empt this screen with the Add Money form (swallowing the
+  // confirmation and looking like the money vanished). Keying it off `settleResult` — not `state` —
+  // keeps the minimal factual acknowledgement (ownership %) up regardless of the post-purchase balance.
+  if (settleResult?.status === "settled" && p) {
+    return (
+      <main className="wrap">
+        <p className="eyebrow"><span className="dot" /> {RIGHTS_COPY.settledEyebrow}</p>
+        <h1>{RIGHTS_COPY.settledTitle}</h1>
+        <p className="muted">{p.name} · {p.location}</p>
+        <div className="card">
+          <div className="calc-row">
+            <span className="muted">{RIGHTS_COPY.ownedLabel}</span>
+            <b className="calc-figure">{formatOwnershipPct(settleResult.ownershipPct)}</b>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (state === "loading") {
     return (
@@ -609,7 +678,7 @@ export default function InvestPage() {
           className="cta"
           onClick={() => {
             setAcks({});
-            setConfirmOpened(false);
+            resetSettleOutcome();
             setView("rights");
           }}
         >
@@ -619,15 +688,24 @@ export default function InvestPage() {
     );
   }
 
-  // state === "funded", view === "rights" — Story 4.3 active-consent gate: a local `view` between the
-  // order preview and the future settlement step (4.4), same idiom as 4.1/4.2. Renders the three
-  // RIGHTS_ACKS as accessible checkbox rows; Confirm is enabled ONLY when `allAcknowledged(acks)` is
-  // true (both `disabled` and `aria-disabled` mirror the gate — FR9). No consent record, mutation, or
-  // persistence — consent is captured atomically with the purchase in Story 4.4. Entered fresh from
-  // the order Continue (acks reset to {}), so a returning investor must actively re-check. Back returns
-  // to the order preview with the amount and fees intact; Confirm reveals the honest 4.4 coming-soon note.
+  // state === "funded", view === "rights" — Story 4.3 active-consent gate now wired to Story 4.4's
+  // atomic settlement. Renders the three RIGHTS_ACKS as accessible checkbox rows; Confirm is enabled
+  // ONLY when `allAcknowledged(acks)` is true and no settle is in flight (both `disabled` and
+  // `aria-disabled` mirror the gate — FR9). Tapping Confirm calls the atomic `confirmPurchase`
+  // mutation with the server-authoritative amount and the checked ids. On a settled outcome the screen
+  // shows a minimal factual acknowledgement (ownership %, confirmation reference) — the celebratory
+  // owner screen is Story 4.5. On a committed failure or a thrown error it shows a calm "nothing was
+  // charged" note; the reactive balance always reflects the truth. Entered fresh from the order
+  // Continue (acks reset to {}), so a returning investor must actively re-check.
   if (state === "funded" && view === "rights" && p) {
     const acknowledged = allAcknowledged(acks);
+    const amountNum = Number(investAmount);
+    const projAmount = Number.isFinite(amountNum) ? Math.max(0, amountNum) : 0;
+
+    // A settled outcome is handled by the terminal early-return above (rendered independently of the
+    // reactive gate state). Here we only render the pre-settle gate and the calm failure note.
+    const failed = settleResult?.status === "failed" || settleError;
+
     return (
       <main className="wrap">
         <button type="button" className="calc-back" onClick={() => setView("order")}>
@@ -646,9 +724,8 @@ export default function InvestPage() {
                   type="checkbox"
                   checked={acks[ack.id] === true}
                   onChange={(e) => {
-                    // Reset the Confirm-reveal on any toggle so the 4.4 coming-soon note never
-                    // lingers over a re-disabled gate (mirrors 4.2's fresh-reveal fix).
-                    setConfirmOpened(false);
+                    // Clear a prior failure note on any toggle so it never lingers over a re-armed gate.
+                    resetSettleOutcome();
                     setAcks((prev) => ({ ...prev, [ack.id]: e.target.checked }));
                   }}
                 />
@@ -661,14 +738,14 @@ export default function InvestPage() {
         <button
           type="button"
           className="cta"
-          disabled={!acknowledged}
-          aria-disabled={!acknowledged}
-          onClick={() => setConfirmOpened(true)}
+          disabled={!acknowledged || settling}
+          aria-disabled={!acknowledged || settling}
+          onClick={() => void submitPurchase(p._id, projAmount)}
         >
-          {RIGHTS_COPY.confirmCta}
+          {settling ? RIGHTS_COPY.submittingLabel : RIGHTS_COPY.confirmCta}
         </button>
-        {confirmOpened && (
-          <p className="muted" role="status">{RIGHTS_COPY.comingSoonNote}</p>
+        {failed && (
+          <p className="muted" role="status">{RIGHTS_COPY.failedNote}</p>
         )}
       </main>
     );
