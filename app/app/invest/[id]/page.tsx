@@ -14,6 +14,24 @@ import {
   remainingRegAHeadroom,
   INVEST_COPY,
 } from "./invest.helpers";
+import {
+  SLIDER_MIN,
+  SLIDER_MAX,
+  QUICK_CHIPS,
+  ownershipFraction,
+  estMonthlyIncome,
+  firstYearBase,
+  firstYearDownside,
+  rentComponent,
+  appreciationComponent,
+  isValidInvestAmount,
+  formatUsdCents,
+  formatSignedUsd,
+  formatOwnershipPct,
+  formatYieldPct,
+  formatMinHint,
+  CALC_COPY,
+} from "./calculator.helpers";
 
 // Whole-dollar add-money bounds — client-side mirror of convex/funding.ts MIN_FUNDING/MAX_FUNDING.
 // The mutation is the authoritative validator; these gate the form (required + submit-disabled).
@@ -57,6 +75,15 @@ export default function InvestPage() {
   const [method, setMethod] = useState<"card" | "ach">("card");
   const [addingMoney, setAddingMoney] = useState(false);
   const [showAddMore, setShowAddMore] = useState(false);
+
+  // Story 4.1 · Calculator view — a local, button-driven toggle off the funded screen (same idiom
+  // as `showAddMore`; the reactive gate-state machine is unchanged). `investAmount` is the raw input
+  // string (default "100" for a live projection on first paint); `projection` flips the first-year
+  // figure between the base and the −12% downside case; `reviewOpened` reveals the calm 4.2 handoff.
+  const [view, setView] = useState<"funded" | "calculator">("funded");
+  const [investAmount, setInvestAmount] = useState("100");
+  const [projection, setProjection] = useState<"base" | "downside">("base");
+  const [reviewOpened, setReviewOpened] = useState(false);
 
   // Resolve the embedded Solana address. Select ONLY the Privy-embedded wallet (its
   // `walletClientType` is "privy"). Never fall back to `solanaWallets[0]`: with "wallet" in
@@ -378,8 +405,153 @@ export default function InvestPage() {
     );
   }
 
-  // state === "funded" — account-level balance in dollars, "Add more" affordance, then the
-  // still-disabled E4 handoff. Balance is the same across every property (account-level).
+  // state === "funded", view === "calculator" — Story 4.1 live projection. Reads the loaded
+  // property's basis (offeringSize / targetNetYield / minInvestment) and recomputes every figure
+  // on each render from `investAmount` (no debounce): typing, dragging the slider, or tapping a
+  // quick chip all flow through `setInvestAmount`. Pure projection only — no order/fee/funding.
+  if (state === "funded" && view === "calculator" && p) {
+    const offeringSize = p.offeringSize;
+    const targetNetYield = p.targetNetYield;
+    const minInvestment = p.minInvestment;
+
+    const amountNum = Number(investAmount);
+    const valid = isValidInvestAmount(amountNum, minInvestment);
+
+    // Project from a non-negative amount so a typed "-100" (the number field's `min=0` doesn't block
+    // typed negatives) shows a neutral $0.00 / 0.0000% projection rather than negative figures painted
+    // in positive color. Validity stays on the raw input, so the min hint + disabled CTA still fire.
+    const projAmount = Number.isFinite(amountNum) ? Math.max(0, amountNum) : 0;
+
+    const own = ownershipFraction(projAmount, offeringSize);
+    const monthly = estMonthlyIncome(projAmount, targetNetYield);
+    const rent = rentComponent(projAmount, targetNetYield);
+    const appreciation = appreciationComponent(projAmount);
+    const firstYear =
+      projection === "downside" ? firstYearDownside(projAmount) : firstYearBase(projAmount, targetNetYield);
+    // The slider control is bounded to SLIDER_MIN..SLIDER_MAX; a blank/out-of-range amount clamps
+    // the thumb without altering the typed input (the input remains the source of truth).
+    const sliderValue = Number.isFinite(amountNum)
+      ? Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, amountNum))
+      : SLIDER_MIN;
+
+    return (
+      <main className="wrap">
+        <button type="button" className="calc-back" onClick={() => setView("funded")}>
+          {CALC_COPY.backLabel}
+        </button>
+        <p className="eyebrow"><span className="dot" /> {CALC_COPY.eyebrow}</p>
+        <h1>{CALC_COPY.title}</h1>
+        <p className="muted">
+          {p.name} · {formatYieldPct(targetNetYield)} · {p.location}
+        </p>
+
+        <div className="card">
+          <label className="inv-field">
+            <span className="inv-label">{CALC_COPY.amountLabel}</span>
+            <div className="calc-amount">
+              <span className="calc-amount-sign" aria-hidden="true">$</span>
+              <input
+                className="calc-amount-input"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step="1"
+                value={investAmount}
+                onChange={(e) => setInvestAmount(e.target.value)}
+                aria-label={CALC_COPY.amountInputLabel}
+              />
+            </div>
+          </label>
+          <input
+            className="calc-range"
+            type="range"
+            min={SLIDER_MIN}
+            max={SLIDER_MAX}
+            step={1}
+            value={sliderValue}
+            onChange={(e) => setInvestAmount(e.target.value)}
+            aria-label={CALC_COPY.sliderLabel}
+            aria-valuetext={formatUsd(sliderValue)}
+          />
+          <div className="calc-chips">
+            {QUICK_CHIPS.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                className={`chip${amountNum === chip ? " on" : ""}`}
+                onClick={() => setInvestAmount(String(chip))}
+              >
+                {formatUsd(chip)}
+              </button>
+            ))}
+          </div>
+          {!valid && <p className="calc-hint" role="status">{formatMinHint(minInvestment)}</p>}
+        </div>
+
+        <div className="card">
+          <p className="calc-proj-head">{CALC_COPY.projectionHeading}</p>
+          <div className="calc-row">
+            <span className="muted">{CALC_COPY.ownLabel}</span>
+            <b className="calc-figure">{formatOwnershipPct(own)}</b>
+          </div>
+          <div className="calc-row">
+            <span className="muted">{CALC_COPY.monthlyLabel}</span>
+            <b className="calc-figure calc-pos">{formatSignedUsd(monthly)}</b>
+          </div>
+          <div className="calc-fy">
+            <div className="calc-row">
+              <span className="muted">{CALC_COPY.firstYearLabel}</span>
+              <b className={`calc-figure ${projection === "downside" ? "calc-neg" : "calc-pos"}`}>
+                {formatSignedUsd(firstYear)}
+              </b>
+            </div>
+            <div className="calc-seg" role="group" aria-label={CALC_COPY.firstYearLabel}>
+              <button
+                type="button"
+                className={`calc-seg-btn${projection === "base" ? " on" : ""}`}
+                aria-pressed={projection === "base"}
+                onClick={() => setProjection("base")}
+              >
+                {CALC_COPY.baseToggle}
+              </button>
+              <button
+                type="button"
+                className={`calc-seg-btn${projection === "downside" ? " on" : ""}`}
+                aria-pressed={projection === "downside"}
+                onClick={() => setProjection("downside")}
+              >
+                {CALC_COPY.downsideToggle}
+              </button>
+            </div>
+            {projection === "downside" ? (
+              <p className="muted calc-item">{CALC_COPY.downsideExplainer}</p>
+            ) : (
+              <p className="muted calc-item">
+                {formatUsdCents(rent)} {CALC_COPY.rentLabel} · {formatUsdCents(appreciation)}{" "}
+                {CALC_COPY.appreciationLabel}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <button
+          className="cta"
+          disabled={!valid}
+          aria-disabled={!valid}
+          onClick={() => setReviewOpened(true)}
+        >
+          {CALC_COPY.reviewCta}
+        </button>
+        {reviewOpened && valid && (
+          <p className="muted" role="status">{CALC_COPY.comingSoonNote}</p>
+        )}
+      </main>
+    );
+  }
+
+  // state === "funded", view === "funded" — account-level balance in dollars, "Add more"
+  // affordance, then the Story 4.1 handoff into the calculator. Balance is the same across every
+  // property (account-level).
   const balance = typeof fundedBalance === "number" ? fundedBalance : 0;
   return (
     <main className="wrap">
@@ -403,10 +575,9 @@ export default function InvestPage() {
           {INVEST_COPY.fundedAddMore}
         </button>
       )}
-      <button className="cta" disabled aria-disabled="true">
+      <button className="cta" onClick={() => setView("calculator")}>
         {INVEST_COPY.fundedCta}
       </button>
-      <p className="muted">{INVEST_COPY.fundedNote}</p>
     </main>
   );
 }
