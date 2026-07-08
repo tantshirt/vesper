@@ -107,4 +107,6 @@ export const PORTFOLIO_COPY = {
 
   // Onward affordance.
   exploreCta: "Explore properties",
+  // The natural onward step from this-month income → the itemized breakdown (Story 5.3).
+  incomeCta: "See your income breakdown",
 } as const;

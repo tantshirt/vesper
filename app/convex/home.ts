@@ -17,8 +17,9 @@ import type { Doc } from "./_generated/dataModel";
 // returns `null` when unauthenticated or unprovisioned — the client-supplied identity is never trusted.
 //
 // `devSeedDistribution` is a CLI-only seed (sibling to properties:seedTheMonroe) that pays out existing
-// holdings so the fresh hero is drivable without a live chain — NEVER wired to any consumer UI. The real
-// gross→net waterfall / scheduler is Story 5.3 (see deferred-work.md); it sets only `netPaid`.
+// holdings so the fresh hero is drivable without a live chain — NEVER wired to any consumer UI. As of
+// Story 5.3 it writes a real itemized gross→net waterfall (via `splitDistribution`); the real
+// distribution scheduler / recurring cadence is still deferred (see deferred-work.md DW-4).
 
 // --- Pure helpers (exported for unit tests; no ctx/db access) ---------------------------------
 
@@ -103,6 +104,33 @@ export function periodFor(nowMs: number): string {
   return new Date(nowMs).toISOString().slice(0, 7);
 }
 
+// Split a net payout into an internally-consistent gross→net waterfall for the dev seed (Story 5.3).
+// Given the cash the owner receives (`netPaid`), it back-fills the gross rent share and the three
+// deductions so the invariant `grossShare = costs + mgmtFee + reserve + netPaid` holds EXACTLY (integer
+// dollars; deductions derive from gross and the net is the remainder, so rounding can never break the
+// sum). The proportions are illustrative dev-seed values — real per-line figures will come from the
+// operator/reconciliation (deferred). A non-positive/non-finite net yields an all-zero waterfall (no
+// fabricated gross for a $0 payout).
+export function splitDistribution(netPaid: number): {
+  grossShare: number;
+  costs: number;
+  mgmtFee: number;
+  reserve: number;
+  netPaid: number;
+} {
+  if (!Number.isFinite(netPaid) || netPaid <= 0) {
+    return { grossShare: 0, costs: 0, mgmtFee: 0, reserve: 0, netPaid: 0 };
+  }
+  const net = Math.round(netPaid);
+  // Net is ~62% of gross after operating costs (~24%), management fee (~8%), and reserve (~6%).
+  const grossShare = Math.round(net / 0.62);
+  const costs = Math.round(grossShare * 0.24);
+  const mgmtFee = Math.round(grossShare * 0.08);
+  // Reserve is the remainder so the four components sum to gross EXACTLY (absorbs all rounding drift).
+  const reserve = grossShare - costs - mgmtFee - net;
+  return { grossShare, costs, mgmtFee, reserve, netPaid: net };
+}
+
 // --- Query ------------------------------------------------------------------------------------
 
 // The reactive Home model for the authenticated caller. Resolves the caller from the JWT and derives
@@ -167,9 +195,10 @@ export const summary = query({
 
 // Demo income producer. For every holding, upsert a `status:"paid"` incomeLedger row for the current
 // period so Home's fresh hero is drivable without a live chain. Idempotent per (user, property, period)
-// and audited. Sets only `netPaid` (grossShare = netPaid, other components 0) — the real gross→net
-// waterfall is Story 5.3. No args / no JWT: under `npx convex run` there is no caller identity, so it
-// iterates ALL holdings. Run: `npx convex run home:devSeedDistribution`.
+// and audited. Writes a real itemized gross→net waterfall via `splitDistribution` (Story 5.3) — gross >
+// net, components sum to gross exactly; `netPaid`/`status`/`paidAt` unchanged. No args / no JWT: under
+// `npx convex run` there is no caller identity, so it iterates ALL holdings. Run:
+// `npx convex run home:devSeedDistribution`.
 export const devSeedDistribution = internalMutation({
   args: {},
   handler: async (ctx) => {
@@ -204,16 +233,20 @@ export const devSeedDistribution = internalMutation({
       }
 
       const netPaid = Math.round((holding.costBasis * property.targetNetYield) / 12);
+      // Story 5.3: a real, internally-consistent itemized waterfall (gross > net; components sum to
+      // gross exactly). `netPaid`/`status`/`paidAt` are unchanged so Home (5.1) / Portfolio (5.2) are
+      // unaffected — only the previously-degenerate gross/costs/mgmtFee/reserve now carry real values.
+      const waterfall = splitDistribution(netPaid);
 
       await ctx.db.insert("incomeLedger", {
         userId: holding.userId,
         propertyId: holding.propertyId,
         period,
-        grossShare: netPaid, // demo: no itemized waterfall (Story 5.3)
-        costs: 0,
-        mgmtFee: 0,
-        reserve: 0,
-        netPaid,
+        grossShare: waterfall.grossShare,
+        costs: waterfall.costs,
+        mgmtFee: waterfall.mgmtFee,
+        reserve: waterfall.reserve,
+        netPaid: waterfall.netPaid,
         status: "paid",
         paidAt: now,
       });

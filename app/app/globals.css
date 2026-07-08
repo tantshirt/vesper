@@ -370,3 +370,32 @@ h1 {
 .port-nudge-title { margin: 0; font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; }
 .port-nudge-body { margin: 0; font: 400 13.5px/1.55 var(--sans); color: var(--ink); }
 .port-nudge .cta.ghost { margin-top: 4px; }
+
+/* ---- E5.3 Income — the itemized gross→net waterfall, matches-target chip, honest banner, and
+   history rows. Cents precision (the legibility surface, O3); token-driven only (no hex). One
+   champagne accent max — spent on the net-paid emphasis. ---- */
+/* Waterfall: hairline-separated .stat-row lines (gross → costs → mgmt → reserve), stable tabular
+   figures so a reactive value update never shifts layout. */
+.income-waterfall { margin-top: 6px; }
+.income-line { padding: 11px 0; border-top: 1px solid var(--hairline); }
+.income-line:first-child { border-top: 0; }
+/* Net-paid emphasis line — the SOLE champagne accent on this surface (the figure the owner reads). */
+.income-net { padding: 13px 0 2px; margin-top: 2px; border-top: 1px solid var(--hairline-2); }
+.income-net > span { font: 500 15px var(--sans); color: var(--ink); }
+.income-net-figure { font: 600 22px var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: var(--champagne); }
+/* Matches-target chip — calm gain soft-tint (mirrors the .pd-verified idiom): affirming, never loud. */
+.income-chip { margin: 16px 0 0; display: inline-block; font: 500 12.5px/1.45 var(--sans); color: var(--gain);
+  background: color-mix(in srgb, var(--gain) 12%, transparent); border: 1px solid color-mix(in srgb, var(--gain) 32%, transparent);
+  border-radius: 12px; padding: 9px 13px; }
+/* Below-target variance — a calm muted note (no soft-tint alarm), names realized vs target factually. */
+.income-variance { margin: 16px 0 0; font: 400 13px/1.55 var(--sans); color: var(--muted); }
+/* Honest banner — calm --warning soft-tint (mirrors the .port-nudge idiom): never silent, never alarming. */
+.income-banner { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent); border-radius: 14px; padding: 16px 18px; }
+.income-banner-title { margin: 0; font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.income-banner-body { margin: 0; font: 400 13.5px/1.55 var(--sans); color: var(--ink); }
+.income-banner .cta.ghost { margin-top: 4px; }
+/* History rows — the .port-holding two-line idiom (month + net / status), hairline-separated. */
+.income-row { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-top: 1px solid var(--hairline); }
+.income-row:first-of-type { border-top: 0; padding-top: 2px; }

@@ -142,4 +142,6 @@ export const HOME_COPY = {
   // Onward affordances.
   exploreCta: "Explore properties",
   portfolioCta: "View portfolio",
+  // Reaches the itemized income breakdown (Story 5.3) — the fresh hero's onward step to its detail.
+  incomeCta: "See your income",
 } as const;

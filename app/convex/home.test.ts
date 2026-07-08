@@ -12,6 +12,7 @@ import {
   selectNextDistributionDate,
   buildBalanceSeries,
   periodFor,
+  splitDistribution,
 } from "./home";
 
 // Story 5.1 — covers the Home read surface end-to-end: the pure derivation helpers (DOM-less, the
@@ -151,6 +152,42 @@ describe("selectNextDistributionDate — soonest date on/after today, else null"
   });
   test("missing dates → null", () => {
     expect(selectNextDistributionDate([{ firstDistributionDate: undefined }], "2026-07-08")).toBeNull();
+  });
+});
+
+describe("splitDistribution — internally-consistent gross→net waterfall (Story 5.3)", () => {
+  test("components sum to gross EXACTLY, gross > net, for a range of net values", () => {
+    for (const net of [1, 2, 3, 5, 30, 62, 100, 251, 4321]) {
+      const w = splitDistribution(net);
+      expect(w.netPaid).toBe(net);
+      // The load-bearing invariant: grossShare === costs + mgmtFee + reserve + netPaid.
+      expect(w.costs + w.mgmtFee + w.reserve + w.netPaid).toBe(w.grossShare);
+      // Non-degenerate: gross exceeds net, and every deduction is non-negative.
+      expect(w.grossShare).toBeGreaterThan(w.netPaid);
+      expect(w.costs).toBeGreaterThanOrEqual(0);
+      expect(w.mgmtFee).toBeGreaterThanOrEqual(0);
+      expect(w.reserve).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  test("the seed's canonical $62 payout → gross 100 / costs 24 / mgmt 8 / reserve 6", () => {
+    expect(splitDistribution(62)).toEqual({
+      grossShare: 100,
+      costs: 24,
+      mgmtFee: 8,
+      reserve: 6,
+      netPaid: 62,
+    });
+  });
+
+  test.each([0, -5, NaN, Infinity])("non-positive/non-finite net %s → all-zero waterfall", (net) => {
+    expect(splitDistribution(net)).toEqual({
+      grossShare: 0,
+      costs: 0,
+      mgmtFee: 0,
+      reserve: 0,
+      netPaid: 0,
+    });
   });
 });
 
@@ -355,10 +392,14 @@ describe("home.devSeedDistribution — idempotent per (user, property, period) +
     expect(rows).toHaveLength(1);
     // netPaid = round(costBasis × targetNetYield / 12) = round(12000 × 0.062 / 12) = round(62) = 62.
     expect(rows[0].netPaid).toBe(62);
-    expect(rows[0].grossShare).toBe(62);
-    expect(rows[0].costs).toBe(0);
-    expect(rows[0].mgmtFee).toBe(0);
-    expect(rows[0].reserve).toBe(0);
+    // Story 5.3: a real itemized waterfall (gross > net; components sum to gross exactly).
+    // splitDistribution(62) → gross round(62/0.62)=100, costs round(24)=24, mgmt round(8)=8, reserve rem=6.
+    expect(rows[0].grossShare).toBe(100);
+    expect(rows[0].costs).toBe(24);
+    expect(rows[0].mgmtFee).toBe(8);
+    expect(rows[0].reserve).toBe(6);
+    expect(rows[0].grossShare).toBeGreaterThan(rows[0].netPaid); // non-degenerate: gross > net
+    expect(rows[0].costs + rows[0].mgmtFee + rows[0].reserve + rows[0].netPaid).toBe(rows[0].grossShare);
     expect(rows[0].status).toBe("paid");
     expect(typeof rows[0].paidAt).toBe("number");
     expect(rows[0].period).toBe(periodFor(Date.now()));
