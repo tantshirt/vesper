@@ -26,7 +26,7 @@ development_status:
   2-1-explore-listing: review                # ✅ built (app/app/explore) vs live seed; build+typecheck pass; visual eyeball pending. B3 gates public-content extent.
   2-2-property-detail-trust-quartet: review  # ✅ built (app/app/property/[id]); getWithGates verified (8 human-signed gates live); build+typecheck pass. B4 gates labels.
   2-3-trust-stack-signed-gates: done # NOTE: B4 gates consumer gate labels
-  2-4-onchain-proof: ready-for-dev
+  2-4-onchain-proof: done # provable-on-demand proof view; mint/holders/DvP/Token ACL/explorer, honest empties
   epic-2-retrospective: optional
 
   # ---- Epic 3: Onboard & Fund ----

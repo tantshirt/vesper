@@ -51,3 +51,15 @@ Tracks intentionally out-of-scope follow-ups surfaced during story implementatio
 - source_spec: `spec-2-3-trust-stack-signed-gates.md`
   summary: The load-bearing invariant "no gate is ever attributed to an AI" and the empty-state/heading behavior live in `TrustStack.tsx`, which has no test coverage — only the four pure helpers are unit-tested. A render-level test asserting the invariant (and empty/pending rendering) is missing.
   evidence: The invariant is structurally guaranteed in code today (the component only ever emits `signerText(signedByHuman)` plus static human copy, with no AI code path), so risk is low, but it is asserted only by comments. Adding a component render test requires new dev tooling (jsdom + @testing-library/react + vitest config) that is out of scope for this story; track as its own focused task.
+
+- source_spec: `spec-2-4-onchain-proof.md`
+  summary: The on-chain proof route (`app/property/[id]/proof/page.tsx`) is a `"use client"` view backed by `useQuery`, with no SSR and no `generateMetadata`/`<title>`/OG tags — a "verify it yourself" trust artifact that renders blank without JS and cannot be unfurled when shared.
+  evidence: Real for a public, shareable proof surface, but it faithfully mirrors the app-wide client-rendered Convex pattern (property detail is client-only too); moving to a server component or adding route metadata is an app-wide rendering-strategy decision beyond this story. Revisit if the proof view is meant to be a first-class shareable/link-unfurlable artifact.
+
+- source_spec: `spec-2-4-onchain-proof.md`
+  summary: `seedTheMonroe` finds the existing property via `by_status("open")`, so once The Monroe leaves "open" (status `funded`/`closed`) the idempotency + mint-backfill check can no longer see it and a re-seed would insert a duplicate "open" Monroe.
+  evidence: Pre-existing in the original seed (the `by_status("open")` lookup predates this story); no code path currently flips The Monroe off "open", so it never triggers today. Robust fix is to look the property up by name or by `mint` (`by_mint`) rather than by status; track with seed-hardening.
+
+- source_spec: `spec-2-4-onchain-proof.md`
+  summary: A malformed `[id]` route param (e.g. `/property/garbage/proof`) makes `getOnChainProof`'s `v.id("properties")` arg validator throw server-side; `useQuery` re-throws and the only handled states are `undefined` (loading) and `null` (not-found), so the visitor hits an uncaught render error instead of the graceful "Property not found" screen.
+  evidence: Real robustness gap, but identical to the pre-existing pattern on `property/[id]/page.tsx` (same `as Id<>` cast, same two-state handling); a proper fix (id-shape guard or route-level error boundary) is an app-wide concern. Only reachable via a hand-crafted bad URL, not a normal navigation path.

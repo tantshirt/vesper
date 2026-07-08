@@ -87,6 +87,8 @@ export default function PropertyPage() {
         </div>
       </section>
 
+      <Link href={`/property/${p._id}/proof`} className="proof-link">See the on-chain proof ↗</Link>
+
       <div className="pd-spacer" />
       <div className="pd-bar">
         <div className="pd-bar-meta">{p.name} · {pct(p.targetNetYield)}<b>Invest from ${p.minInvestment}</b></div>
