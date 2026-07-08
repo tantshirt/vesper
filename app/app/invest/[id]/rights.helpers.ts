@@ -58,14 +58,11 @@ export const RIGHTS_COPY = {
   backLabel: "‹ Back to review your order",
   confirmCta: "Confirm and continue",
 
-  // Story 4.4 · settlement outcome. Shown while the purchase settles, then a minimal factual
-  // acknowledgement on success (the celebratory owner screen is Story 4.5) or a calm "nothing was
+  // Story 4.4 · settlement outcome. Shown while the purchase settles, then a calm "nothing was
   // charged" note on any failure. Deliberately free of settlement/payment jargon; the failure note is
   // reason-neutral (it never promises an imminent retry will succeed — a cap/eligibility block won't).
+  // The settled-success copy now lives in CONFIRMATION_COPY (Story 4.5's "You're an owner" screen).
   submittingLabel: "Completing your investment…",
-  settledEyebrow: "Done",
-  settledTitle: "Your investment is complete",
-  ownedLabel: "You now own",
   failedNote:
     "We couldn't complete this, and nothing was charged. No harm done — please review your details and try again.",
 } as const;

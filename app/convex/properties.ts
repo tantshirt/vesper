@@ -23,6 +23,13 @@ export const getWithGates = query({
 // until real settlement flows through the reconcile harness — so nothing here is fabricated.
 export const DEMO_MONROE_MINT = "6MonRoeSeedM1ntDemo11111111111111111111111";
 
+// E4.5 — generic first-distribution date for the seeded Monroe (YYYY-MM-DD, parsed UTC by the
+// confirmation view). A placeholder offering date, NOT a compliance-mandated payout policy. Editing
+// this constant sets the date on a FRESH seed and backfills a Monroe that has none — but the backfill
+// below is fill-only (never overwrites), so correcting an already-seeded date needs a manual patch, not
+// just a reseed.
+export const MONROE_FIRST_DISTRIBUTION_DATE = "2026-08-31";
+
 // E2.4 on-chain proof read path (public; no auth). Returns ONLY real chain-mirrored facts:
 // the property mint, live holder count, and settled-order DvP receipts. `null` when missing.
 export const getOnChainProof = query({
@@ -102,10 +109,14 @@ export const seedTheMonroe = mutation({
       .collect();
     const monroe = existing.find((p) => p.name === "The Monroe");
     if (monroe) {
-      // Idempotent backfill: if a pre-E2.4 Monroe exists without a mint, anchor the demo mint.
-      if (!monroe.mint) {
-        await ctx.db.patch(monroe._id, { mint: DEMO_MONROE_MINT });
-        return "backfilled mint";
+      // Idempotent backfill: patch any missing fields onto an already-seeded Monroe so a running
+      // deployment gets them without a full reseed. Mirrors the mint backfill for E4.5's date.
+      const patch: { mint?: string; firstDistributionDate?: string } = {};
+      if (!monroe.mint) patch.mint = DEMO_MONROE_MINT;
+      if (!monroe.firstDistributionDate) patch.firstDistributionDate = MONROE_FIRST_DISTRIBUTION_DATE;
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(monroe._id, patch);
+        return "backfilled " + Object.keys(patch).join(", ");
       }
       return "already seeded";
     }
@@ -122,6 +133,7 @@ export const seedTheMonroe = mutation({
       spvName: "The Monroe LLC",
       minInvestment: 50,
       mint: DEMO_MONROE_MINT, // E2.4 disclosed demo Token-2022 mint (fixture, not a live asset)
+      firstDistributionDate: MONROE_FIRST_DISTRIBUTION_DATE, // E4.5 generic offering date for the confirmation
     });
 
     const gates: Array<[number, string, string]> = [

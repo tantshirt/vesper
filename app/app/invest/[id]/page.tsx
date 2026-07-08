@@ -44,6 +44,11 @@ import {
   allAcknowledged,
   RIGHTS_COPY,
 } from "./rights.helpers";
+import {
+  CONFIRMATION_COPY,
+  formatDistributionDate,
+  formatConfirmationRef,
+} from "./confirmation.helpers";
 
 // Whole-dollar add-money bounds — client-side mirror of convex/funding.ts MIN_FUNDING/MAX_FUNDING.
 // The mutation is the authoritative validator; these gate the form (required + submit-disabled).
@@ -104,9 +109,12 @@ export default function InvestPage() {
   const [acks, setAcks] = useState<Record<string, boolean>>({});
   const [settling, setSettling] = useState(false);
   // The on-chain DvP receipt (`dvpTxSig`) is deliberately NOT held here: it is recorded server-side
-  // (order + audit) and surfaces only in the pull-only proof view, never on the consumer screen.
+  // (order + audit) and surfaces only in the pull-only proof view, never on the consumer screen. The
+  // `orderId` IS kept — it feeds the consumer-safe confirmation reference (Story 4.5), not the raw sig.
   const [settleResult, setSettleResult] = useState<
-    { status: "settled"; ownershipPct: number } | { status: "failed" } | null
+    | { status: "settled"; ownershipPct: number; orderId: string }
+    | { status: "failed" }
+    | null
   >(null);
   const [settleError, setSettleError] = useState(false);
 
@@ -252,6 +260,7 @@ export default function InvestPage() {
         setSettleResult({
           status: "settled",
           ownershipPct: result.ownershipPct,
+          orderId: result.orderId,
         });
       } else {
         setSettleResult({ status: "failed" });
@@ -321,23 +330,55 @@ export default function InvestPage() {
 
   const p = property?.property ?? null;
 
-  // Story 4.4 · settled acknowledgement — TERMINAL and rendered BEFORE the reactive gate-state
-  // switches. A full-balance purchase drives the derived `fundedBalance` to 0, which would otherwise
-  // flip `state` back to "funding" and pre-empt this screen with the Add Money form (swallowing the
-  // confirmation and looking like the money vanished). Keying it off `settleResult` — not `state` —
-  // keeps the minimal factual acknowledgement (ownership %) up regardless of the post-purchase balance.
-  if (settleResult?.status === "settled" && p) {
+  // Story 4.5 · the celebratory "You're an owner" confirmation (FR11) — TERMINAL and rendered BEFORE
+  // the reactive gate-state switches. A full-balance purchase drives the derived `fundedBalance` to 0,
+  // which would otherwise flip `state` back to "funding" and pre-empt this screen with the Add Money
+  // form (swallowing the confirmation and looking like the money vanished). Keying it off
+  // `settleResult` — not `state` — keeps the confirmation up regardless of the post-purchase balance.
+  // Everything renders from data already in hand: `ownershipPct` + `orderId` (from the mutation) and
+  // `firstDistributionDate` (off the already-loaded property doc) — no new query. The confirmation
+  // reference is a consumer-safe derivation of the order id; the raw on-chain receipt lives only in
+  // the pull-only proof view, reached via the low-weight link. When the date is absent/unparseable the
+  // row degrades to an honest fallback, never "Invalid Date".
+  //
+  // The branch is keyed off `settleResult` ALONE (not `&& p`): a settled purchase must never fall
+  // through to the gate-state switch below, where a zeroed post-purchase balance would swallow it into
+  // the Add Money form. `property` is already loaded by the time settlement runs, but if the reactive
+  // query ever momentarily lacks it we hold on a terminal "finalizing" view rather than leak through.
+  if (settleResult?.status === "settled") {
+    if (!p) {
+      return (
+        <main className="wrap">
+          <p className="eyebrow"><span className="dot" /> {CONFIRMATION_COPY.eyebrow}</p>
+          <p className="muted">{CONFIRMATION_COPY.finalizingNote}</p>
+        </main>
+      );
+    }
+    const firstDistribution = formatDistributionDate(p.firstDistributionDate);
+    const confirmationRef = formatConfirmationRef(settleResult.orderId);
     return (
       <main className="wrap">
-        <p className="eyebrow"><span className="dot" /> {RIGHTS_COPY.settledEyebrow}</p>
-        <h1>{RIGHTS_COPY.settledTitle}</h1>
+        <p className="eyebrow"><span className="dot" /> {CONFIRMATION_COPY.eyebrow}</p>
+        <h1>{CONFIRMATION_COPY.title}</h1>
         <p className="muted">{p.name} · {p.location}</p>
         <div className="card">
           <div className="calc-row">
-            <span className="muted">{RIGHTS_COPY.ownedLabel}</span>
+            <span className="muted">{CONFIRMATION_COPY.ownedLabel}</span>
             <b className="calc-figure">{formatOwnershipPct(settleResult.ownershipPct)}</b>
           </div>
+          <div className="calc-row">
+            <span className="muted">{CONFIRMATION_COPY.distributionLabel}</span>
+            <b className="calc-figure">{firstDistribution ?? CONFIRMATION_COPY.distributionFallback}</b>
+          </div>
+          <div className="calc-row">
+            <span className="muted">{CONFIRMATION_COPY.referenceLabel}</span>
+            <b className="calc-figure">{confirmationRef}</b>
+          </div>
         </div>
+        <Link className="cta" href="/explore">{CONFIRMATION_COPY.portfolioCta}</Link>
+        <p className="muted">
+          <Link href={`/property/${p._id}/proof`}>{CONFIRMATION_COPY.proofLinkLabel}</Link>
+        </p>
       </main>
     );
   }

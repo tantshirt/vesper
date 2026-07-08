@@ -38,6 +38,7 @@ export default defineSchema({
     spvName: v.string(),
     minInvestment: v.number(),
     mint: v.optional(v.string()), // E1.3: on-chain token address → routes chain events to this property
+    firstDistributionDate: v.optional(v.string()), // E4.5: YYYY-MM-DD; optional so existing docs stay valid (no migration)
   }).index("by_status", ["status"]).index("by_mint", ["mint"]), // by_mint: E1.3 chain-event routing
 
   diligenceGates: defineTable({
