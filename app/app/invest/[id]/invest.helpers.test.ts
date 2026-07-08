@@ -3,6 +3,8 @@ import {
   investGateState,
   shouldMirrorWallet,
   hasCryptoVocabulary,
+  remainingRegAHeadroom,
+  formatUsd,
   INVEST_COPY,
 } from "./invest.helpers";
 
@@ -19,6 +21,9 @@ describe("investGateState — one screen per matrix row", () => {
     walletAddress: null as string | null,
     propertyLoaded: true,
     propertyFound: true,
+    kycStatus: "verified" as const,
+    eligibilityLoaded: true,
+    eligible: true as boolean | null,
   };
 
   test("Privy initializing (ready === false) → loading", () => {
@@ -51,12 +56,74 @@ describe("investGateState — one screen per matrix row", () => {
     expect(investGateState({ ...base, walletAddress: "   " })).toBe("provisioning");
   });
 
-  test("wallet ready, not yet mirrored → ready", () => {
-    expect(investGateState({ ...base, walletAddress: ADDR })).toBe("ready");
+  test("account ready but identity not yet verified → kyc", () => {
+    expect(investGateState({ ...base, walletAddress: ADDR, kycStatus: "none" })).toBe("kyc");
   });
 
-  test("returning linked user (mirrored address resolves) → ready", () => {
-    expect(investGateState({ ...base, walletAddress: ADDR })).toBe("ready");
+  test("prior identity-check failure keeps the user on kyc (retryable)", () => {
+    expect(investGateState({ ...base, walletAddress: ADDR, kycStatus: "failed" })).toBe("kyc");
+  });
+
+  test("verified but eligibility doc not yet resolved → loading (never flash restricted)", () => {
+    expect(
+      investGateState({ ...base, walletAddress: ADDR, eligibilityLoaded: false, eligible: null }),
+    ).toBe("loading");
+  });
+
+  test("verified + eligible jurisdiction → eligible", () => {
+    expect(investGateState({ ...base, walletAddress: ADDR, eligible: true })).toBe("eligible");
+  });
+
+  test("verified + restricted jurisdiction → restricted", () => {
+    expect(investGateState({ ...base, walletAddress: ADDR, eligible: false })).toBe("restricted");
+  });
+
+  test("verified globally but no eligibility record for this property → kyc", () => {
+    expect(
+      investGateState({ ...base, walletAddress: ADDR, eligibilityLoaded: true, eligible: null }),
+    ).toBe("kyc");
+  });
+});
+
+describe("remainingRegAHeadroom — remaining dollars, never negative", () => {
+  test("full cap when nothing invested yet", () => {
+    expect(remainingRegAHeadroom(12_000, 0)).toBe(12_000);
+  });
+
+  test("partial headroom after prior investment", () => {
+    expect(remainingRegAHeadroom(20_000, 15_000)).toBe(5_000);
+  });
+
+  test("never goes negative once the cap is exhausted or exceeded", () => {
+    expect(remainingRegAHeadroom(10_000, 10_000)).toBe(0);
+    expect(remainingRegAHeadroom(10_000, 12_500)).toBe(0);
+  });
+
+  test("floors a fractional cap down to whole dollars (never shown above the true 10%)", () => {
+    expect(remainingRegAHeadroom(5_555.5, 0)).toBe(5_555);
+    expect(remainingRegAHeadroom(5_555.5, 55.4)).toBe(5_500);
+  });
+
+  test("undefined/null/NaN inputs are treated as 0", () => {
+    expect(remainingRegAHeadroom(undefined, undefined)).toBe(0);
+    expect(remainingRegAHeadroom(null, 5)).toBe(0);
+    expect(remainingRegAHeadroom(NaN, NaN)).toBe(0);
+    expect(remainingRegAHeadroom(10_000, undefined)).toBe(10_000);
+  });
+});
+
+describe("formatUsd — calm whole-dollar display", () => {
+  test("formats whole dollars with no cents", () => {
+    expect(formatUsd(12_000)).toBe("$12,000");
+    expect(formatUsd(0)).toBe("$0");
+  });
+
+  test("rounds away cents (maximumFractionDigits: 0)", () => {
+    expect(formatUsd(12_000.75)).toBe("$12,001");
+  });
+
+  test("non-finite input falls back to $0", () => {
+    expect(formatUsd(NaN)).toBe("$0");
   });
 });
 

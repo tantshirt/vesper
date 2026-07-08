@@ -12,6 +12,7 @@ export default defineSchema({
     kycStatus: v.union(v.literal("none"), v.literal("pending"), v.literal("verified"), v.literal("failed")),
     walletAddress: v.optional(v.string()), // Privy embedded Solana wallet
     regAInvestedThisYear: v.optional(v.number()), // for Reg A+ cap (I5)
+    regAAnnualLimit: v.optional(v.number()), // E3.2: computed Reg A+ per-investor cap (10% of greater of income/net worth)
     createdAt: v.number(),
   }).index("by_privyId", ["privyId"]).index("by_wallet", ["walletAddress"]), // by_wallet: E1.3 chain-event routing
 
@@ -73,6 +74,16 @@ export default defineSchema({
     eligible: v.boolean(),
     jurisdiction: v.string(),
     tokenAclState: v.union(v.literal("frozen"), v.literal("thawed")),
+    personaInquiryId: v.optional(v.string()), // E3.2: ref to the (stubbed) Persona KYC inquiry that produced this result
+  }).index("by_user_property", ["userId", "propertyId"]),
+
+  // E3.2: restricted-jurisdiction waitlist — never a dead-end. One row per (user, property);
+  // idempotent join via by_user_property. Fed only by joinWaitlist (audited).
+  waitlist: defineTable({
+    userId: v.id("users"),
+    propertyId: v.id("properties"),
+    jurisdiction: v.string(),
+    createdAt: v.number(),
   }).index("by_user_property", ["userId", "propertyId"]),
 
   incomeLedger: defineTable({

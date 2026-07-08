@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { usePrivy, useSolanaWallets } from "@privy-io/react-auth";
 import { useConvexAuth, useQuery, useMutation } from "convex/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import {
   investGateState,
   shouldMirrorWallet,
+  remainingRegAHeadroom,
+  formatUsd,
   INVEST_COPY,
 } from "./invest.helpers";
 
@@ -28,8 +30,20 @@ export default function InvestPage() {
 
   const property = useQuery(api.properties.getWithGates, { id: propertyId });
   const currentUser = useQuery(api.users.currentUser);
+  const eligibility = useQuery(api.eligibility.getEligibility, { propertyId });
   const ensureUser = useMutation(api.users.ensureUser);
   const setWalletAddress = useMutation(api.users.setWalletAddress);
+  const recordEligibility = useMutation(api.eligibility.recordEligibility);
+  const joinWaitlist = useMutation(api.eligibility.joinWaitlist);
+
+  // Local form/submission state for the identity-check + waitlist steps (client-only; the
+  // authoritative record lives in Convex). `country` maps to the jurisdiction the mutation records.
+  const [country, setCountry] = useState<"us" | "other">("us");
+  const [annualIncome, setAnnualIncome] = useState("");
+  const [netWorth, setNetWorth] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [joined, setJoined] = useState(false);
 
   // Resolve the embedded Solana address. Select ONLY the Privy-embedded wallet (its
   // `walletClientType` is "privy"). Never fall back to `solanaWallets[0]`: with "wallet" in
@@ -61,13 +75,61 @@ export default function InvestPage() {
     }
   }, [isAuthenticated, currentUser, resolvedAddress, setWalletAddress]);
 
-  const state = investGateState({
+  // The per-property eligibility doc (undefined = query still resolving, null = no doc yet).
+  const eligibilityLoaded = eligibility !== undefined;
+  const eligible = eligibility == null ? null : eligibility.eligible;
+  // Hold the loading affordance until the reactive user resolves, so a returning verified user
+  // never flashes the identity-check step before their status is known.
+  const userLoaded = !authenticated || currentUser !== undefined;
+
+  const rawState = investGateState({
     privyReady: ready,
     isAuthenticated: authenticated,
     walletAddress: resolvedAddress,
     propertyLoaded: property !== undefined,
     propertyFound: property != null,
+    kycStatus: currentUser?.kycStatus ?? null,
+    eligibilityLoaded,
+    eligible,
   });
+  const state = !userLoaded && rawState !== "loading" ? "loading" : rawState;
+
+  // Submit the (stubbed-Persona) identity check. The hosted Persona flow that would call this same
+  // mutation is deferred; here the form is the KYC-result boundary and always reports success.
+  async function submitIdentityCheck(e: React.FormEvent) {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await recordEligibility({
+        propertyId,
+        jurisdiction: country === "us" ? "United States" : "Somewhere else",
+        annualIncome: Number(annualIncome) || 0,
+        netWorth: Number(netWorth) || 0,
+        verified: true,
+      });
+    } catch {
+      // Best-effort; the reactive state reflects the outcome. Failures leave the user on this step.
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitWaitlist() {
+    if (joining) return;
+    setJoining(true);
+    try {
+      await joinWaitlist({
+        propertyId,
+        jurisdiction: eligibility?.jurisdiction ?? (country === "us" ? "United States" : "Somewhere else"),
+      });
+      setJoined(true);
+    } catch {
+      // Idempotent server-side; a transient failure just leaves the CTA available to retry.
+    } finally {
+      setJoining(false);
+    }
+  }
 
   const p = property?.property ?? null;
 
@@ -118,22 +180,113 @@ export default function InvestPage() {
     );
   }
 
-  // state === "ready" — honest handoff placeholder; E4 wires the calculator here.
+  if (state === "kyc") {
+    return (
+      <main className="wrap">
+        <p className="eyebrow"><span className="dot" /> {INVEST_COPY.brandEyebrow}</p>
+        <h1>{INVEST_COPY.kycTitle}</h1>
+        {p && (
+          <p className="muted">{p.name} · {p.location}</p>
+        )}
+        <p className="muted">{INVEST_COPY.kycBody}</p>
+        {currentUser?.kycStatus === "failed" && (
+          <p className="muted" role="status">{INVEST_COPY.kycRetryNote}</p>
+        )}
+        <form className="card inv-form" onSubmit={submitIdentityCheck}>
+          <label className="inv-field">
+            <span className="inv-label">{INVEST_COPY.kycCountryLabel}</span>
+            <select
+              className="inv-input"
+              value={country}
+              onChange={(e) => setCountry(e.target.value as "us" | "other")}
+            >
+              <option value="us">{INVEST_COPY.kycCountryUs}</option>
+              <option value="other">{INVEST_COPY.kycCountryOther}</option>
+            </select>
+          </label>
+          <label className="inv-field">
+            <span className="inv-label">{INVEST_COPY.kycIncomeLabel}</span>
+            <input
+              className="inv-input"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              required
+              value={annualIncome}
+              onChange={(e) => setAnnualIncome(e.target.value)}
+            />
+          </label>
+          <label className="inv-field">
+            <span className="inv-label">{INVEST_COPY.kycNetWorthLabel}</span>
+            <input
+              className="inv-input"
+              type="number"
+              min="0"
+              inputMode="numeric"
+              required
+              value={netWorth}
+              onChange={(e) => setNetWorth(e.target.value)}
+            />
+          </label>
+          <p className="muted">{INVEST_COPY.kycAmountHint}</p>
+          <button className="cta" type="submit" disabled={submitting} aria-disabled={submitting}>
+            {submitting ? INVEST_COPY.kycSubmitting : INVEST_COPY.kycCta}
+          </button>
+        </form>
+      </main>
+    );
+  }
+
+  if (state === "restricted") {
+    return (
+      <main className="wrap">
+        <p className="eyebrow"><span className="dot" /> {INVEST_COPY.brandEyebrow}</p>
+        <h1>{INVEST_COPY.restrictedTitle}</h1>
+        {p && (
+          <p className="muted">{p.name} · {p.location}</p>
+        )}
+        <div className="card">
+          <p className="muted">{INVEST_COPY.restrictedBody}</p>
+          {joined ? (
+            <p className="ok"><span aria-hidden="true">✓</span> {INVEST_COPY.restrictedConfirm}</p>
+          ) : (
+            <button
+              className="cta"
+              onClick={submitWaitlist}
+              disabled={joining}
+              aria-disabled={joining}
+            >
+              {joining ? INVEST_COPY.restrictedSubmitting : INVEST_COPY.restrictedCta}
+            </button>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  // state === "eligible" — calm remaining-headroom line, then the still-disabled E4 handoff.
+  const headroom = remainingRegAHeadroom(
+    currentUser?.regAAnnualLimit,
+    currentUser?.regAInvestedThisYear ?? 0,
+  );
   return (
     <main className="wrap">
-      <p className="eyebrow"><span className="dot" /> {INVEST_COPY.readyEyebrow}</p>
-      <h1>{INVEST_COPY.readyTitle}</h1>
+      <p className="eyebrow"><span className="dot" /> {INVEST_COPY.eligibleEyebrow}</p>
+      <h1>{INVEST_COPY.eligibleTitle}</h1>
       {p && (
         <p className="muted">{p.name} · {p.location}</p>
       )}
       <div className="card">
-        <p className="ok"><span aria-hidden="true">✓</span> {INVEST_COPY.readyConfirm}</p>
-        <p className="muted">{INVEST_COPY.readyBody}</p>
+        <div className="row">
+          <span className="muted">{INVEST_COPY.eligibleHeadroomLabel}</span>
+          <b className="inv-headroom">{formatUsd(headroom)}</b>
+        </div>
+        <p className="muted">{INVEST_COPY.eligibleHeadroomNote}</p>
       </div>
       <button className="cta" disabled aria-disabled="true">
-        {INVEST_COPY.readyCta}
+        {INVEST_COPY.eligibleCta}
       </button>
-      <p className="muted">{INVEST_COPY.readyNote}</p>
+      <p className="muted">{INVEST_COPY.eligibleNote}</p>
     </main>
   );
 }

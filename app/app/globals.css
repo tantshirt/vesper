@@ -124,6 +124,17 @@ h1 {
 .cta.ghost { background: transparent; color: var(--accent); border: 1px solid var(--hairline-2); }
 .cta:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
 
+/* ---- E3.2 Invest eligibility — identity-check form + headroom (token-driven) ---- */
+.inv-form { gap: 16px; }
+.inv-field { display: flex; flex-direction: column; gap: 6px; }
+.inv-label { font: 600 12px var(--sans); color: var(--sub); letter-spacing: .01em; }
+.inv-input {
+  font: 500 15px var(--sans); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--hairline-2); border-radius: 13px; padding: 12px 14px; width: 100%;
+}
+.inv-input:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+.inv-headroom { font: 600 17px var(--sans); color: var(--ink); font-variant-numeric: tabular-nums; }
+
 /* ---- E2.1 Explore ---- */
 .ex { max-width: 440px; margin: 0 auto; padding-bottom: 80px; min-height: 100vh; }
 .ex-head { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between;

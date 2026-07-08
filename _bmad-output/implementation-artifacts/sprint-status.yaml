@@ -32,7 +32,7 @@ development_status:
   # ---- Epic 3: Onboard & Fund ----
   epic-3: in-progress
   3-1-passkey-signup-wallet: done            # /invest/[id] auth gate; Privy passkey/social signup; embedded Solana wallet mirrored once + audited
-  3-2-kyc-rega-eligibility: ready-for-dev
+  3-2-kyc-rega-eligibility: done               # KYC (Persona stub) + Reg A+ cap + eligibility→Token-ACL mirror (frozen-by-default) + restricted-jurisdiction waitlist; all audited
   3-3-add-money-usdc: backlog                # BLOCKED by B1 (escrow/custody vendor)
   epic-3-retrospective: optional
 
