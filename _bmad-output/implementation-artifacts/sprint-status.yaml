@@ -4,7 +4,7 @@
 # Build order: E1 → E2 → E3 → E4 → E5 (matches DD build order; E2 demoable earliest against seed)
 
 generated: 2026-07-07
-last_updated: 2026-07-07
+last_updated: 2026-07-08
 project: Vesper
 project_key: VSPR
 tracking_system: file-system
@@ -33,7 +33,7 @@ development_status:
   epic-3: in-progress
   3-1-passkey-signup-wallet: done            # /invest/[id] auth gate; Privy passkey/social signup; embedded Solana wallet mirrored once + audited
   3-2-kyc-rega-eligibility: done               # KYC (Persona stub) + Reg A+ cap + eligibility→Token-ACL mirror (frozen-by-default) + restricted-jurisdiction waitlist; all audited
-  3-3-add-money-usdc: backlog                # BLOCKED by B1 (escrow/custody vendor)
+  3-3-add-money-usdc: done                   # fiat "Add money" → append-only USDC funding ledger; on-ramp/escrow (B1) stubbed behind addMoney + deferred; dollars-only, no-crypto-vocab; Reg A+ cap carried onto funding screens
   epic-3-retrospective: optional
 
   # ---- Epic 4: Invest ----

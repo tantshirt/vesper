@@ -10,10 +10,15 @@ import type { Id } from "@/convex/_generated/dataModel";
 import {
   investGateState,
   shouldMirrorWallet,
-  remainingRegAHeadroom,
   formatUsd,
+  remainingRegAHeadroom,
   INVEST_COPY,
 } from "./invest.helpers";
+
+// Whole-dollar add-money bounds — client-side mirror of convex/funding.ts MIN_FUNDING/MAX_FUNDING.
+// The mutation is the authoritative validator; these gate the form (required + submit-disabled).
+const MIN_ADD = 50;
+const MAX_ADD = 1_000_000;
 
 // Story 3.1 · Invest-flow entry — the auth-gated gateway behind Property Detail's "Invest" CTA.
 // Unauthenticated → calm passkey/social signup (in place, so the user returns to this property).
@@ -31,10 +36,12 @@ export default function InvestPage() {
   const property = useQuery(api.properties.getWithGates, { id: propertyId });
   const currentUser = useQuery(api.users.currentUser);
   const eligibility = useQuery(api.eligibility.getEligibility, { propertyId });
+  const fundedBalance = useQuery(api.funding.getFundedBalance);
   const ensureUser = useMutation(api.users.ensureUser);
   const setWalletAddress = useMutation(api.users.setWalletAddress);
   const recordEligibility = useMutation(api.eligibility.recordEligibility);
   const joinWaitlist = useMutation(api.eligibility.joinWaitlist);
+  const addMoney = useMutation(api.funding.addMoney);
 
   // Local form/submission state for the identity-check + waitlist steps (client-only; the
   // authoritative record lives in Convex). `country` maps to the jurisdiction the mutation records.
@@ -44,6 +51,12 @@ export default function InvestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
+
+  // Add-money form state (client-only; the settled deposit lives in the append-only Convex ledger).
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<"card" | "ach">("card");
+  const [addingMoney, setAddingMoney] = useState(false);
+  const [showAddMore, setShowAddMore] = useState(false);
 
   // Resolve the embedded Solana address. Select ONLY the Privy-embedded wallet (its
   // `walletClientType` is "privy"). Never fall back to `solanaWallets[0]`: with "wallet" in
@@ -78,6 +91,9 @@ export default function InvestPage() {
   // The per-property eligibility doc (undefined = query still resolving, null = no doc yet).
   const eligibilityLoaded = eligibility !== undefined;
   const eligible = eligibility == null ? null : eligibility.eligible;
+  // The account-level balance query (undefined = still resolving). Held on `loading` while unresolved
+  // so `funding` never flashes for an already-funded user.
+  const balanceLoaded = fundedBalance !== undefined;
   // Hold the loading affordance until the reactive user resolves, so a returning verified user
   // never flashes the identity-check step before their status is known.
   const userLoaded = !authenticated || currentUser !== undefined;
@@ -91,6 +107,8 @@ export default function InvestPage() {
     kycStatus: currentUser?.kycStatus ?? null,
     eligibilityLoaded,
     eligible,
+    balanceLoaded,
+    fundedBalance: fundedBalance ?? null,
   });
   const state = !userLoaded && rawState !== "loading" ? "loading" : rawState;
 
@@ -130,6 +148,86 @@ export default function InvestPage() {
       setJoining(false);
     }
   }
+
+  // Whole-dollar client validation mirroring the mutation's rule — gates the submit button.
+  const amountNum = Number(amount);
+  const amountValid =
+    amount.trim() !== "" &&
+    Number.isInteger(amountNum) &&
+    amountNum >= MIN_ADD &&
+    amountNum <= MAX_ADD;
+
+  // Record a settled deposit through the (stubbed) on-ramp. The client-supplied amount is validated
+  // here and re-validated authoritatively by the mutation; the reactive balance reflects the result.
+  async function submitAddMoney(e: React.FormEvent) {
+    e.preventDefault();
+    if (addingMoney || !amountValid) return;
+    setAddingMoney(true);
+    try {
+      await addMoney({ amountUsd: amountNum, method });
+      setAmount("");
+      setShowAddMore(false);
+    } catch {
+      // Best-effort; the reactive balance reflects the outcome. Failures leave the form in place.
+    } finally {
+      setAddingMoney(false);
+    }
+  }
+
+  const addMoneyForm = (
+    <form className="card inv-form" onSubmit={submitAddMoney}>
+      <label className="inv-field">
+        <span className="inv-label">{INVEST_COPY.fundingAmountLabel}</span>
+        <input
+          className="inv-input"
+          type="number"
+          min={MIN_ADD}
+          max={MAX_ADD}
+          step="1"
+          inputMode="numeric"
+          required
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+      </label>
+      <label className="inv-field">
+        <span className="inv-label">{INVEST_COPY.fundingMethodLabel}</span>
+        <select
+          className="inv-input"
+          value={method}
+          onChange={(e) => setMethod(e.target.value as "card" | "ach")}
+        >
+          <option value="card">{INVEST_COPY.fundingMethodCard}</option>
+          <option value="ach">{INVEST_COPY.fundingMethodBank}</option>
+        </select>
+      </label>
+      <p className="muted">{INVEST_COPY.fundingAmountHint}</p>
+      <button
+        className="cta"
+        type="submit"
+        disabled={addingMoney || !amountValid}
+        aria-disabled={addingMoney || !amountValid}
+      >
+        {addingMoney ? INVEST_COPY.fundingSubmitting : INVEST_COPY.fundingCta}
+      </button>
+    </form>
+  );
+
+  // Reg A+ per-investor limit, shown calmly on both add-money screens (carried over from the Story
+  // 3.2 eligible screen). Show the ACTUAL yearly cap (floored), not remaining headroom, so the value
+  // matches the "limit" label — `remainingRegAHeadroom(x, 0)` just floors/clamps. Hide when the cap
+  // is 0 (or absent) so we never paint a "$0 limit" wall (the never-a-wall intent).
+  const regaLimit = currentUser?.regAAnnualLimit;
+  const regaLimitRow =
+    typeof regaLimit === "number" && regaLimit > 0 ? (
+      <div className="card">
+        <div className="row">
+          <span className="muted">{INVEST_COPY.regaLimitLabel}</span>
+          <b className="inv-headroom">{formatUsd(remainingRegAHeadroom(regaLimit, 0))}</b>
+        </div>
+        <p className="muted">{INVEST_COPY.regaLimitNote}</p>
+      </div>
+    ) : null;
 
   const p = property?.property ?? null;
 
@@ -264,29 +362,51 @@ export default function InvestPage() {
     );
   }
 
-  // state === "eligible" — calm remaining-headroom line, then the still-disabled E4 handoff.
-  const headroom = remainingRegAHeadroom(
-    currentUser?.regAAnnualLimit,
-    currentUser?.regAInvestedThisYear ?? 0,
-  );
+  if (state === "funding") {
+    // Eligible, zero balance → the calm Add Money form (the fiat-native on-ramp surface).
+    return (
+      <main className="wrap">
+        <p className="eyebrow"><span className="dot" /> {INVEST_COPY.fundingEyebrow}</p>
+        <h1>{INVEST_COPY.fundingTitle}</h1>
+        {p && (
+          <p className="muted">{p.name} · {p.location}</p>
+        )}
+        <p className="muted">{INVEST_COPY.fundingBody}</p>
+        {regaLimitRow}
+        {addMoneyForm}
+      </main>
+    );
+  }
+
+  // state === "funded" — account-level balance in dollars, "Add more" affordance, then the
+  // still-disabled E4 handoff. Balance is the same across every property (account-level).
+  const balance = typeof fundedBalance === "number" ? fundedBalance : 0;
   return (
     <main className="wrap">
-      <p className="eyebrow"><span className="dot" /> {INVEST_COPY.eligibleEyebrow}</p>
-      <h1>{INVEST_COPY.eligibleTitle}</h1>
+      <p className="eyebrow"><span className="dot" /> {INVEST_COPY.fundedEyebrow}</p>
+      <h1>{INVEST_COPY.fundedTitle}</h1>
       {p && (
         <p className="muted">{p.name} · {p.location}</p>
       )}
       <div className="card">
         <div className="row">
-          <span className="muted">{INVEST_COPY.eligibleHeadroomLabel}</span>
-          <b className="inv-headroom">{formatUsd(headroom)}</b>
+          <span className="muted">{INVEST_COPY.fundedBalanceLabel}</span>
+          <b className="inv-headroom">{formatUsd(balance)}</b>
         </div>
-        <p className="muted">{INVEST_COPY.eligibleHeadroomNote}</p>
+        <p className="muted">{INVEST_COPY.fundedBalanceNote}</p>
       </div>
+      {regaLimitRow}
+      {showAddMore ? (
+        addMoneyForm
+      ) : (
+        <button className="cta ghost" onClick={() => setShowAddMore(true)}>
+          {INVEST_COPY.fundedAddMore}
+        </button>
+      )}
       <button className="cta" disabled aria-disabled="true">
-        {INVEST_COPY.eligibleCta}
+        {INVEST_COPY.fundedCta}
       </button>
-      <p className="muted">{INVEST_COPY.eligibleNote}</p>
+      <p className="muted">{INVEST_COPY.fundedNote}</p>
     </main>
   );
 }

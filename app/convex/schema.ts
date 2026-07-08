@@ -86,6 +86,18 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_user_property", ["userId", "propertyId"]),
 
+  // E3.3: append-only funding ledger (fiat→USDC on-ramp deposits). Balance is DERIVED from the
+  // sum of `status:"settled"` rows (never a denormalized field). Account-level (per-user, not
+  // per-property) → `by_user`. Additive only — no destructive migration of existing rows.
+  fundings: defineTable({
+    userId: v.id("users"),
+    amountUsd: v.number(), // whole-dollar deposit amount (1:1 USDC behind the scenes)
+    method: v.union(v.literal("card"), v.literal("ach")),
+    status: v.union(v.literal("pending"), v.literal("settled"), v.literal("failed")),
+    providerRef: v.optional(v.string()), // ref to the (stubbed) on-ramp/settlement provider
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   incomeLedger: defineTable({
     userId: v.id("users"),
     propertyId: v.id("properties"),

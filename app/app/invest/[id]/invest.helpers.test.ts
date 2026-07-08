@@ -24,6 +24,8 @@ describe("investGateState — one screen per matrix row", () => {
     kycStatus: "verified" as const,
     eligibilityLoaded: true,
     eligible: true as boolean | null,
+    balanceLoaded: true,
+    fundedBalance: 500 as number | null,
   };
 
   test("Privy initializing (ready === false) → loading", () => {
@@ -70,11 +72,34 @@ describe("investGateState — one screen per matrix row", () => {
     ).toBe("loading");
   });
 
-  test("verified + eligible jurisdiction → eligible", () => {
-    expect(investGateState({ ...base, walletAddress: ADDR, eligible: true })).toBe("eligible");
+  test("verified + eligible but balance query not yet resolved → loading (never flash funding)", () => {
+    expect(
+      investGateState({ ...base, walletAddress: ADDR, eligible: true, balanceLoaded: false, fundedBalance: null }),
+    ).toBe("loading");
   });
 
-  test("verified + restricted jurisdiction → restricted", () => {
+  test("verified + eligible + zero balance → funding (Add Money form)", () => {
+    expect(
+      investGateState({ ...base, walletAddress: ADDR, eligible: true, balanceLoaded: true, fundedBalance: 0 }),
+    ).toBe("funding");
+  });
+
+  test("verified + eligible + non-finite/absent balance treated as 0 → funding", () => {
+    expect(
+      investGateState({ ...base, walletAddress: ADDR, eligible: true, balanceLoaded: true, fundedBalance: null }),
+    ).toBe("funding");
+    expect(
+      investGateState({ ...base, walletAddress: ADDR, eligible: true, balanceLoaded: true, fundedBalance: NaN }),
+    ).toBe("funding");
+  });
+
+  test("verified + eligible + positive balance → funded", () => {
+    expect(
+      investGateState({ ...base, walletAddress: ADDR, eligible: true, balanceLoaded: true, fundedBalance: 500 }),
+    ).toBe("funded");
+  });
+
+  test("verified + restricted jurisdiction → restricted (no funding offered)", () => {
     expect(investGateState({ ...base, walletAddress: ADDR, eligible: false })).toBe("restricted");
   });
 
