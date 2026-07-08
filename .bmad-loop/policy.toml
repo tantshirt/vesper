@@ -6,7 +6,7 @@ retrospective = "notify"     # never | notify | auto (auto unsupported in v1)
 
 [limits]
 max_review_cycles = 3
-max_dev_attempts = 2
+max_dev_attempts = 6         # raised from 2: harness terminates the long background resume mid-dev, and each rollback+re-drive burns an attempt; 6 lets a mechanical kill recur without escalating a healthy story
 session_timeout_min = 90
 stop_without_result_nudges = 1
 dev_stall_grace_s = 600      # grace for a dev session that ended its turn awaiting a background process (e.g. a slow PlayMode/test run) before it is called stalled; each re-invocation resets it. 0 = fail fast on the first result-less Stop
