@@ -1,4 +1,5 @@
 import { query, mutation } from "./_generated/server";
+import { v } from "convex/values";
 import { writeAudit } from "./audit";
 
 // E1.1 AC: "a user signs in with Privy → Convex trusts the JWT → resolves the user in a reactive query."
@@ -42,5 +43,55 @@ export const ensureUser = mutation({
     });
 
     return userId;
+  },
+});
+
+// Story 3.1 — mirror the Privy embedded (self-custodial Solana) address into the read model.
+// Idempotent + auditable (spine I3): the caller is derived server-side from the JWT (never taken
+// as an argument), an unchanged address is a no-op, and linking a new address appends an AuditLog
+// entry. The address is an internal read-model detail — it is never surfaced to the user.
+export const setWalletAddress = mutation({
+  args: { walletAddress: v.string() },
+  handler: async (ctx, { walletAddress }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
+      .unique();
+    if (!existing) throw new Error("User not provisioned");
+
+    // Idempotent: unchanged address is a no-op (no write, no duplicate audit entry).
+    if (existing.walletAddress === walletAddress) return existing._id;
+
+    // Mirror-once: the embedded wallet address is stable for the life of the account. Never
+    // silently repoint an already-linked account to a different address — that would rewrite the
+    // on-chain settlement routing key (reconcile.ts `by_wallet`) out from under existing holdings.
+    if (existing.walletAddress) {
+      throw new Error("Wallet already linked");
+    }
+
+    // Uniqueness: the address is the reconciliation routing key, so it must map to at most one
+    // account. Reject if another user already mirrors it (guards against collisions / hijack).
+    const addrOwner = await ctx.db
+      .query("users")
+      .withIndex("by_wallet", (q) => q.eq("walletAddress", walletAddress))
+      .first();
+    if (addrOwner && addrOwner._id !== existing._id) {
+      throw new Error("Wallet already linked to another account");
+    }
+
+    await ctx.db.patch(existing._id, { walletAddress });
+
+    // I3: persisting the wallet address is an auditable state change (record which address).
+    await writeAudit(ctx, {
+      actor: identity.subject,
+      action: "user.wallet_linked",
+      target: existing._id,
+      meta: { walletAddress },
+    });
+
+    return existing._id;
   },
 });
