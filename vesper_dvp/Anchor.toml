@@ -1,0 +1,18 @@
+[toolchain]
+package_manager = "pnpm"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+vesper_dvp = "CfVrHrQoHq5tmAKPBQAtG5Eh5qrYuKQf1XrXWconD5M2"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test"
+
+[hooks]
