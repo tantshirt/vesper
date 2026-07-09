@@ -1,0 +1,362 @@
+{
+  "address": "CfVrHrQoHq5tmAKPBQAtG5Eh5qrYuKQf1XrXWconD5M2",
+  "metadata": {
+    "name": "vesper_dvp",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "initialize_offering",
+      "docs": [
+        "Create an offering (config + vault/treasury binding) for one property mint."
+      ],
+      "discriminator": [
+        70,
+        17,
+        190,
+        188,
+        38,
+        137,
+        106,
+        9
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "property_mint"
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "offering",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  102,
+                  102,
+                  101,
+                  114,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "property_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Delivery source: a property-token account owned by the offering PDA."
+          ]
+        },
+        {
+          "name": "treasury",
+          "docs": [
+            "Payment destination: any USDC token account (typically the platform treasury)."
+          ]
+        },
+        {
+          "name": "property_token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "price_per_token",
+          "type": "u64"
+        },
+        {
+          "name": "total_offering",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "settle_purchase",
+      "docs": [
+        "Atomic delivery-versus-payment: buyer pays USDC and receives property tokens, or nothing."
+      ],
+      "discriminator": [
+        96,
+        123,
+        151,
+        42,
+        186,
+        39,
+        84,
+        111
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "offering",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  102,
+                  102,
+                  101,
+                  114,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "property_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "property_mint",
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "usdc_mint",
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "buyer_property",
+          "writable": true
+        },
+        {
+          "name": "buyer_usdc",
+          "writable": true
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "property_token_program"
+        },
+        {
+          "name": "usdc_token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "token_amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Offering",
+      "discriminator": [
+        128,
+        234,
+        9,
+        226,
+        125,
+        227,
+        146,
+        39
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "PurchaseSettled",
+      "discriminator": [
+        104,
+        127,
+        95,
+        74,
+        143,
+        164,
+        52,
+        40
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "OfferingClosed",
+      "msg": "Offering is closed to new purchases"
+    },
+    {
+      "code": 6001,
+      "name": "ZeroAmount",
+      "msg": "Token amount must be greater than zero"
+    },
+    {
+      "code": 6002,
+      "name": "ExceedsOffering",
+      "msg": "Purchase would exceed the offering size"
+    },
+    {
+      "code": 6003,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "Offering",
+      "docs": [
+        "One `Offering` per property mint. It is the on-chain config for a primary issuance AND the",
+        "authority (PDA) over the pre-minted property-token vault. Delivery (vault -> buyer) can only be",
+        "signed by this PDA, so tokens never leave the vault except through `settle_purchase` — which is",
+        "what binds delivery to payment."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Platform admin authorized to initialize / close the offering."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "property_mint",
+            "docs": [
+              "The Token-2022 property mint (one dedicated mint per property)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "docs": [
+              "The payment mint (USDC)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "docs": [
+              "Treasury token account (USDC) — the payment destination."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "docs": [
+              "Program-owned property-token vault (owned by this PDA) — the delivery source."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "price_per_token",
+            "docs": [
+              "Price in USDC base units per ONE property-token base unit. usdc = token_amount * price."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_offering",
+            "docs": [
+              "Total property tokens offered (the offering size / cap)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "sold",
+            "docs": [
+              "Cumulative tokens sold. Invariant: sold <= total_offering."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump for [b\"offering\", property_mint]."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "closed",
+            "docs": [
+              "When true, no further purchases settle."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PurchaseSettled",
+      "docs": [
+        "Emitted on every settled primary purchase. Helius indexes this into the Convex reconcile mirror",
+        "(reconcile.applyChainEvent) — chain stays authoritative, Convex mirrors."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "offering",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "property_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_amount",
+            "type": "u64"
+          },
+          {
+            "name": "usdc_amount",
+            "type": "u64"
+          },
+          {
+            "name": "sold_after",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}
