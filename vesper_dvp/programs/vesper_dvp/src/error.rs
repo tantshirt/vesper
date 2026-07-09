@@ -10,4 +10,8 @@ pub enum DvpError {
     ExceedsOffering,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    #[msg("Wallet is not eligible to hold this property token")]
+    NotEligible,
+    #[msg("Signer is not the offering authority")]
+    Unauthorized,
 }

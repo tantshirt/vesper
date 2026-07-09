@@ -29,6 +29,23 @@ pub struct Offering {
     pub closed: bool,
 }
 
+/// The on-chain projection of Convex's entitlement authority — one per (property_mint, owner). It IS
+/// the Token-ACL attestation: the platform writes it (set_eligibility) once Convex confirms KYC /
+/// suitability, and `thaw` will only unfreeze a wallet's token account when its Eligibility says so.
+/// Compliance therefore runs on freeze/thaw (cheap, composable), not on every transfer.
+#[account]
+#[derive(InitSpace)]
+pub struct Eligibility {
+    /// The property mint this eligibility is scoped to.
+    pub property_mint: Pubkey,
+    /// The investor wallet (token-account owner) this eligibility clears.
+    pub owner: Pubkey,
+    /// Whether the owner is currently cleared to hold this property's token.
+    pub eligible: bool,
+    /// PDA bump for [b"eligibility", property_mint, owner].
+    pub bump: u8,
+}
+
 /// Emitted on every settled primary purchase. Helius indexes this into the Convex reconcile mirror
 /// (reconcile.applyChainEvent) — chain stays authoritative, Convex mirrors.
 #[event]

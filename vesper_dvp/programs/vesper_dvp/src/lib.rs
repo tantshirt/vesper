@@ -26,4 +26,19 @@ pub mod vesper_dvp {
     pub fn settle_purchase(ctx: Context<SettlePurchase>, token_amount: u64) -> Result<()> {
         settle_purchase::handler(ctx, token_amount)
     }
+
+    /// Token-ACL: admin writes/updates a wallet's on-chain eligibility for a property (Convex → chain).
+    pub fn set_eligibility(ctx: Context<SetEligibility>, eligible: bool) -> Result<()> {
+        set_eligibility::handler(ctx, eligible)
+    }
+
+    /// Token-ACL: permissionless self-thaw of an eligible wallet's token account.
+    pub fn thaw(ctx: Context<Thaw>) -> Result<()> {
+        thaw::handler(ctx)
+    }
+
+    /// Token-ACL: admin re-freezes a wallet's token account (compliance action).
+    pub fn freeze(ctx: Context<Freeze>) -> Result<()> {
+        freeze::handler(ctx)
+    }
 }
