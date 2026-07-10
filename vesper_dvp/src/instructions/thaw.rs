@@ -18,6 +18,9 @@ pub struct Thaw {
     pub property_mint: InterfaceAccount<Mint>,
     #[account(mut)]
     pub token_account: InterfaceAccount<Token>,
+    /// CHECK: Read-only alias role. `owner` may equal `offering` when thawing the offering-owned
+    /// vault; the handler verifies the token account owner and Eligibility PDA binding.
+    #[account(dup)]
     pub owner: UncheckedAccount,
     #[account(
         address = Eligibility::seeds(property_mint.address(), owner.address()),

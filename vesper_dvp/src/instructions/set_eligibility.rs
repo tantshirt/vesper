@@ -19,6 +19,9 @@ pub struct SetEligibility {
     )]
     pub offering: Account<Offering>,
     pub property_mint: InterfaceAccount<Mint>,
+    /// CHECK: Read-only alias role. `owner` may equal `offering` when the offering PDA is attested
+    /// so its vault can be thawed; the Eligibility PDA seeds still bind the exact owner address.
+    #[account(dup)]
     pub owner: UncheckedAccount,
     #[account(mut, init(idempotent), payer = authority, address = Eligibility::seeds(property_mint.address(), owner.address()))]
     pub eligibility: Account<Eligibility>,

@@ -399,6 +399,9 @@ async function main() {
     tokenAmount: PURCHASE_AMOUNT,
     computeUnitPrice: COMPUTE_UNIT_PRICE,
     computeUnitLimit: COMPUTE_UNIT_LIMIT,
+    // This legacy smoke test creates a basic Token-2022 mint with no DefaultAccountState.
+    // The ACL-specific script covers frozen-by-default mint behavior and eligibility-gated thaw.
+    includeThaw: false,
   });
   console.log(
     `Settle   : buying ${PURCHASE_AMOUNT} tokens for ${built.usdcAmount} USDC base units`,
@@ -444,6 +447,7 @@ async function main() {
             tokenAmount: PURCHASE_AMOUNT,
             computeUnitPrice: COMPUTE_UNIT_PRICE,
             computeUnitLimit: COMPUTE_UNIT_LIMIT,
+            includeThaw: false,
           });
           rebuilt.transaction.sign([buyer]);
           built.transaction = rebuilt.transaction;
