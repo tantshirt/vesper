@@ -23,6 +23,7 @@ import {
 import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
+  getAccount,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 
@@ -51,6 +52,9 @@ export { ASSOCIATED_TOKEN_PROGRAM_ID };
 
 /** PDA seed prefix for the per-property Offering account. */
 export const OFFERING_SEED = Buffer.from("offering");
+
+/** PDA seed prefix for the per-(property_mint, owner) Eligibility (Token-ACL) account. */
+export const ELIGIBILITY_SEED = Buffer.from("eligibility");
 
 // ---------------------------------------------------------------------------
 // Decimals (design facts)
@@ -87,6 +91,9 @@ export const SETTLE_PURCHASE_DISCRIMINATOR =
 export const INITIALIZE_OFFERING_DISCRIMINATOR = idlInstructionDiscriminator(
   "initialize_offering",
 );
+export const SET_ELIGIBILITY_DISCRIMINATOR =
+  idlInstructionDiscriminator("set_eligibility");
+export const THAW_DISCRIMINATOR = idlInstructionDiscriminator("thaw");
 export const OFFERING_ACCOUNT_DISCRIMINATOR =
   idlAccountDiscriminator("Offering");
 
@@ -112,6 +119,17 @@ function readU64LE(buf: Buffer, offset: number): bigint {
 export function deriveOfferingPda(propertyMint: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [OFFERING_SEED, propertyMint.toBuffer()],
+    PROGRAM_ID,
+  );
+}
+
+/** Derive the Eligibility PDA: seeds [b"eligibility", property_mint, owner]. */
+export function deriveEligibilityPda(
+  propertyMint: PublicKey,
+  owner: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ELIGIBILITY_SEED, propertyMint.toBuffer(), owner.toBuffer()],
     PROGRAM_ID,
   );
 }
@@ -321,6 +339,79 @@ export function buildInitializeOfferingInstruction(params: {
   });
 }
 
+/**
+ * Build the raw `set_eligibility` instruction (admin-only Token-ACL attestation). Account order:
+ *   0 authority     signer, writable (must equal offering.authority)
+ *   1 offering       readonly (PDA)
+ *   2 property_mint  readonly
+ *   3 owner          readonly (the investor wallet; a PDA seed, not a signer)
+ *   4 eligibility    writable (PDA, init_if_needed)
+ *   5 system_program readonly
+ */
+export function buildSetEligibilityInstruction(params: {
+  authority: PublicKey;
+  propertyMint: PublicKey;
+  owner: PublicKey;
+  eligible: boolean;
+}): TransactionInstruction {
+  const SYSTEM_PROGRAM_ID = new PublicKey("11111111111111111111111111111111");
+  const [offering] = deriveOfferingPda(params.propertyMint);
+  const [eligibility] = deriveEligibilityPda(params.propertyMint, params.owner);
+  const data = Buffer.concat([
+    SET_ELIGIBILITY_DISCRIMINATOR,
+    Buffer.from([params.eligible ? 1 : 0]),
+  ]);
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: params.authority, isSigner: true, isWritable: true },
+      { pubkey: offering, isSigner: false, isWritable: false },
+      { pubkey: params.propertyMint, isSigner: false, isWritable: false },
+      { pubkey: params.owner, isSigner: false, isWritable: false },
+      { pubkey: eligibility, isSigner: false, isWritable: true },
+      { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+}
+
+/**
+ * Build the raw `thaw` instruction (permissionless self-thaw, gated by Eligibility). Account order:
+ *   0 cranker       signer, writable (whoever pays — permissionless)
+ *   1 offering       readonly (PDA)
+ *   2 property_mint  readonly
+ *   3 token_account  writable (the account to thaw)
+ *   4 eligibility    readonly (PDA for `owner`)
+ *   5 token_program  readonly (Token-2022 for the property token)
+ */
+export function buildThawInstruction(params: {
+  cranker: PublicKey;
+  propertyMint: PublicKey;
+  tokenAccount: PublicKey;
+  /** Owner of `tokenAccount` — keys the Eligibility PDA. */
+  owner: PublicKey;
+  tokenProgram?: PublicKey;
+}): TransactionInstruction {
+  const [offering] = deriveOfferingPda(params.propertyMint);
+  const [eligibility] = deriveEligibilityPda(params.propertyMint, params.owner);
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: params.cranker, isSigner: true, isWritable: true },
+      { pubkey: offering, isSigner: false, isWritable: false },
+      { pubkey: params.propertyMint, isSigner: false, isWritable: false },
+      { pubkey: params.tokenAccount, isSigner: false, isWritable: true },
+      { pubkey: eligibility, isSigner: false, isWritable: false },
+      {
+        pubkey: params.tokenProgram ?? TOKEN_2022_PROGRAM_ID,
+        isSigner: false,
+        isWritable: false,
+      },
+    ],
+    data: THAW_DISCRIMINATOR,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // High-level: build the unsigned settle transaction
 // ---------------------------------------------------------------------------
@@ -337,6 +428,14 @@ export interface BuildSettlePurchaseArgs {
   computeUnitPrice?: number;
   /** Optional compute-unit limit (default 200_000, enough for the CPIs). */
   computeUnitLimit?: number;
+  /**
+   * Whether to inject a Token-ACL `thaw` for the buyer's property ATA (after ATA creation, before
+   * settle). Default is auto: thaw when the buyer's property ATA is missing or frozen — with
+   * DefaultAccountState=Frozen a freshly-created ATA is frozen, so a first-time buyer thaws; a
+   * returning buyer (already thawed) must NOT re-thaw (that errors). Requires the buyer's on-chain
+   * Eligibility to have been attested (set_eligibility) first.
+   */
+  includeThaw?: boolean;
 }
 
 export interface BuildSettlePurchaseResult {
@@ -347,6 +446,8 @@ export interface BuildSettlePurchaseResult {
   buyerUsdc: PublicKey;
   /** usdc base units that will be paid = tokenAmount * price_per_token. */
   usdcAmount: bigint;
+  /** Whether a Token-ACL `thaw` instruction was injected before settle. */
+  thawInjected: boolean;
   blockhash: string;
   lastValidBlockHeight: number;
 }
@@ -386,6 +487,25 @@ export async function buildSettlePurchaseTransaction(
     offering.usdcMint,
   );
 
+  // Decide whether to thaw the buyer's property ATA. Auto: a missing or frozen ATA needs the one-time
+  // Token-ACL thaw; an already-thawed ATA must be left alone (re-thaw errors).
+  let thawInjected: boolean;
+  if (typeof args.includeThaw === "boolean") {
+    thawInjected = args.includeThaw;
+  } else {
+    try {
+      const acct = await getAccount(
+        connection,
+        buyerProperty,
+        "confirmed",
+        TOKEN_2022_PROGRAM_ID,
+      );
+      thawInjected = acct.isFrozen;
+    } catch {
+      thawInjected = true; // ATA doesn't exist yet → it will be created frozen in this tx
+    }
+  }
+
   const instructions: TransactionInstruction[] = [
     ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnitLimit }),
     ComputeBudgetProgram.setComputeUnitPrice({
@@ -408,6 +528,19 @@ export async function buildSettlePurchaseTransaction(
       TOKEN_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID,
     ),
+    // Token-ACL: thaw the (frozen-by-default) property ATA before delivery. Gated on-chain by the
+    // buyer's Eligibility attestation; the offering PDA (mint freeze authority) signs the thaw via CPI.
+    ...(thawInjected
+      ? [
+          buildThawInstruction({
+            cranker: buyer,
+            propertyMint,
+            tokenAccount: buyerProperty,
+            owner: buyer,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          }),
+        ]
+      : []),
     buildSettlePurchaseInstruction({
       buyer,
       offering: offeringAddress,
@@ -439,6 +572,7 @@ export async function buildSettlePurchaseTransaction(
     buyerProperty,
     buyerUsdc,
     usdcAmount: BigInt(tokenAmount) * offering.pricePerToken,
+    thawInjected,
     blockhash,
     lastValidBlockHeight,
   };

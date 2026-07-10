@@ -8,6 +8,69 @@
   },
   "instructions": [
     {
+      "name": "freeze",
+      "docs": [
+        "Token-ACL: admin re-freezes a wallet's token account (compliance action)."
+      ],
+      "discriminator": [
+        255,
+        91,
+        207,
+        84,
+        251,
+        194,
+        254,
+        63
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "offering",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  102,
+                  102,
+                  101,
+                  114,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "property_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "property_mint",
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "initialize_offering",
       "docs": [
         "Create an offering (config + vault/treasury binding) for one property mint."
@@ -87,6 +150,107 @@
         {
           "name": "total_offering",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_eligibility",
+      "docs": [
+        "Token-ACL: admin writes/updates a wallet's on-chain eligibility for a property (Convex → chain)."
+      ],
+      "discriminator": [
+        101,
+        95,
+        132,
+        213,
+        175,
+        252,
+        123,
+        46
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "offering",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  102,
+                  102,
+                  101,
+                  114,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "property_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "property_mint",
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "owner"
+        },
+        {
+          "name": "eligibility",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  105,
+                  103,
+                  105,
+                  98,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "property_mint"
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "eligible",
+          "type": "bool"
         }
       ]
     },
@@ -183,9 +347,124 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "thaw",
+      "docs": [
+        "Token-ACL: permissionless self-thaw of an eligible wallet's token account."
+      ],
+      "discriminator": [
+        226,
+        249,
+        34,
+        57,
+        189,
+        21,
+        177,
+        101
+      ],
+      "accounts": [
+        {
+          "name": "cranker",
+          "docs": [
+            "Pays the transaction; may be anyone (the owner, or a platform crank) — this is permissionless."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "offering",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  102,
+                  102,
+                  101,
+                  114,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "property_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "property_mint",
+          "relations": [
+            "offering"
+          ]
+        },
+        {
+          "name": "token_account",
+          "docs": [
+            "The account to thaw. Its `owner` is what the Eligibility PDA is keyed on."
+          ],
+          "writable": true
+        },
+        {
+          "name": "eligibility",
+          "docs": [
+            "The attestation for `token_account.owner`. The seed binding guarantees it is THIS owner's row,",
+            "and the constraint enforces it is currently cleared."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  108,
+                  105,
+                  103,
+                  105,
+                  98,
+                  105,
+                  108,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "property_mint"
+              },
+              {
+                "kind": "account",
+                "path": "token_account.owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
+    {
+      "name": "Eligibility",
+      "discriminator": [
+        53,
+        74,
+        180,
+        116,
+        197,
+        25,
+        67,
+        67
+      ]
+    },
     {
       "name": "Offering",
       "discriminator": [
@@ -235,9 +514,61 @@
       "code": 6003,
       "name": "MathOverflow",
       "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6004,
+      "name": "NotEligible",
+      "msg": "Wallet is not eligible to hold this property token"
+    },
+    {
+      "code": 6005,
+      "name": "Unauthorized",
+      "msg": "Signer is not the offering authority"
     }
   ],
   "types": [
+    {
+      "name": "Eligibility",
+      "docs": [
+        "The on-chain projection of Convex's entitlement authority — one per (property_mint, owner). It IS",
+        "the Token-ACL attestation: the platform writes it (set_eligibility) once Convex confirms KYC /",
+        "suitability, and `thaw` will only unfreeze a wallet's token account when its Eligibility says so.",
+        "Compliance therefore runs on freeze/thaw (cheap, composable), not on every transfer."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "property_mint",
+            "docs": [
+              "The property mint this eligibility is scoped to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "docs": [
+              "The investor wallet (token-account owner) this eligibility clears."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "eligible",
+            "docs": [
+              "Whether the owner is currently cleared to hold this property's token."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump for [b\"eligibility\", property_mint, owner]."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "Offering",
       "docs": [
