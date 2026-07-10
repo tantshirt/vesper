@@ -1,17 +1,18 @@
 /**
  * Vesper DvP (delivery-versus-payment) client.
  *
- * Reusable, dependency-light TypeScript client for the `vesper_dvp` Anchor
+ * Reusable, dependency-light TypeScript client for the `vesper_dvp` Quasar
  * program deployed to Solana devnet. This module is consumed both by the
  * devnet e2e proof script and by the upcoming Solana Pay endpoint, so it is
  * kept framework-agnostic (plain @solana/web3.js + @solana/spl-token, no
- * @coral-xyz/anchor runtime dependency).
+ * framework runtime dependency).
  *
- * Instruction data is encoded using the 8-byte Anchor discriminators taken
- * verbatim from the IDL, followed by borsh-encoded u64 (LE) args. The Offering
+ * Instruction data is encoded using Quasar discriminators taken verbatim from
+ * the IDL, followed by borsh-encoded u64 (LE) args. The Offering
  * account is decoded manually per the on-chain `state.rs` field order.
  */
 
+import { Buffer } from "node:buffer";
 import {
   Connection,
   PublicKey,
@@ -87,13 +88,14 @@ function idlAccountDiscriminator(name: string): Buffer {
 }
 
 export const SETTLE_PURCHASE_DISCRIMINATOR =
-  idlInstructionDiscriminator("settle_purchase");
+  idlInstructionDiscriminator("settlePurchase");
 export const INITIALIZE_OFFERING_DISCRIMINATOR = idlInstructionDiscriminator(
-  "initialize_offering",
+  "initializeOffering",
 );
 export const SET_ELIGIBILITY_DISCRIMINATOR =
-  idlInstructionDiscriminator("set_eligibility");
+  idlInstructionDiscriminator("setEligibility");
 export const THAW_DISCRIMINATOR = idlInstructionDiscriminator("thaw");
+export const FREEZE_DISCRIMINATOR = idlInstructionDiscriminator("freeze");
 export const OFFERING_ACCOUNT_DISCRIMINATOR =
   idlAccountDiscriminator("Offering");
 
@@ -152,8 +154,8 @@ export interface Offering {
 }
 
 /**
- * Decode a raw Offering account buffer. Layout (after the 8-byte Anchor
- * account discriminator), matching state.rs field order:
+ * Decode a raw Offering account buffer. Layout (after the Quasar account
+ * discriminator), matching state.rs field order:
  *   authority     pubkey (32)
  *   property_mint pubkey (32)
  *   usdc_mint     pubkey (32)
@@ -166,13 +168,14 @@ export interface Offering {
  *   closed          bool (1)
  */
 export function decodeOffering(data: Buffer): Offering {
-  const disc = data.subarray(0, 8);
+  const discriminatorLength = OFFERING_ACCOUNT_DISCRIMINATOR.length;
+  const disc = data.subarray(0, discriminatorLength);
   if (!disc.equals(OFFERING_ACCOUNT_DISCRIMINATOR)) {
     throw new Error(
       `Not an Offering account: discriminator ${disc.toString("hex")} != ${OFFERING_ACCOUNT_DISCRIMINATOR.toString("hex")}`,
     );
   }
-  let o = 8;
+  let o = discriminatorLength;
   const pk = () => {
     const key = new PublicKey(data.subarray(o, o + 32));
     o += 32;
@@ -250,7 +253,7 @@ export function deriveBuyerAtas(
 }
 
 /**
- * Build the raw `settle_purchase` instruction. Account order + writability
+ * Build the raw `settlePurchase` instruction. Account order + writability
  * exactly matches the program:
  *   0 buyer          signer, writable
  *   1 offering       writable (PDA)
@@ -297,7 +300,7 @@ export function buildSettlePurchaseInstruction(params: {
 }
 
 /**
- * Build the raw `initialize_offering` instruction. Account order:
+ * Build the raw `initializeOffering` instruction. Account order:
  *   0 authority      signer, writable
  *   1 property_mint  readonly
  *   2 usdc_mint      readonly
@@ -340,7 +343,7 @@ export function buildInitializeOfferingInstruction(params: {
 }
 
 /**
- * Build the raw `set_eligibility` instruction (admin-only Token-ACL attestation). Account order:
+ * Build the raw `setEligibility` instruction (admin-only Token-ACL attestation). Account order:
  *   0 authority     signer, writable (must equal offering.authority)
  *   1 offering       readonly (PDA)
  *   2 property_mint  readonly
@@ -381,8 +384,9 @@ export function buildSetEligibilityInstruction(params: {
  *   1 offering       readonly (PDA)
  *   2 property_mint  readonly
  *   3 token_account  writable (the account to thaw)
- *   4 eligibility    readonly (PDA for `owner`)
- *   5 token_program  readonly (Token-2022 for the property token)
+ *   4 owner          readonly (token account owner; keys the Eligibility PDA)
+ *   5 eligibility    readonly (PDA for `owner`)
+ *   6 token_program  readonly (Token-2022 for the property token)
  */
 export function buildThawInstruction(params: {
   cranker: PublicKey;
@@ -401,6 +405,7 @@ export function buildThawInstruction(params: {
       { pubkey: offering, isSigner: false, isWritable: false },
       { pubkey: params.propertyMint, isSigner: false, isWritable: false },
       { pubkey: params.tokenAccount, isSigner: false, isWritable: true },
+      { pubkey: params.owner, isSigner: false, isWritable: false },
       { pubkey: eligibility, isSigner: false, isWritable: false },
       {
         pubkey: params.tokenProgram ?? TOKEN_2022_PROGRAM_ID,
@@ -409,6 +414,38 @@ export function buildThawInstruction(params: {
       },
     ],
     data: THAW_DISCRIMINATOR,
+  });
+}
+
+/**
+ * Build the raw `freeze` instruction (authority-only Token-ACL enforcement). Account order:
+ *   0 authority      signer, readonly (must equal offering.authority)
+ *   1 offering       readonly (PDA)
+ *   2 property_mint  readonly
+ *   3 token_account  writable (the account to freeze)
+ *   4 token_program  readonly (Token-2022 for the property token)
+ */
+export function buildFreezeInstruction(params: {
+  authority: PublicKey;
+  propertyMint: PublicKey;
+  tokenAccount: PublicKey;
+  tokenProgram?: PublicKey;
+}): TransactionInstruction {
+  const [offering] = deriveOfferingPda(params.propertyMint);
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: params.authority, isSigner: true, isWritable: false },
+      { pubkey: offering, isSigner: false, isWritable: false },
+      { pubkey: params.propertyMint, isSigner: false, isWritable: false },
+      { pubkey: params.tokenAccount, isSigner: false, isWritable: true },
+      {
+        pubkey: params.tokenProgram ?? TOKEN_2022_PROGRAM_ID,
+        isSigner: false,
+        isWritable: false,
+      },
+    ],
+    data: FREEZE_DISCRIMINATOR,
   });
 }
 
@@ -433,7 +470,7 @@ export interface BuildSettlePurchaseArgs {
    * settle). Default is auto: thaw when the buyer's property ATA is missing or frozen — with
    * DefaultAccountState=Frozen a freshly-created ATA is frozen, so a first-time buyer thaws; a
    * returning buyer (already thawed) must NOT re-thaw (that errors). Requires the buyer's on-chain
-   * Eligibility to have been attested (set_eligibility) first.
+   * Eligibility to have been attested (setEligibility) first.
    */
   includeThaw?: boolean;
 }
@@ -458,7 +495,7 @@ export interface BuildSettlePurchaseResult {
  * It fetches + decodes the on-chain Offering (for vault / treasury / usdc_mint),
  * derives the buyer's two ATAs, PREPENDS idempotent ATA-creation instructions
  * (payer = buyer) for both the Token-2022 property ATA and the classic USDC ATA,
- * appends the `settle_purchase` instruction, adds compute-budget instructions,
+ * appends the `settlePurchase` instruction, adds compute-budget instructions,
  * sets feePayer = buyer and a fresh recentBlockhash, and returns the unsigned tx.
  *
  * The buyer signs later (single tx-level signer). The offering PDA signs the

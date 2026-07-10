@@ -22,17 +22,18 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Vesper",
+  title: "Vesper — Own the building. Not the mortgage.",
   description: "Own real estate income, quietly.",
+  icons: {
+    icon: [{ url: "/brand/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/brand/app-icon.svg" }],
+  },
 };
 
 export const viewport: Viewport = {
-  colorScheme: "light dark",
-  themeColor: [
-    // Browser chrome color; must be a literal string (mirrors the light/dark --bg tokens).
-    { media: "(prefers-color-scheme: light)", color: "#FBFBFD" }, /* token-guard-allow */
-    { media: "(prefers-color-scheme: dark)", color: "#141033" }, /* token-guard-allow */
-  ],
+  // Light-first only — no dark mode. Chrome color mirrors --bg.
+  colorScheme: "light",
+  themeColor: "#FBFBFD", /* token-guard-allow */
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

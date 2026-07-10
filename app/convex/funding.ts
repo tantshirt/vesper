@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { writeAudit } from "./audit";
 import { settledOrdersTotal } from "./settlement";
 import type { Doc } from "./_generated/dataModel";
+import { findUserByIdentity, identityKey, requireUnsafeStubs } from "./security";
 
 // Story 3.3 — Add money (fiat → USDC).
 //
@@ -71,10 +72,7 @@ export const getFundedBalance = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return 0;
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) return 0;
 
     const fundings = await ctx.db
@@ -108,11 +106,10 @@ export const addMoney = mutation({
   handler: async (ctx, { amountUsd, method }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    const actor = identityKey(identity);
+    requireUnsafeStubs("Stub funding");
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) throw new Error("User not provisioned");
 
     // Validate before any write — an invalid amount throws and rolls back (no row, no audit).
@@ -131,7 +128,7 @@ export const addMoney = mutation({
     });
 
     await writeAudit(ctx, {
-      actor: identity.subject,
+      actor,
       action: "funding.added",
       target: user._id,
       meta: { amountUsd, method, fundingId },

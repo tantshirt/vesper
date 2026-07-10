@@ -9,7 +9,7 @@
  *
  * The unsigned tx is built by the framework-agnostic DvP client
  * (`@/lib/solana/dvp`), which fetches the on-chain Offering, prepends idempotent
- * ATA creation, appends `settle_purchase`, and sets feePayer = buyer. The buyer
+ * ATA creation, appends `settlePurchase`, and sets feePayer = buyer. The buyer
  * is the ONLY tx-level signer — this route never signs.
  *
  * Consumer copy stays fiat-native: the `message` says "shares", never "USDC".
@@ -20,6 +20,11 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { buildSettlePurchaseTransaction } from "@/lib/solana/dvp";
 
 const DEFAULT_RPC_URL = "https://api.devnet.solana.com";
+const MAX_TOKEN_AMOUNT = 1_000_000;
+
+function solanaPayEnabled(): boolean {
+  return process.env.VESPER_ENABLE_SOLANA_PAY === "true";
+}
 
 function getConnection(): Connection {
   return new Connection(
@@ -49,7 +54,7 @@ function parseParams(url: URL):
     return { ok: false, error: "Missing required query param: tokenAmount" };
   }
   const tokenAmount = Number(tokenAmountRaw);
-  if (!Number.isInteger(tokenAmount) || tokenAmount <= 0) {
+  if (!Number.isInteger(tokenAmount) || tokenAmount <= 0 || tokenAmount > MAX_TOKEN_AMOUNT) {
     return { ok: false, error: "Invalid tokenAmount (must be a positive integer)" };
   }
 
@@ -62,6 +67,9 @@ function parseParams(url: URL):
  * origin so it resolves regardless of deploy host.
  */
 export async function GET(req: Request) {
+  if (!solanaPayEnabled()) {
+    return NextResponse.json({ error: "Solana Pay is disabled" }, { status: 404 });
+  }
   const url = new URL(req.url);
   const params = parseParams(url);
   if (!params.ok) {
@@ -79,6 +87,9 @@ export async function GET(req: Request) {
  * unsigned VersionedTransaction plus a fiat-native display message.
  */
 export async function POST(req: Request) {
+  if (!solanaPayEnabled()) {
+    return NextResponse.json({ error: "Solana Pay is disabled" }, { status: 404 });
+  }
   const url = new URL(req.url);
   const params = parseParams(url);
   if (!params.ok) {

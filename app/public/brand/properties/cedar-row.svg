@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-label="Cedar Row — a row of townhomes at dusk">
+  <defs>
+    <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E1B4B"/>
+      <stop offset="0.52" stop-color="#3A2E63"/>
+      <stop offset="0.8" stop-color="#8A6E86"/>
+      <stop offset="1" stop-color="#E8C88C"/>
+    </linearGradient>
+    <radialGradient id="sun2" cx="0.28" cy="0.88" r="0.45">
+      <stop offset="0" stop-color="#F3E1B0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#E8C88C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lit2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F6E6BE"/>
+      <stop offset="1" stop-color="#E8C88C"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#sky2)"/>
+  <rect width="800" height="600" fill="url(#sun2)"/>
+  <path d="M650 78 L656 100 L678 106 L656 112 L650 134 L644 112 L622 106 L644 100 Z" fill="#F6E6BE"/>
+  <!-- row of 4 pitched townhouses -->
+  <g>
+    <!-- unit 1 -->
+    <polygon points="70,300 170,240 270,300" fill="#211C4A"/>
+    <rect x="90" y="300" width="160" height="210" fill="#191637"/>
+    <rect x="110" y="330" width="46" height="52" rx="3" fill="url(#lit2)"/>
+    <rect x="184" y="330" width="46" height="52" rx="3" fill="#2C2760"/>
+    <rect x="150" y="430" width="40" height="80" rx="3" fill="#2C2760"/>
+    <!-- unit 2 -->
+    <polygon points="250,300 350,240 450,300" fill="#241E52"/>
+    <rect x="270" y="300" width="160" height="210" fill="#1C1940"/>
+    <rect x="290" y="330" width="46" height="52" rx="3" fill="#2C2760"/>
+    <rect x="364" y="330" width="46" height="52" rx="3" fill="url(#lit2)"/>
+    <rect x="330" y="430" width="40" height="80" rx="3" fill="url(#lit2)"/>
+    <!-- unit 3 -->
+    <polygon points="430,300 530,240 630,300" fill="#211C4A"/>
+    <rect x="450" y="300" width="160" height="210" fill="#191637"/>
+    <rect x="470" y="330" width="46" height="52" rx="3" fill="url(#lit2)"/>
+    <rect x="544" y="330" width="46" height="52" rx="3" fill="url(#lit2)"/>
+    <rect x="510" y="430" width="40" height="80" rx="3" fill="#2C2760"/>
+    <!-- unit 4 -->
+    <polygon points="610,300 710,240 810,300" fill="#241E52"/>
+    <rect x="630" y="300" width="150" height="210" fill="#1C1940"/>
+    <rect x="650" y="330" width="46" height="52" rx="3" fill="#2C2760"/>
+    <rect x="724" y="330" width="46" height="52" rx="3" fill="url(#lit2)"/>
+    <rect x="690" y="430" width="40" height="80" rx="3" fill="#2C2760"/>
+  </g>
+  <rect x="0" y="508" width="800" height="92" fill="#14142B"/>
+  <rect x="0" y="508" width="800" height="4" fill="#211C4A"/>
+</svg>

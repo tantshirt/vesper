@@ -8,7 +8,7 @@ import { v } from "convex/values";
 export default defineSchema({
   // --- E1.1: identity + audit (the backbone) ---
   users: defineTable({
-    privyId: v.string(), // did:privy:... = JWT `sub`
+    privyId: v.string(), // stable Privy identity key = JWT tokenIdentifier
     kycStatus: v.union(v.literal("none"), v.literal("pending"), v.literal("verified"), v.literal("failed")),
     walletAddress: v.optional(v.string()), // Privy embedded Solana wallet
     regAInvestedThisYear: v.optional(v.number()), // for Reg A+ cap (I5)

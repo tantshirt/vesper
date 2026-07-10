@@ -10,12 +10,13 @@ import {
   ownershipBasis,
   isValidPurchaseAmount,
   distinctAckCount,
+  hasRequiredRiskAcks,
   businessGateDecision,
   settlementDecision,
   dvpSettle,
 } from "./settlement";
-import { platformFee, totalChargedToday } from "../app/invest/[id]/order.helpers";
-import { ownershipFraction } from "../app/invest/[id]/calculator.helpers";
+import { platformFee, totalChargedToday } from "../app/app/invest/[id]/order.helpers";
+import { ownershipFraction } from "../app/app/invest/[id]/calculator.helpers";
 import type { Id } from "./_generated/dataModel";
 
 // Story 4.4 — locks the atomic-settlement invariants without a Convex ctx (repo's pure-helper + vitest
@@ -189,11 +190,31 @@ describe("dvpSettle — the stub seam", () => {
     expect(result.confirmed).toBe(true);
     expect(result.dvpTxSig).toBe("STUB-DVP-order_abc");
   });
+
+  test("fails closed when unsafe stubs are not enabled", () => {
+    const oldNodeEnv = process.env.NODE_ENV;
+    const oldStubFlag = process.env.VESPER_ENABLE_UNSAFE_STUBS;
+    process.env.NODE_ENV = "production";
+    delete process.env.VESPER_ENABLE_UNSAFE_STUBS;
+    try {
+      const result = dvpSettle("order_abc" as Id<"orders">);
+      expect(result.confirmed).toBe(false);
+      expect(result.dvpTxSig).toBe("");
+    } finally {
+      process.env.NODE_ENV = oldNodeEnv;
+      if (oldStubFlag === undefined) delete process.env.VESPER_ENABLE_UNSAFE_STUBS;
+      else process.env.VESPER_ENABLE_UNSAFE_STUBS = oldStubFlag;
+    }
+  });
 });
 
-describe("distinctAckCount — duplicates never inflate the count", () => {
+describe("risk acknowledgements — duplicates and fake ids never satisfy consent", () => {
   test("counts distinct ids", () => {
     expect(distinctAckCount(["illiquidity", "loss", "not-insured"])).toBe(3);
+  });
+  test("canonical ids are required", () => {
+    expect(hasRequiredRiskAcks(["illiquidity", "loss", "not-insured"])).toBe(true);
+    expect(hasRequiredRiskAcks(["a", "b", "c"])).toBe(false);
   });
   test("empty → 0", () => {
     expect(distinctAckCount([])).toBe(0);
@@ -210,10 +231,30 @@ describe("businessGateDecision — the pre-DvP gates (invoked BEFORE the seam)",
   test("all business gates pass → ok (the mutation may then call dvpSettle)", () => {
     expect(businessGateDecision(okInput)).toEqual({ ok: true });
   });
+  test("closed/funded offering → offering-unavailable", () => {
+    expect(businessGateDecision({ ...okInput, propertyStatus: "funded" })).toEqual({
+      ok: false,
+      reason: "offering-unavailable",
+    });
+  });
+  test("purchase beyond remaining offering capacity → offering-unavailable", () => {
+    expect(
+      businessGateDecision({
+        ...okInput,
+        offeringSize: 1_000,
+        offeringSettledAmount: 950,
+        amount: 100,
+      }),
+    ).toEqual({ ok: false, reason: "offering-unavailable" });
+  });
   test("ineligible / frozen / short consent → ineligible", () => {
     expect(businessGateDecision({ ...okInput, eligible: false })).toEqual({ ok: false, reason: "ineligible" });
     expect(businessGateDecision({ ...okInput, tokenAclState: "frozen" })).toEqual({ ok: false, reason: "ineligible" });
     expect(businessGateDecision({ ...okInput, acknowledgedRiskCount: 2 })).toEqual({ ok: false, reason: "ineligible" });
+    expect(businessGateDecision({ ...okInput, hasRequiredRiskAcks: false })).toEqual({
+      ok: false,
+      reason: "ineligible",
+    });
   });
   test("over Reg A+ cap → reg-a-cap", () => {
     expect(businessGateDecision({ ...okInput, regAInvestedThisYear: 9_950, amount: 100 })).toEqual({

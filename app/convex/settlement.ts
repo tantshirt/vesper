@@ -2,6 +2,7 @@ import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
 import { availableBalance } from "./funding";
+import { findUserByIdentity, identityKey, unsafeStubsEnabled } from "./security";
 import type { Doc, Id } from "./_generated/dataModel";
 
 // Story 4.4 — Atomic Delivery-versus-Payment (DvP) settlement.
@@ -10,7 +11,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 // all-or-nothing, so the settled order (the debit that reduces spendable balance) and the token
 // delivery (the holding) commit together or not at all. The `settled` status is authorized SOLELY by
 // the `dvpSettle` seam's confirmation — "Convex never self-settles". `dvpSettle` is a synchronous
-// STUB standing in for the deferred Anchor DvP program / on-chain reconcile (blocker B1); the real
+// STUB standing in for the deferred Quasar DvP program / on-chain reconcile (blocker B1); the real
 // program swaps in behind this seam with no change to the settle-authorization structure.
 //
 // Failures are COMMITTED, not thrown (the audit-survival rule): a thrown Convex mutation rolls back
@@ -35,6 +36,7 @@ export const MAX_PURCHASE = 1_000_000;
 // The number of distinct risk acknowledgements active consent requires (FR9 / RIGHTS_ACKS.length).
 // Kept as a constant here (the settlement gate) mirroring the UI's REQUIRED_ACK_COUNT.
 export const REQUIRED_RISK_ACK_COUNT = 3;
+export const REQUIRED_RISK_ACK_IDS = ["illiquidity", "loss", "not-insured"] as const;
 
 // Coerce any input to a finite number, else 0 — the shared finite guard. `+ 0` normalizes `-0` → `+0`.
 function finite(n: number): number {
@@ -102,15 +104,28 @@ export function isValidPurchaseAmount(amount: number, minInvestment: number): bo
 }
 
 // Count the DISTINCT acknowledgement ids in a consent submission — duplicates never inflate the
-// count, so a crafted `["x","x","x"]` cannot satisfy the three-distinct-ack gate. (Membership
-// validation against the canonical RIGHTS_ACKS ids is deferred — see the deferred-work ledger.)
+// count, so a crafted `["x","x","x"]` cannot satisfy the three-distinct-ack gate.
 export function distinctAckCount(acknowledgedRiskIds: readonly string[]): number {
   return new Set(acknowledgedRiskIds).size;
 }
 
-// The reasons a settlement can fail — exactly the four business gates. Consent (short acks) folds into
-// `ineligible`: without active consent the caller is not cleared to receive the token.
+export function hasRequiredRiskAcks(acknowledgedRiskIds: readonly string[]): boolean {
+  const submitted = new Set(acknowledgedRiskIds);
+  return REQUIRED_RISK_ACK_IDS.every((id) => submitted.has(id));
+}
+
+export function settledPropertyAmount(
+  orders: Pick<Doc<"orders">, "amount" | "status">[],
+): number {
+  return orders
+    .filter((o) => o.status === "settled")
+    .reduce((sum, o) => sum + finite(o.amount), 0);
+}
+
+// The reasons a settlement can fail. Consent folds into `ineligible`: without active consent the
+// caller is not cleared to receive the token.
 export type SettlementReason =
+  | "offering-unavailable"
   | "ineligible"
   | "reg-a-cap"
   | "insufficient-funds"
@@ -124,24 +139,41 @@ export type SettlementResult = { ok: true } | { ok: false; reason: SettlementRea
 //   2. within the Reg A+ per-investor cap (limit must be set) → else `reg-a-cap`
 //   3. total <= spendable balance                         → else `insufficient-funds`
 // Keeping these separate from the DvP check is what lets the mutation gate FIRST and only THEN call
-// the seam — so the real Anchor DvP program swaps in behind `dvpSettle` with no risk of settling for
+// the seam — so the real Quasar DvP program swaps in behind `dvpSettle` with no risk of settling for
 // an ineligible/over-cap/underfunded caller ("Convex never self-settles", enforced structurally).
 export function businessGateDecision(input: {
+  propertyStatus?: "open" | "funded" | "closed";
+  offeringSize?: number;
+  offeringSettledAmount?: number;
   eligible: boolean;
   tokenAclState: "frozen" | "thawed" | null | undefined;
   acknowledgedRiskCount: number;
+  hasRequiredRiskAcks?: boolean;
   regAAnnualLimit: number | null | undefined;
   regAInvestedThisYear: number | null | undefined;
   amount: number;
   total: number;
   spendable: number;
 }): SettlementResult {
+  const status = input.propertyStatus ?? "open";
+  const offeringSize = input.offeringSize;
+  const offeringSettledAmount = finite(input.offeringSettledAmount ?? 0);
+  if (
+    status !== "open" ||
+    (typeof offeringSize === "number" &&
+      Number.isFinite(offeringSize) &&
+      offeringSettledAmount + input.amount > offeringSize)
+  ) {
+    return { ok: false, reason: "offering-unavailable" };
+  }
+
   // 1. Eligibility + active consent. An ineligible/frozen account gets no token; likewise a request
   //    that arrives without all three acknowledgements (UI-gated, but enforced server-side too).
   if (
     input.eligible !== true ||
     input.tokenAclState !== "thawed" ||
-    input.acknowledgedRiskCount < REQUIRED_RISK_ACK_COUNT
+    input.acknowledgedRiskCount < REQUIRED_RISK_ACK_COUNT ||
+    input.hasRequiredRiskAcks === false
   ) {
     return { ok: false, reason: "ineligible" };
   }
@@ -170,9 +202,13 @@ export function businessGateDecision(input: {
 // first and only invokes the DvP seam once it passes, then applies the DvP result. DvP never surfaces
 // unless every business gate already passed.
 export function settlementDecision(input: {
+  propertyStatus?: "open" | "funded" | "closed";
+  offeringSize?: number;
+  offeringSettledAmount?: number;
   eligible: boolean;
   tokenAclState: "frozen" | "thawed" | null | undefined;
   acknowledgedRiskCount: number;
+  hasRequiredRiskAcks?: boolean;
   regAAnnualLimit: number | null | undefined;
   regAInvestedThisYear: number | null | undefined;
   amount: number;
@@ -188,10 +224,13 @@ export function settlementDecision(input: {
 }
 
 // The DvP seam (B1 / on-chain stand-in). In the stub it confirms synchronously and returns a clearly
-// marked stub signature; when B1 lands this becomes the real Anchor DvP call (or the Helius reconcile
+// marked stub signature; when B1 lands this becomes the real Quasar DvP call (or the Helius reconcile
 // path flips pending → settled from chain truth) with NO change to the settle-authorization structure.
 // The order is inserted `pending` first, so the async-confirm future needs no structural change.
 export function dvpSettle(orderId: Id<"orders">): { confirmed: boolean; dvpTxSig: string } {
+  if (!unsafeStubsEnabled()) {
+    return { confirmed: false, dvpTxSig: "" };
+  }
   return { confirmed: true, dvpTxSig: `STUB-DVP-${orderId}` };
 }
 
@@ -213,11 +252,9 @@ export const confirmPurchase = mutation({
   handler: async (ctx, { propertyId, amountUsd, acknowledgedRiskIds }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    const actor = identityKey(identity);
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) throw new Error("User not provisioned");
 
     const property = await ctx.db.get(propertyId);
@@ -264,14 +301,22 @@ export const confirmPurchase = mutation({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
     const spendable = spendableBalance(fundings, priorOrders);
+    const propertyOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+      .collect();
 
     // Business gates FIRST — eligibility/consent (distinct acks), Reg A+ cap, spendable balance. The
     // DvP seam is invoked ONLY once these pass, so a real on-chain DvP program never settles for a
     // blocked caller (the settle-authorization structure holds when the stub is swapped out).
     const gate = businessGateDecision({
+      propertyStatus: property.status,
+      offeringSize: property.offeringSize,
+      offeringSettledAmount: settledPropertyAmount(propertyOrders),
       eligible: eligibility?.eligible === true,
       tokenAclState: eligibility?.tokenAclState,
       acknowledgedRiskCount: distinctAckCount(acknowledgedRiskIds),
+      hasRequiredRiskAcks: hasRequiredRiskAcks(acknowledgedRiskIds),
       regAAnnualLimit: user.regAAnnualLimit,
       regAInvestedThisYear: user.regAInvestedThisYear,
       amount,
@@ -293,7 +338,7 @@ export const confirmPurchase = mutation({
     if (reason !== null) {
       await ctx.db.patch(orderId, { status: "failed" });
       await writeAudit(ctx, {
-        actor: identity.subject,
+        actor,
         action: "order.failed",
         target: user._id,
         meta: { propertyId, amount, reason },
@@ -340,7 +385,7 @@ export const confirmPurchase = mutation({
     // Durable consent capture: acknowledgedRiskIds live in the settled audit meta (the atomic consent
     // record Story 4.3 deferred), alongside the DvP receipt reference.
     await writeAudit(ctx, {
-      actor: identity.subject,
+      actor,
       action: "order.settled",
       target: user._id,
       meta: {

@@ -1,13 +1,37 @@
-[workspace]
-members = [
-    "programs/*"
+[package]
+name = "vesper_dvp"
+version = "0.1.0"
+edition = "2021"
+description = "Vesper atomic DvP and Token-ACL program, ported to Quasar"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "vesper_dvp"
+
+[features]
+alloc = []
+client = []
+debug = []
+idl-build = ["quasar-lang/idl-build"]
+
+[dependencies]
+quasar-lang = { git = "https://github.com/blueshift-gg/quasar" }
+quasar-spl = { git = "https://github.com/blueshift-gg/quasar" }
+solana-instruction = { version = "3.2.0" }
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = [
+    'cfg(target_os, values("solana"))',
+    'cfg(feature, values("alloc", "client", "debug", "idl-build"))',
 ]
-resolver = "2"
 
 [profile.release]
 overflow-checks = true
 lto = "fat"
 codegen-units = 1
+opt-level = 3
+
 [profile.release.build-override]
 opt-level = 3
 incremental = false

@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
-import { periodFor, selectNextDistributionDate } from "./home";
+import { selectNextDistributionDate } from "./home";
+import { findUserByIdentity } from "./security";
 import type { Doc, Id } from "./_generated/dataModel";
 
 // Story 5.3 — Income: itemized breakdown + matches-target (FR14).
@@ -106,10 +107,7 @@ export const summary = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) return null;
 
     const holdings = await ctx.db

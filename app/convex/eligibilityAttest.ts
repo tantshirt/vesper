@@ -1,4 +1,4 @@
-import { action, internalQuery } from "./_generated/server";
+import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
@@ -6,7 +6,7 @@ import { internal } from "./_generated/api";
 //
 // Convex is the entitlement authority: `eligibility.recordEligibility` decides who is cleared and flips
 // `tokenAclState` to "thawed". This action projects that decision onto the chain by writing the on-chain
-// Eligibility attestation (`set_eligibility`), which is what lets the wallet's frozen-by-default property
+// Eligibility attestation (`setEligibility`), which is what lets the wallet's frozen-by-default property
 // token account be thawed (and thus receive/hold the token). It is meant to be invoked whenever
 // recordEligibility flips a (user, property) to thawed/frozen.
 //
@@ -14,7 +14,7 @@ import { internal } from "./_generated/api";
 // STUB seam (mirrors dvpSettle / pushUsdcToHolder) — the orchestration (resolve wallet + mint, guard,
 // return a signature) is real; only the signature is synthetic.
 
-// Real impl: the platform (offering.authority) signs a `set_eligibility(eligible)` transaction via a
+// Real impl: the platform (offering.authority) signs a `setEligibility(eligible)` transaction via a
 // Privy server wallet — authority = platform, owner = `wallet`, property_mint = `mint` — submits it, and
 // returns the tx signature. Here it returns a clearly-marked stub.
 function signSetEligibility(wallet: string, _mint: string, eligible: boolean): string {
@@ -37,7 +37,7 @@ type AttestResult =
   | { status: "attested"; signature: string; wallet: string; mint: string }
   | { status: "skipped"; reason: "no-wallet" | "no-mint" };
 
-export const attestEligibilityOnChain = action({
+export const attestEligibilityOnChain = internalAction({
   args: {
     userId: v.id("users"),
     propertyId: v.id("properties"),

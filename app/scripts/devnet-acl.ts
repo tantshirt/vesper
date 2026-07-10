@@ -143,7 +143,7 @@ async function main() {
     [buildInitializeOfferingInstruction({ authority: admin.publicKey, propertyMint: propertyMint.publicKey, usdcMint: usdcMint.publicKey, offering, vault, treasury, pricePerToken: PRICE_PER_TOKEN, totalOffering: TOTAL_OFFERING })],
     admin,
     [],
-    "initialize_offering",
+    "initializeOffering",
   );
 
   // --- 5. attest the offering PDA + thaw the vault so it can be pre-minted (frozen-by-default) ---

@@ -1,6 +1,7 @@
 import { query, internalMutation } from "./_generated/server";
 import { writeAudit } from "./audit";
-import type { Doc } from "./_generated/dataModel";
+import { findUserByIdentity } from "./security";
+import type { Doc, Id } from "./_generated/dataModel";
 
 // Story 5.1 — Home: the payout is the hero (FR12).
 //
@@ -142,10 +143,7 @@ export const summary = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) return null;
 
     const holdings = await ctx.db
@@ -176,10 +174,49 @@ export const summary = query({
     const fresh = selectFreshDistribution(income, now);
     const todayIso = new Date(now).toISOString().slice(0, 10);
 
+    // This-month paid income per property (current period) — powers Home's "This month" stat and the
+    // per-home preview's this-month figure. Same rule as Portfolio's monthIncomeByProperty (paid rows in
+    // the current period only), computed inline to avoid a home↔portfolio import cycle.
+    const period = periodFor(now);
+    const propertyById = new Map<Id<"properties">, Doc<"properties">>(properties.map((p) => [p._id, p]));
+    const monthIncomeByProperty = new Map<Id<"properties">, number>();
+    for (const r of income) {
+      if (r.status !== "paid" || r.period !== period) continue;
+      const v = Number.isFinite(r.netPaid) ? r.netPaid : 0;
+      monthIncomeByProperty.set(r.propertyId, (monthIncomeByProperty.get(r.propertyId) ?? 0) + v);
+    }
+
+    // Per-holding preview rows (grouped by property, like Portfolio) — Home shows a compact "Your homes"
+    // list that links onward to the full Portfolio. Consumer-safe: name + market + cost-basis value + the
+    // month's net; never a raw txSig or period internal.
+    const holdingByProperty = new Map<
+      Id<"properties">,
+      { propertyId: Id<"properties">; name: string; market: string; value: number; monthIncome: number }
+    >();
+    for (const h of holdings) {
+      const value = Number.isFinite(h.costBasis) ? h.costBasis : 0;
+      const existing = holdingByProperty.get(h.propertyId);
+      if (existing) {
+        existing.value += value;
+        continue;
+      }
+      const property = propertyById.get(h.propertyId);
+      holdingByProperty.set(h.propertyId, {
+        propertyId: h.propertyId,
+        name: property?.name ?? "Your property",
+        market: property?.location ?? "Unknown market",
+        value,
+        monthIncome: monthIncomeByProperty.get(h.propertyId) ?? 0,
+      });
+    }
+    const holdingRows = [...holdingByProperty.values()];
+
     return {
       hasHoldings: holdings.length > 0,
       portfolioValue,
       incomeToDate,
+      // This month's realized income across all holdings (paid rows in the current period).
+      monthIncome: [...monthIncomeByProperty.values()].reduce((sum, v) => sum + v, 0),
       // All-time return equals realized income-to-date (no live NAV/appreciation); pct guarded to 0.
       allTimeReturn: incomeToDate,
       allTimeReturnPct: returnPct(incomeToDate, portfolioValue),
@@ -187,6 +224,8 @@ export const summary = query({
       freshDistribution: fresh ? { amount: fresh.netPaid } : null,
       nextDistributionDate: selectNextDistributionDate(properties, todayIso),
       balanceSeries: buildBalanceSeries(orders),
+      // A compact per-home preview (name · market · value · this-month) linking onward to Portfolio.
+      holdings: holdingRows,
     };
   },
 });

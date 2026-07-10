@@ -1,13 +1,14 @@
 import { action, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { isLikelySolanaSignature } from "./security";
 
 // Slice 4 — the "confirm → mirror" bridge for the on-chain purchase flow.
 //
 // In production a Helius webhook (http.ts `/helius/webhook`) pushes the PurchaseSettled token transfer
 // into reconcile.applyChainEvent automatically. That needs a live Helius account + a registered webhook
 // per property mint. For the devnet prototype (no Helius account) this action is the pull-based stand-in:
-// after the client signs + submits the on-chain `settle_purchase` and the transaction confirms, it calls
+// after the client signs + submits the on-chain `settlePurchase` and the transaction confirms, it calls
 // this with the signature. We fetch the confirmed transaction straight from the RPC, read the
 // CHAIN-AUTHORITATIVE post-balances, and hand each one to the SAME idempotent reconcile mutation the
 // webhook uses. Chain stays the source of truth — the client only supplies a signature, never a balance.
@@ -70,6 +71,16 @@ type ConfirmResult =
 export const confirmSettlement = action({
   args: { signature: v.string() },
   handler: async (ctx, { signature }): Promise<ConfirmResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    if (
+      process.env.VESPER_ENABLE_PUBLIC_ONCHAIN_CONFIRM !== "true" &&
+      process.env.NODE_ENV !== "test"
+    ) {
+      throw new Error("Public on-chain confirmation is disabled");
+    }
+    if (!isLikelySolanaSignature(signature)) throw new Error("Invalid transaction signature");
+
     const rpcUrl = process.env.SOLANA_RPC_URL ?? DEFAULT_RPC_URL;
 
     // Pull the confirmed transaction. jsonParsed gives us postTokenBalances with mint+owner+uiAmount.

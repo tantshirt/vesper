@@ -1,0 +1,8 @@
+[project]
+name = "vesper_dvp"
+
+[toolchain]
+type = "solana"
+
+[testing]
+framework = "none"

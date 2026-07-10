@@ -12,7 +12,6 @@ import {
   buildHistory,
   isSurfaceableDistribution,
 } from "./income";
-import { periodFor } from "./home";
 
 // Story 5.3 — covers the Income read surface end-to-end: the pure derivation helpers (DOM-less, the
 // repo's helper convention) AND the `summary` query across every I/O-matrix state via convex-test

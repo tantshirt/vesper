@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
+import { isLikelySolanaSignature, requireSeedWrites } from "./security";
 
 // E2.2 read path — a property plus its diligence gates (public; no auth).
 export const getWithGates = query({
@@ -70,7 +71,12 @@ export const getOnChainProof = query({
     const seen = new Set<string>();
     const receipts: Array<{ dvpTxSig: string }> = [];
     for (const o of orders) {
-      if (o.status === "settled" && o.dvpTxSig && !seen.has(o.dvpTxSig)) {
+      if (
+        o.status === "settled" &&
+        o.dvpTxSig &&
+        isLikelySolanaSignature(o.dvpTxSig) &&
+        !seen.has(o.dvpTxSig)
+      ) {
         seen.add(o.dvpTxSig);
         receipts.push({ dvpTxSig: o.dvpTxSig });
       }
@@ -103,6 +109,8 @@ export const listOpen = query({
 export const seedTheMonroe = mutation({
   args: {},
   handler: async (ctx) => {
+    requireSeedWrites("Property seed");
+
     const existing = await ctx.db
       .query("properties")
       .withIndex("by_status", (q) => q.eq("status", "open"))

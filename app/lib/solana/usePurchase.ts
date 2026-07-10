@@ -14,19 +14,16 @@
  *
  * Privy API used (verified against the INSTALLED @privy-io/react-auth, dist/dts
  * — package.json reports 2.25.0, not 2.4.0):
- *   - `useSolanaWallets()` from "@privy-io/react-auth/solana" → { ready, wallets }
- *     where `wallets: ConnectedSolanaWallet[]`. The embedded wallet has
- *     `walletClientType === "privy"`.
- *   - `useSignTransaction()` from "@privy-io/react-auth/solana" →
- *     { signTransaction({ transaction, connection, address? }) } which returns
- *     the SIGNED SupportedSolanaTransaction (Transaction | VersionedTransaction)
- *     WITHOUT broadcasting. We broadcast ourselves so we can confirm + mirror.
+ *   - `useWallets()` from "@privy-io/react-auth/solana" → { ready, wallets }
+ *     where the embedded wallet's standard metadata has `isPrivyWallet === true`.
+ *   - `useSignTransaction()` from "@privy-io/react-auth/solana" signs serialized
+ *     transaction bytes and returns signed bytes. We broadcast ourselves so we can confirm + mirror.
  *
  * Consumer copy stays fiat-native — this module never surfaces "USDC".
  */
 
 import { useCallback, useState } from "react";
-import { useSolanaWallets, useSignTransaction } from "@privy-io/react-auth/solana";
+import { useWallets as useSolanaWallets, useSignTransaction } from "@privy-io/react-auth/solana";
 import { useAction } from "convex/react";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
 import { api } from "@/convex/_generated/api";
@@ -56,6 +53,10 @@ function rpcUrl(): string {
   return process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? DEFAULT_RPC_URL;
 }
 
+function base64ToBytes(value: string): Uint8Array {
+  return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+}
+
 export function usePurchase(): UsePurchaseResult {
   const { wallets } = useSolanaWallets();
   const { signTransaction } = useSignTransaction();
@@ -71,11 +72,12 @@ export function usePurchase(): UsePurchaseResult {
       setSignature(null);
 
       // Resolve the buyer's embedded Solana wallet (Privy-managed).
-      const wallet =
-        wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
+      const wallet = wallets.find(
+        (w) => (w.standardWallet as { isPrivyWallet?: boolean }).isPrivyWallet === true,
+      );
       if (!wallet) {
         setStatus("error");
-        setError("No Solana wallet available. Please sign in first.");
+        setError("Your Vesper account is still being prepared. Please try again in a moment.");
         return;
       }
 
@@ -105,16 +107,17 @@ export function usePurchase(): UsePurchaseResult {
           transaction: string;
         };
         const tx = VersionedTransaction.deserialize(
-          Buffer.from(base64, "base64"),
+          base64ToBytes(base64),
         );
 
         // 2. Sign with the Privy embedded wallet (no broadcast — we do that next).
         setStatus("signing");
-        const signed = (await signTransaction({
-          transaction: tx,
-          connection,
-          address: wallet.address,
-        })) as VersionedTransaction;
+        const { signedTransaction } = await signTransaction({
+          transaction: tx.serialize(),
+          wallet,
+          chain: "solana:devnet",
+        });
+        const signed = VersionedTransaction.deserialize(signedTransaction);
 
         // 3. Broadcast + confirm on devnet.
         setStatus("confirming");

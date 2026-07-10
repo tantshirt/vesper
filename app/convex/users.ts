@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
+import { findUserByIdentity, identityKey, normalizeSolanaAddress } from "./security";
 
 // E1.1 AC: "a user signs in with Privy → Convex trusts the JWT → resolves the user in a reactive query."
 export const currentUser = query({
@@ -8,10 +9,7 @@ export const currentUser = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
-    return await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    return await findUserByIdentity(ctx, identity);
   },
 });
 
@@ -22,22 +20,25 @@ export const ensureUser = mutation({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    const actor = identityKey(identity);
 
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
-    if (existing) return existing._id;
+    const existing = await findUserByIdentity(ctx, identity);
+    if (existing) {
+      if (existing.privyId !== actor) {
+        await ctx.db.patch(existing._id, { privyId: actor });
+      }
+      return existing._id;
+    }
 
     const userId = await ctx.db.insert("users", {
-      privyId: identity.subject,
+      privyId: actor,
       kycStatus: "none",
       createdAt: Date.now(),
     });
 
     // FR16: creating a user is an auditable state change.
     await writeAudit(ctx, {
-      actor: identity.subject,
+      actor,
       action: "user.created",
       target: userId,
     });
@@ -55,15 +56,14 @@ export const setWalletAddress = mutation({
   handler: async (ctx, { walletAddress }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    const actor = identityKey(identity);
+    const normalizedWalletAddress = normalizeSolanaAddress(walletAddress);
 
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const existing = await findUserByIdentity(ctx, identity);
     if (!existing) throw new Error("User not provisioned");
 
     // Idempotent: unchanged address is a no-op (no write, no duplicate audit entry).
-    if (existing.walletAddress === walletAddress) return existing._id;
+    if (existing.walletAddress === normalizedWalletAddress) return existing._id;
 
     // Mirror-once: the embedded wallet address is stable for the life of the account. Never
     // silently repoint an already-linked account to a different address — that would rewrite the
@@ -76,20 +76,20 @@ export const setWalletAddress = mutation({
     // account. Reject if another user already mirrors it (guards against collisions / hijack).
     const addrOwner = await ctx.db
       .query("users")
-      .withIndex("by_wallet", (q) => q.eq("walletAddress", walletAddress))
+      .withIndex("by_wallet", (q) => q.eq("walletAddress", normalizedWalletAddress))
       .first();
     if (addrOwner && addrOwner._id !== existing._id) {
       throw new Error("Wallet already linked to another account");
     }
 
-    await ctx.db.patch(existing._id, { walletAddress });
+    await ctx.db.patch(existing._id, { walletAddress: normalizedWalletAddress });
 
     // I3: persisting the wallet address is an auditable state change (record which address).
     await writeAudit(ctx, {
-      actor: identity.subject,
+      actor,
       action: "user.wallet_linked",
       target: existing._id,
-      meta: { walletAddress },
+      meta: { walletAddress: normalizedWalletAddress },
     });
 
     return existing._id;

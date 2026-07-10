@@ -3,87 +3,13 @@
   "metadata": {
     "name": "vesper_dvp",
     "version": "0.1.0",
-    "spec": "0.1.0",
-    "description": "Created with Anchor"
+    "spec": "0.1.0"
   },
   "instructions": [
     {
-      "name": "freeze",
-      "docs": [
-        "Token-ACL: admin re-freezes a wallet's token account (compliance action)."
-      ],
+      "name": "initializeOffering",
       "discriminator": [
-        255,
-        91,
-        207,
-        84,
-        251,
-        194,
-        254,
-        63
-      ],
-      "accounts": [
-        {
-          "name": "authority",
-          "signer": true,
-          "relations": [
-            "offering"
-          ]
-        },
-        {
-          "name": "offering",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  102,
-                  102,
-                  101,
-                  114,
-                  105,
-                  110,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "property_mint"
-              }
-            ]
-          }
-        },
-        {
-          "name": "property_mint",
-          "relations": [
-            "offering"
-          ]
-        },
-        {
-          "name": "token_account",
-          "writable": true
-        },
-        {
-          "name": "token_program"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "initialize_offering",
-      "docs": [
-        "Create an offering (config + vault/treasury binding) for one property mint."
-      ],
-      "discriminator": [
-        70,
-        17,
-        190,
-        188,
-        38,
-        137,
-        106,
-        9
+        0
       ],
       "accounts": [
         {
@@ -92,159 +18,116 @@
           "signer": true
         },
         {
-          "name": "property_mint"
+          "name": "propertyMint"
         },
         {
-          "name": "usdc_mint"
+          "name": "usdcMint"
         },
         {
           "name": "offering",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  102,
-                  102,
-                  101,
-                  114,
-                  105,
-                  110,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "property_mint"
-              }
-            ]
-          }
+          "writable": true
         },
         {
-          "name": "vault",
-          "docs": [
-            "Delivery source: a property-token account owned by the offering PDA."
-          ]
+          "name": "vault"
         },
         {
-          "name": "treasury",
-          "docs": [
-            "Payment destination: any USDC token account (typically the platform treasury)."
-          ]
+          "name": "treasury"
         },
         {
-          "name": "property_token_program"
+          "name": "propertyTokenProgram"
         },
         {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
+          "name": "systemProgram"
         }
       ],
       "args": [
         {
-          "name": "price_per_token",
+          "name": "pricePerToken",
           "type": "u64"
         },
         {
-          "name": "total_offering",
+          "name": "totalOffering",
           "type": "u64"
         }
       ]
     },
     {
-      "name": "set_eligibility",
-      "docs": [
-        "Token-ACL: admin writes/updates a wallet's on-chain eligibility for a property (Convex → chain)."
-      ],
+      "name": "settlePurchase",
       "discriminator": [
-        101,
-        95,
-        132,
-        213,
-        175,
-        252,
-        123,
-        46
+        1
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "offering",
+          "writable": true
+        },
+        {
+          "name": "propertyMint"
+        },
+        {
+          "name": "usdcMint"
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "buyerProperty",
+          "writable": true
+        },
+        {
+          "name": "buyerUsdc",
+          "writable": true
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "propertyTokenProgram"
+        },
+        {
+          "name": "usdcTokenProgram"
+        }
+      ],
+      "args": [
+        {
+          "name": "tokenAmount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "setEligibility",
+      "discriminator": [
+        2
       ],
       "accounts": [
         {
           "name": "authority",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "offering"
-          ]
+          "signer": true
         },
         {
-          "name": "offering",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  102,
-                  102,
-                  101,
-                  114,
-                  105,
-                  110,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "property_mint"
-              }
-            ]
-          }
+          "name": "offering"
         },
         {
-          "name": "property_mint",
-          "relations": [
-            "offering"
-          ]
+          "name": "propertyMint"
         },
         {
           "name": "owner"
         },
         {
           "name": "eligibility",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  108,
-                  105,
-                  103,
-                  105,
-                  98,
-                  105,
-                  108,
-                  105,
-                  116,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "property_mint"
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              }
-            ]
-          }
+          "writable": true
         },
         {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
+          "name": "systemProgram"
         }
       ],
       "args": [
@@ -255,197 +138,60 @@
       ]
     },
     {
-      "name": "settle_purchase",
-      "docs": [
-        "Atomic delivery-versus-payment: buyer pays USDC and receives property tokens, or nothing."
-      ],
-      "discriminator": [
-        96,
-        123,
-        151,
-        42,
-        186,
-        39,
-        84,
-        111
-      ],
-      "accounts": [
-        {
-          "name": "buyer",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "offering",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  102,
-                  102,
-                  101,
-                  114,
-                  105,
-                  110,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "property_mint"
-              }
-            ]
-          }
-        },
-        {
-          "name": "property_mint",
-          "relations": [
-            "offering"
-          ]
-        },
-        {
-          "name": "usdc_mint",
-          "relations": [
-            "offering"
-          ]
-        },
-        {
-          "name": "vault",
-          "writable": true,
-          "relations": [
-            "offering"
-          ]
-        },
-        {
-          "name": "buyer_property",
-          "writable": true
-        },
-        {
-          "name": "buyer_usdc",
-          "writable": true
-        },
-        {
-          "name": "treasury",
-          "writable": true,
-          "relations": [
-            "offering"
-          ]
-        },
-        {
-          "name": "property_token_program"
-        },
-        {
-          "name": "usdc_token_program"
-        }
-      ],
-      "args": [
-        {
-          "name": "token_amount",
-          "type": "u64"
-        }
-      ]
-    },
-    {
       "name": "thaw",
-      "docs": [
-        "Token-ACL: permissionless self-thaw of an eligible wallet's token account."
-      ],
       "discriminator": [
-        226,
-        249,
-        34,
-        57,
-        189,
-        21,
-        177,
-        101
+        3
       ],
       "accounts": [
         {
           "name": "cranker",
-          "docs": [
-            "Pays the transaction; may be anyone (the owner, or a platform crank) — this is permissionless."
-          ],
           "writable": true,
           "signer": true
         },
         {
-          "name": "offering",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  102,
-                  102,
-                  101,
-                  114,
-                  105,
-                  110,
-                  103
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "property_mint"
-              }
-            ]
-          }
+          "name": "offering"
         },
         {
-          "name": "property_mint",
-          "relations": [
-            "offering"
-          ]
+          "name": "propertyMint"
         },
         {
-          "name": "token_account",
-          "docs": [
-            "The account to thaw. Its `owner` is what the Eligibility PDA is keyed on."
-          ],
+          "name": "tokenAccount",
           "writable": true
         },
         {
-          "name": "eligibility",
-          "docs": [
-            "The attestation for `token_account.owner`. The seed binding guarantees it is THIS owner's row,",
-            "and the constraint enforces it is currently cleared."
-          ],
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  108,
-                  105,
-                  103,
-                  105,
-                  98,
-                  105,
-                  108,
-                  105,
-                  116,
-                  121
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "property_mint"
-              },
-              {
-                "kind": "account",
-                "path": "token_account.owner"
-              }
-            ]
-          }
+          "name": "owner"
         },
         {
-          "name": "token_program"
+          "name": "eligibility"
+        },
+        {
+          "name": "tokenProgram"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "freeze",
+      "discriminator": [
+        4
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "offering"
+        },
+        {
+          "name": "propertyMint"
+        },
+        {
+          "name": "tokenAccount",
+          "writable": true
+        },
+        {
+          "name": "tokenProgram"
         }
       ],
       "args": []
@@ -453,29 +199,15 @@
   ],
   "accounts": [
     {
-      "name": "Eligibility",
+      "name": "Offering",
       "discriminator": [
-        53,
-        74,
-        180,
-        116,
-        197,
-        25,
-        67,
-        67
+        1
       ]
     },
     {
-      "name": "Offering",
+      "name": "Eligibility",
       "discriminator": [
-        128,
-        234,
-        9,
-        226,
-        125,
-        227,
-        146,
-        39
+        2
       ]
     }
   ],
@@ -483,211 +215,152 @@
     {
       "name": "PurchaseSettled",
       "discriminator": [
-        104,
-        127,
-        95,
-        74,
-        143,
-        164,
-        52,
-        40
+        0
       ]
-    }
-  ],
-  "errors": [
-    {
-      "code": 6000,
-      "name": "OfferingClosed",
-      "msg": "Offering is closed to new purchases"
-    },
-    {
-      "code": 6001,
-      "name": "ZeroAmount",
-      "msg": "Token amount must be greater than zero"
-    },
-    {
-      "code": 6002,
-      "name": "ExceedsOffering",
-      "msg": "Purchase would exceed the offering size"
-    },
-    {
-      "code": 6003,
-      "name": "MathOverflow",
-      "msg": "Arithmetic overflow"
-    },
-    {
-      "code": 6004,
-      "name": "NotEligible",
-      "msg": "Wallet is not eligible to hold this property token"
-    },
-    {
-      "code": 6005,
-      "name": "Unauthorized",
-      "msg": "Signer is not the offering authority"
     }
   ],
   "types": [
     {
-      "name": "Eligibility",
-      "docs": [
-        "The on-chain projection of Convex's entitlement authority — one per (property_mint, owner). It IS",
-        "the Token-ACL attestation: the platform writes it (set_eligibility) once Convex confirms KYC /",
-        "suitability, and `thaw` will only unfreeze a wallet's token account when its Eligibility says so.",
-        "Compliance therefore runs on freeze/thaw (cheap, composable), not on every transfer."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "property_mint",
-            "docs": [
-              "The property mint this eligibility is scoped to."
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "owner",
-            "docs": [
-              "The investor wallet (token-account owner) this eligibility clears."
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "eligible",
-            "docs": [
-              "Whether the owner is currently cleared to hold this property's token."
-            ],
-            "type": "bool"
-          },
-          {
-            "name": "bump",
-            "docs": [
-              "PDA bump for [b\"eligibility\", property_mint, owner]."
-            ],
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
       "name": "Offering",
-      "docs": [
-        "One `Offering` per property mint. It is the on-chain config for a primary issuance AND the",
-        "authority (PDA) over the pre-minted property-token vault. Delivery (vault -> buyer) can only be",
-        "signed by this PDA, so tokens never leave the vault except through `settle_purchase` — which is",
-        "what binds delivery to payment."
-      ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "authority",
-            "docs": [
-              "Platform admin authorized to initialize / close the offering."
-            ],
-            "type": "pubkey"
+            "type": "publicKey"
           },
           {
-            "name": "property_mint",
-            "docs": [
-              "The Token-2022 property mint (one dedicated mint per property)."
-            ],
-            "type": "pubkey"
+            "name": "propertyMint",
+            "type": "publicKey"
           },
           {
-            "name": "usdc_mint",
-            "docs": [
-              "The payment mint (USDC)."
-            ],
-            "type": "pubkey"
+            "name": "usdcMint",
+            "type": "publicKey"
           },
           {
             "name": "treasury",
-            "docs": [
-              "Treasury token account (USDC) — the payment destination."
-            ],
-            "type": "pubkey"
+            "type": "publicKey"
           },
           {
             "name": "vault",
-            "docs": [
-              "Program-owned property-token vault (owned by this PDA) — the delivery source."
-            ],
-            "type": "pubkey"
+            "type": "publicKey"
           },
           {
-            "name": "price_per_token",
-            "docs": [
-              "Price in USDC base units per ONE property-token base unit. usdc = token_amount * price."
-            ],
+            "name": "pricePerToken",
             "type": "u64"
           },
           {
-            "name": "total_offering",
-            "docs": [
-              "Total property tokens offered (the offering size / cap)."
-            ],
+            "name": "totalOffering",
             "type": "u64"
           },
           {
             "name": "sold",
-            "docs": [
-              "Cumulative tokens sold. Invariant: sold <= total_offering."
-            ],
             "type": "u64"
           },
           {
             "name": "bump",
-            "docs": [
-              "PDA bump for [b\"offering\", property_mint]."
-            ],
             "type": "u8"
           },
           {
             "name": "closed",
-            "docs": [
-              "When true, no further purchases settle."
-            ],
             "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Eligibility",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "propertyMint",
+            "type": "publicKey"
+          },
+          {
+            "name": "owner",
+            "type": "publicKey"
+          },
+          {
+            "name": "eligible",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
     },
     {
       "name": "PurchaseSettled",
-      "docs": [
-        "Emitted on every settled primary purchase. Helius indexes this into the Convex reconcile mirror",
-        "(reconcile.applyChainEvent) — chain stays authoritative, Convex mirrors."
-      ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "offering",
-            "type": "pubkey"
+            "type": "publicKey"
           },
           {
             "name": "buyer",
-            "type": "pubkey"
+            "type": "publicKey"
           },
           {
-            "name": "property_mint",
-            "type": "pubkey"
+            "name": "propertyMint",
+            "type": "publicKey"
           },
           {
-            "name": "token_amount",
+            "name": "tokenAmount",
             "type": "u64"
           },
           {
-            "name": "usdc_amount",
+            "name": "usdcAmount",
             "type": "u64"
           },
           {
-            "name": "sold_after",
+            "name": "soldAfter",
             "type": "u64"
           }
         ]
       }
+    }
+  ],
+  "errors": [
+    {
+      "code": 0,
+      "name": "OfferingClosed"
+    },
+    {
+      "code": 1,
+      "name": "ZeroAmount"
+    },
+    {
+      "code": 2,
+      "name": "ExceedsOffering"
+    },
+    {
+      "code": 3,
+      "name": "MathOverflow"
+    },
+    {
+      "code": 4,
+      "name": "NotEligible"
+    },
+    {
+      "code": 5,
+      "name": "Unauthorized"
+    },
+    {
+      "code": 6,
+      "name": "InvalidVault"
+    },
+    {
+      "code": 7,
+      "name": "InvalidTreasury"
+    },
+    {
+      "code": 8,
+      "name": "InvalidTokenAccount"
     }
   ]
 }

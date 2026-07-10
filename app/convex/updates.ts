@@ -1,6 +1,7 @@
 import { query, internalMutation } from "./_generated/server";
 import { periodFor } from "./home";
 import { writeAudit } from "./audit";
+import { findUserByIdentity } from "./security";
 import type { Doc } from "./_generated/dataModel";
 
 // Story 5.4 — Monthly property update (even quiet ones) (FR15).
@@ -85,10 +86,7 @@ export const summary = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) return null;
 
     const holdings = await ctx.db

@@ -3,32 +3,52 @@
   "version": "0.1.0",
   "private": true,
   "description": "Vesper consumer app — E1.1 reactive backbone (Next.js + Convex + Privy).",
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --max-warnings=0",
     "convex": "convex dev",
     "seed": "convex run properties:seedTheMonroe",
+    "seed:demo": "convex run seedDemo:seedMaya",
     "check:tokens": "node scripts/check-tokens.mjs",
     "test": "vitest run"
   },
   "dependencies": {
-    "@privy-io/react-auth": "^2.4.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "@privy-io/react-auth": "^3.34.0",
+    "@solana-program/memo": "^0.11.2",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.98.4",
     "convex": "^1.17.0",
-    "next": "^15.1.0",
+    "next": "^16.2.10",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^4.0.0",
     "@fontsource-variable/fraunces": "^5.2.9",
     "@fontsource-variable/inter": "^5.2.8",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@edge-runtime/vm": "^4.0.0",
     "convex-test": "^0.0.35",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.2.10",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "elliptic": "^6.6.1",
+    "esbuild": "^0.25.12",
+    "postcss": "^8.5.10",
+    "uuid": "^11.1.1",
+    "ws": "^8.20.2"
   }
 }

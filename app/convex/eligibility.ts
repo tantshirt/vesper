@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
+import { findUserByIdentity, identityKey, requireUnsafeStubs } from "./security";
 
 // Story 3.2 — KYC + Reg A+ eligibility.
 //
@@ -41,10 +42,7 @@ export const getEligibility = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) return null;
 
     return await ctx.db
@@ -76,11 +74,10 @@ export const recordEligibility = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    const actor = identityKey(identity);
+    requireUnsafeStubs("Stub KYC");
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) throw new Error("User not provisioned");
 
     // Identity-check failure: mark failed (idempotently) and audit. No thaw, no throw — retryable.
@@ -89,7 +86,7 @@ export const recordEligibility = mutation({
         await ctx.db.patch(user._id, { kycStatus: "failed" });
       }
       await writeAudit(ctx, {
-        actor: identity.subject,
+        actor,
         action: "kyc.failed",
         target: user._id,
         meta: { propertyId: args.propertyId },
@@ -108,7 +105,7 @@ export const recordEligibility = mutation({
     if (user.kycStatus !== "verified" || user.regAAnnualLimit !== regAAnnualLimit) {
       await ctx.db.patch(user._id, { kycStatus: "verified", regAAnnualLimit });
       await writeAudit(ctx, {
-        actor: identity.subject,
+        actor,
         action: "kyc.verified",
         target: user._id,
         meta: { propertyId: args.propertyId, regAAnnualLimit },
@@ -159,7 +156,7 @@ export const recordEligibility = mutation({
       // eligibility.recorded meta carries the decisive regulated-decision inputs (computed cap +
       // jurisdiction) — not raw income/net worth, which stay out of the audit log as PII.
       await writeAudit(ctx, {
-        actor: identity.subject,
+        actor,
         action: "eligibility.recorded",
         target: user._id,
         meta: { propertyId: args.propertyId, eligible, jurisdiction: args.jurisdiction, regAAnnualLimit },
@@ -168,7 +165,7 @@ export const recordEligibility = mutation({
       // Convex mirror of the on-chain Token-ACL state (self-thaw on eligibility). The live
       // Token-2022 freeze/thaw is deferred — this audit is the authoritative record here.
       await writeAudit(ctx, {
-        actor: identity.subject,
+        actor,
         action: eligible ? "acl.thawed" : "acl.frozen",
         target: user._id,
         meta: { propertyId: args.propertyId },
@@ -189,11 +186,9 @@ export const joinWaitlist = mutation({
   handler: async (ctx, { propertyId, jurisdiction }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    const actor = identityKey(identity);
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_privyId", (q) => q.eq("privyId", identity.subject))
-      .unique();
+    const user = await findUserByIdentity(ctx, identity);
     if (!user) throw new Error("User not provisioned");
 
     const existing = await ctx.db
@@ -212,7 +207,7 @@ export const joinWaitlist = mutation({
     });
 
     await writeAudit(ctx, {
-      actor: identity.subject,
+      actor,
       action: "waitlist.joined",
       target: user._id,
       meta: { propertyId },

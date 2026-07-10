@@ -12,7 +12,7 @@
  *   4. create a treasury USDC account (admin's USDC ATA)
  *   5. create a fresh buyer keypair funded via SystemProgram.transfer (NOT airdrop)
  *   6. create + fund the buyer's USDC ATA (mint mock USDC to it)
- *   7. initialize_offering (admin signs)
+ *   7. initializeOffering (admin signs)
  *   8. build the settle tx via buildSettlePurchaseTransaction, sign as buyer, send
  *   9. assert post-state and print every signature + explorer link
  *  10. persist created addresses to app/scripts/devnet-e2e.out.json
@@ -365,7 +365,7 @@ async function main() {
     console.log(`  buyer_usdc = ${buyerUsdc.toBase58()}`);
   }
 
-  // --- 7. initialize_offering -------------------------------------------
+  // --- 7. initializeOffering --------------------------------------------
   {
     const ix = buildInitializeOfferingInstruction({
       authority: admin.publicKey,
@@ -379,7 +379,7 @@ async function main() {
     });
     sigs.initializeOffering = await sendIxs(
       connection,
-      `initialize_offering (price=${PRICE_PER_TOKEN}, total=${TOTAL_OFFERING})`,
+      `initializeOffering (price=${PRICE_PER_TOKEN}, total=${TOTAL_OFFERING})`,
       admin,
       [ix],
     );
@@ -452,7 +452,7 @@ async function main() {
         }
         if (attempt === maxAttempts) {
           throw new Error(
-            `settle_purchase failed after ${maxAttempts} attempts: ${msg}`,
+            `settlePurchase failed after ${maxAttempts} attempts: ${msg}`,
           );
         }
         await sleep(1500 * attempt);
@@ -460,7 +460,7 @@ async function main() {
     }
   }
   sigs.settlePurchase = settleSig;
-  console.log(`  [ok] settle_purchase: ${settleSig}`);
+  console.log(`  [ok] settlePurchase: ${settleSig}`);
   console.log(`       ${explorer(settleSig)}`);
 
   // --- 9. assert post-state ----------------------------------------------
