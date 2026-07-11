@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { roleValidator } from "./roles";
 
 // Core entities (E1.1 users + auditLog; E1.4 the rest). Shape is seed — owned by code from here.
 // Data-ownership per architecture spine: on-chain owns token truth; Convex owns intent,
@@ -15,6 +16,20 @@ export default defineSchema({
     regAAnnualLimit: v.optional(v.number()), // E3.2: computed Reg A+ per-investor cap (10% of greater of income/net worth)
     createdAt: v.number(),
   }).index("by_privyId", ["privyId"]).index("by_wallet", ["walletAddress"]), // by_wallet: E1.3 chain-event routing
+
+  // --- Admin Story 1.1: staff identity, kept STRICTLY separate from consumer `users` ---
+  // Staff sign in via WorkOS SSO and are keyed on `workosId` (the WorkOS token `sub`); consumers are
+  // keyed on `privyId`. The scope wall (security.ts) enforces that these never cross-resolve. Staff
+  // access is grant-only: a valid WorkOS JWT with no row here is NOT staff. Permissions are DERIVED
+  // from `roles` on every request (roles.ts) — never stored — so a role edit takes effect at once.
+  staff: defineTable({
+    workosId: v.string(),
+    email: v.string(),
+    name: v.string(), // the named human — every admin action attributes to this, never to a system
+    roles: v.array(roleValidator),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    createdAt: v.number(),
+  }).index("by_workosId", ["workosId"]),
 
   // Append-only. Every money/ownership/eligibility/diligence mutation writes here (FR16 / spine I3).
   auditLog: defineTable({

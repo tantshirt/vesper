@@ -1,7 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
-import { findUserByIdentity, identityKey, normalizeSolanaAddress } from "./security";
+import { findUserByIdentity, identityKey, normalizeSolanaAddress, requireConsumer } from "./security";
 
 // E1.1 AC: "a user signs in with Privy → Convex trusts the JWT → resolves the user in a reactive query."
 export const currentUser = query({
@@ -18,8 +18,11 @@ export const currentUser = query({
 export const ensureUser = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    // Scope wall: reject a staff (WorkOS) identity BEFORE the lookup. Without this the wall inverts
+    // into a consumer-account factory — findUserByIdentity now returns null for a staff token, and
+    // ensureUser reads null as "provision this user", inserting a fresh `users` row plus a
+    // `user.created` audit entry on EVERY call by any staff token.
+    const identity = await requireConsumer(ctx);
     const actor = identityKey(identity);
 
     const existing = await findUserByIdentity(ctx, identity);

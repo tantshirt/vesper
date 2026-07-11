@@ -43,9 +43,12 @@ export const knownPropertyMints = internalQuery({
 // BINDS the supplied signature to the caller: only balances owned by this wallet are reconciled, so a
 // caller can never drive a reconcile write against another user's holding using a foreign signature.
 export const callerWalletAddress = internalQuery({
-  args: { subject: v.string(), tokenIdentifier: v.optional(v.string()) },
-  handler: async (ctx, { subject, tokenIdentifier }): Promise<string | null> => {
-    const user = await findUserByIdentity(ctx, { subject, tokenIdentifier });
+  // `issuer` MUST be threaded through: reconstructing the identity without it makes isWorkosIdentity
+  // return false, silently disarming the scope wall on exactly this path (where a manufactured
+  // colliding row would be exploited).
+  args: { subject: v.string(), tokenIdentifier: v.optional(v.string()), issuer: v.optional(v.string()) },
+  handler: async (ctx, { subject, tokenIdentifier, issuer }): Promise<string | null> => {
+    const user = await findUserByIdentity(ctx, { subject, tokenIdentifier, issuer });
     return user?.walletAddress ?? null;
   },
 });
@@ -171,6 +174,7 @@ export const confirmSettlement = action({
     const callerWallet = await ctx.runQuery(internal.onchainConfirm.callerWalletAddress, {
       subject: identity.subject,
       tokenIdentifier: identity.tokenIdentifier ?? undefined,
+      issuer: identity.issuer ?? undefined,
     });
     if (!callerWallet) throw new Error("No linked wallet for caller");
 

@@ -4,11 +4,44 @@ import type { Doc } from "./_generated/dataModel";
 type Identity = {
   subject: string;
   tokenIdentifier?: string | null;
+  issuer?: string; // Admin Story 1.1: the scope wall keys off a recognized WorkOS issuer
 };
 
 type UserReadCtx = Pick<QueryCtx, "db"> | Pick<MutationCtx, "db">;
 
+// Minimal auth-bearing ctx shape (query / mutation / action all satisfy it). Kept structural so this
+// helper does not couple to a specific Convex ctx type.
+type AuthCtx = {
+  auth: {
+    getUserIdentity(): Promise<
+      { subject: string; issuer?: string; tokenIdentifier?: string | null } | null
+    >;
+  };
+};
+
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
+
+// Admin Story 1.1 — the scope wall, in one predicate. It must be issuer-POSITIVE: "is this a
+// recognized WorkOS issuer?", never "is the issuer missing / not privy.io?". The existing consumer
+// tests fake identity as `{ subject }` with NO issuer, so an issuer-negative rule would both break
+// every one of them AND fail OPEN the day a third provider appears. The prefix is the EXACT WorkOS
+// user-management path — matching the bare `https://api.workos.com/` host would silently promote any
+// future WorkOS-hosted issuer to a staff issuer (fails open).
+const WORKOS_ISSUER_PREFIX = "https://api.workos.com/user_management/";
+
+export function isWorkosIdentity(identity: Identity): boolean {
+  return Boolean(identity.issuer?.startsWith(WORKOS_ISSUER_PREFIX));
+}
+
+// Consumer half of the scope wall: resolve the caller and REFUSE a staff (WorkOS) identity. Every
+// consumer write path that provisions a `users` row (e.g. users.ensureUser) must gate on this — see
+// the note there for why a staff token would otherwise become a consumer-account factory.
+export async function requireConsumer(ctx: AuthCtx): Promise<Identity> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Not authenticated");
+  if (isWorkosIdentity(identity)) throw new Error("Not authenticated as a consumer");
+  return identity;
+}
 
 export function identityKey(identity: Identity): string {
   return identity.tokenIdentifier || identity.subject;
@@ -18,6 +51,10 @@ export async function findUserByIdentity(
   ctx: UserReadCtx,
   identity: Identity,
 ): Promise<Doc<"users"> | null> {
+  // Scope wall (consumer side): a staff (WorkOS) identity must never resolve to a consumer `users`
+  // row. Returning null here is what makes a staff token at a consumer function resolve to "no user".
+  if (isWorkosIdentity(identity)) return null;
+
   const key = identityKey(identity);
   const user = await ctx.db
     .query("users")

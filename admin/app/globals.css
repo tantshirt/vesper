@@ -1,0 +1,6 @@
+/* Admin design tokens are INHERITED VERBATIM from the consumer app — not redefined. Importing the
+   consumer globals.css (via the workspace `vesper-app/app/globals.css` export) means the color,
+   type, spacing, and radius tokens cannot drift from the canonical D-Design-System. Story 1.5 will
+   ADD the admin-only extension (mono-data type role, density scale, status system) on top of this
+   import; Story 1.1 only needs the tokens reachable. */
+@import "vesper-app/app/globals.css";
