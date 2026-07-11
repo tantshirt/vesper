@@ -18,7 +18,7 @@ development_status:
   epic-1: in-progress
   1-1-scaffold-workos-rbac: done               # ✅ monorepo workspace (app/+admin/), admin Next16 app, WorkOS as 2nd Convex provider (conditional), staff model + roles.ts/rbac.ts (grantRoles internalMutation, scope wall), 19 RBAC tests. Consumer intact: 599 tests pass, build/lint/token-guard green. Verified independently.
   1-3-audit-log: ready-for-dev                 # Sprint 0. Extend existing auditLog/writeAudit with named-human (WorkOS) actor + on-chain-ref; append-only views/export.
-  1-5-design-system-extension: ready-for-dev   # Sprint 0. Density scale + mono-data type + operational status chips over globals.css tokens. Light-first only (no dark mode).
+  1-5-design-system-extension: done            # ✅ admin data layer: density scale + mono-data + StatusChip/DataTable/MonoData/OnChainActionPanel/Money primitives + styleguide route, all token-derived. check:tokens/lint/tsc/build:admin green; consumer untouched.
   1-2-segregation-of-duties: backlog           # Sprint 1. Net-new RBAC/SoD tables + per-request enforcement. Needs 1-1.
   1-4-platform-admin-break-glass: backlog      # Sprint 1. Needs 1-2.
   epic-1-retrospective: notify

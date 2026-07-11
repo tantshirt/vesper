@@ -4,3 +4,201 @@
    ADD the admin-only extension (mono-data type role, density scale, status system) on top of this
    import; Story 1.1 only needs the tokens reachable. */
 @import "vesper-app/app/globals.css";
+
+/* ============================================================================
+   Admin Design System — DATA LAYER (Story 1.5)
+   An EXTENSION of the canonical tokens above, never a new system. Every value
+   below is derived from a canonical CSS custom property — no hardcoded hex,
+   no new palette, no new font, no new radius. Light-first only (no dark mode),
+   matching the consumer surface. See:
+   _bmad-output/admin/D-Design-System/00-admin-design-system.md
+   ============================================================================ */
+
+:root {
+  /* Density scale (desktop ops) — a tighter step-scale for tables + review panes,
+     DERIVED from the canonical --space-* rather than replacing it. */
+  --admin-row-h: 44px;              /* comfortable row — keeps the WCAG target size */
+  --admin-row-h-compact: 36px;      /* compact row (density toggle) */
+  --admin-cell-pad-y: 10px;
+  --admin-cell-pad-x: var(--space-4);   /* 16px → visually the spec's 14px band; token-derived */
+  --admin-section-gap: var(--space-5);  /* 20px */
+  --admin-pane-gutter: var(--space-6);  /* 24px */
+  --admin-read-col: 1440px;             /* comfortable reading column for detail panes */
+
+  /* Sticky-header ground — the same blur/translucency idiom as the consumer nav. */
+  --admin-sticky-bg: color-mix(in srgb, var(--bg) 82%, transparent);
+}
+
+/* ---- Type — one addition: the mono-data role (addresses, tx sigs, mint IDs,
+   doc hashes, gate signatures). 13px, ink, tabular, monospace. An on-chain value
+   is NEVER set in a proportional font. ---- */
+.mono-data {
+  font: 500 13px ui-monospace, Menlo, monospace;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
+/* ---- Money — Inter, tabular. All money on the admin surface aligns on the decimal. ---- */
+.a-money { font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.a-money.neg { color: var(--loss); }
+.a-money.pos { color: var(--gain); }
+
+/* ============================================================================
+   StatusChip — the operational status system. Every status pairs
+   color + icon + label (never color alone), on the lavender chip ground.
+   ============================================================================ */
+.a-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--chip); border: 1px solid var(--hairline-2);
+  border-radius: var(--radius-pill); padding: 4px 11px;
+  font: 600 12px var(--sans); white-space: nowrap; line-height: 1;
+}
+.a-chip-icon { font-size: 12px; line-height: 1; flex: none; }
+.a-chip-label { line-height: 1; }
+.a-chip.is-passed  { color: var(--gain); }
+.a-chip.is-blocked { color: var(--loss); }
+.a-chip.is-pending { color: var(--warning); }
+.a-chip.is-onchain { color: var(--accent); }
+.a-chip.is-draft   { color: var(--muted); }
+/* Complete — the rare earned moment: a champagne dot + ★, label in ink. */
+.a-chip.is-complete { color: var(--ink); }
+.a-chip.is-complete .a-chip-icon { color: var(--champagne); }
+.a-chip-dot {
+  width: 6px; height: 6px; border-radius: var(--radius-pill);
+  background: linear-gradient(135deg, var(--champagne), var(--champagne-soft));
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--champagne) 55%, transparent);
+  flex: none;
+}
+
+/* ============================================================================
+   MonoData — an address/hash/sig set mono + tabular, truncated in the middle
+   (0x1E1B…4B4B), copy-on-click, full value on hover (title) / expand.
+   ============================================================================ */
+.a-mono {
+  font: 500 13px ui-monospace, Menlo, monospace;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+  background: var(--chip); border: 1px solid var(--hairline-2);
+  border-radius: 7px; padding: 3px 8px;
+  display: inline-flex; align-items: center; gap: 8px;
+  cursor: pointer; max-width: 100%; text-align: left;
+}
+.a-mono:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline-2)); }
+.a-mono:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+.a-mono-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a-mono.is-expanded .a-mono-value { overflow-wrap: anywhere; white-space: normal; }
+.a-mono-copy { font-size: 11px; color: var(--muted); flex: none; line-height: 1; }
+.a-mono.is-copied .a-mono-copy { color: var(--gain); }
+
+/* ============================================================================
+   DataTable — the review-queue shell. Sticky blurred header (like the consumer
+   nav), 44px rows (36px compact), status-chip cells, tabular money, hover=lavender.
+   Structure is virtualization-ready (fixed row heights, a scroll container).
+   ============================================================================ */
+.a-table-panel {
+  border: 1px solid var(--hairline-2); border-radius: var(--radius-lg);
+  background: var(--surface); overflow: hidden;
+}
+.a-table-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  padding: var(--space-3) var(--admin-cell-pad-x);
+  border-bottom: 1px solid var(--hairline);
+}
+.a-table-caption { font: 600 13px var(--sans); color: var(--ink); }
+.a-table-caption small { display: block; font: 500 12px var(--sans); color: var(--muted); margin-top: 2px; }
+.a-table-scroll { width: 100%; overflow: auto; max-height: 70vh; }
+.a-table { width: 100%; border-collapse: collapse; font: 500 13.5px var(--sans); }
+.a-table thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--admin-sticky-bg); backdrop-filter: blur(14px);
+  text-align: left; font: 600 11px ui-monospace, Menlo, monospace;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+  padding: var(--admin-cell-pad-y) var(--admin-cell-pad-x);
+  border-bottom: 1px solid var(--hairline-2); white-space: nowrap;
+}
+.a-table th.a-col-num { text-align: right; }
+.a-table tbody td {
+  height: var(--admin-row-h); padding: 0 var(--admin-cell-pad-x);
+  border-bottom: 1px solid var(--hairline); color: var(--ink); vertical-align: middle;
+}
+.a-table.is-compact tbody td { height: var(--admin-row-h-compact); }
+.a-table tbody tr:last-child td { border-bottom: 0; }
+.a-table tbody tr:hover td { background: var(--chip); }
+.a-td-num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.a-table-empty { padding: var(--space-8) var(--admin-cell-pad-x); text-align: center; color: var(--muted); font-size: 14px; }
+
+/* Density toggle — a segmented control (comfortable | compact). */
+.a-seg {
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: var(--chip); border: 1px solid var(--hairline-2); border-radius: var(--radius-pill);
+}
+.a-seg-btn {
+  cursor: pointer; border: 0; background: transparent; color: var(--muted);
+  font: 600 12px var(--sans); padding: 5px 13px; border-radius: var(--radius-pill);
+}
+.a-seg-btn.on { color: var(--surface); background: var(--accent); }
+.a-seg-btn:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+
+/* ============================================================================
+   OnChainActionPanel — states consequence + cost + FINALITY before a confirm.
+   Midnight/dusk framing signals "this touches the chain." Placeholder confirm
+   handler (real step-up / on-chain wiring is a later story).
+   ============================================================================ */
+.a-onchain {
+  background: var(--dusk); color: var(--dusk-fg);
+  border: 1px solid var(--dusk-hairline); border-radius: var(--radius-lg);
+  padding: 22px 24px; display: flex; flex-direction: column; gap: 16px;
+}
+.a-onchain-eyebrow {
+  margin: 0; display: flex; align-items: center; gap: 8px;
+  font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--dusk-eyebrow);
+}
+.a-onchain-title {
+  margin: 0; font-family: var(--serif); font-weight: 500; font-size: 22px;
+  letter-spacing: -.01em; line-height: 1.12; color: var(--dusk-fg);
+}
+.a-onchain-consequence { margin: 0; font: 400 14px/1.55 var(--sans); color: var(--dusk-sub); max-width: 60ch; }
+.a-onchain-meta {
+  display: flex; flex-wrap: wrap; gap: 22px; padding: 15px 0;
+  border-top: 1px solid var(--dusk-hairline); border-bottom: 1px solid var(--dusk-hairline);
+}
+.a-onchain-meta-item { display: flex; flex-direction: column; gap: 4px; }
+.a-onchain-meta-k { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--dusk-eyebrow); }
+.a-onchain-meta-v { font: 600 15px var(--sans); font-variant-numeric: tabular-nums; color: var(--dusk-fg); }
+.a-onchain-finality { display: inline-flex; align-items: center; gap: 8px; font: 600 12.5px var(--sans); color: var(--champagne); }
+.a-onchain-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.a-onchain-confirm {
+  border: 0; cursor: pointer; font: 600 14px var(--sans); color: var(--midnight);
+  background: linear-gradient(135deg, var(--champagne-soft), var(--champagne));
+  padding: 12px 22px; border-radius: var(--radius-md);
+}
+.a-onchain-confirm:focus-visible { outline: 2px solid var(--dusk-fg); outline-offset: 2px; }
+.a-onchain-confirm:disabled { opacity: .5; cursor: not-allowed; }
+.a-onchain-cancel {
+  border: 1px solid var(--dusk-hairline); background: transparent; color: var(--dusk-fg);
+  padding: 12px 22px; border-radius: var(--radius-md); cursor: pointer; font: 600 14px var(--sans);
+}
+.a-onchain-cancel:focus-visible { outline: 2px solid var(--dusk-fg); outline-offset: 2px; }
+/* Lifecycle line: optimistic-intent → chain-confirm → reconciled (never ambiguous). */
+.a-onchain-status { display: flex; align-items: center; gap: 10px; font: 500 12.5px var(--sans); color: var(--dusk-sub); }
+.a-onchain-status .a-onchain-dot { width: 7px; height: 7px; border-radius: var(--radius-pill); background: var(--dusk-eyebrow); flex: none; }
+.a-onchain-status.is-confirmed { color: var(--champagne); }
+.a-onchain-status.is-confirmed .a-onchain-dot { background: linear-gradient(135deg, var(--champagne), var(--champagne-soft)); }
+
+/* ============================================================================
+   Styleguide — the dev/QA verification surface (not a product screen).
+   ============================================================================ */
+.sg { max-width: var(--admin-read-col); margin: 0 auto; padding: var(--space-8) var(--admin-pane-gutter) var(--space-10); }
+.sg-head { margin-bottom: var(--space-8); }
+.sg-eyebrow { font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); display: flex; align-items: center; gap: 10px; }
+.sg-eyebrow .dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--champagne); }
+.sg-title { font-family: var(--serif); font-weight: 500; font-size: 34px; letter-spacing: -.02em; margin: 12px 0 8px; color: var(--ink); }
+.sg-lead { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 68ch; margin: 0; }
+.sg-section { padding: var(--space-7) 0; border-top: 1px solid var(--hairline); }
+.sg-section-title { font-family: var(--serif); font-weight: 500; font-size: 22px; letter-spacing: -.01em; color: var(--ink); margin: 0 0 6px; }
+.sg-section-note { color: var(--muted); font-size: 13.5px; line-height: 1.55; margin: 0 0 var(--space-5); max-width: 72ch; }
+.sg-row { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: center; }
+.sg-stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.sg-swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-4); }
+.sg-note { font: 500 12px var(--sans); color: var(--muted); }
