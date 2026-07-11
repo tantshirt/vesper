@@ -67,7 +67,10 @@ export default defineSchema({
     tokenAmount: v.number(),
     ownershipPct: v.number(),
     costBasis: v.number(),
-  }).index("by_user", ["userId"]).index("by_property", ["propertyId"]), // by_property: E2.4 count holders per property without a scan
+  })
+    .index("by_user", ["userId"])
+    .index("by_property", ["propertyId"]) // by_property: E2.4 count holders per property without a scan
+    .index("by_user_property", ["userId", "propertyId"]), // settle/reconcile fetch one holding by (user, property)
 
   eligibility: defineTable({
     userId: v.id("users"),

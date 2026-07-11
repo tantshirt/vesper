@@ -16,6 +16,7 @@ export interface ChainEvent {
   mint?: string;
   owner?: string; // token account owner (wallet address)
   tokenAmount?: number;
+  ownershipPct?: number; // chain-authoritative ownership fraction (balance / mint supply), when known
   period?: string; // "2026-07" — distribution period
   txSig?: string; // on-chain distribution tx reference recorded on incomeLedger
   slot?: number;
@@ -29,6 +30,7 @@ const eventArgs = {
   mint: v.optional(v.string()),
   owner: v.optional(v.string()),
   tokenAmount: v.optional(v.number()),
+  ownershipPct: v.optional(v.number()),
   period: v.optional(v.string()),
   txSig: v.optional(v.string()),
   slot: v.optional(v.number()),
@@ -95,22 +97,27 @@ async function applyOwnership(ctx: MutationCtx, event: ChainEvent) {
     return { status: "unresolved" as const };
   }
 
-  const holding = (
-    await ctx.db
-      .query("holdings")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect()
-  ).find((h) => h.propertyId === property._id);
+  const holding = await ctx.db
+    .query("holdings")
+    .withIndex("by_user_property", (q) =>
+      q.eq("userId", user._id).eq("propertyId", property._id),
+    )
+    .unique();
 
   // Chain wins: the event's token balance overwrites Convex. costBasis stays Convex intent (order
-  // side, never chain-authoritative). ownershipPct scales with the prior balance→pct ratio when
-  // known; a fresh holding has no supply oracle here (out of scope) so it starts at 0.
+  // side, never chain-authoritative). ownershipPct is NOT ratio-scaled from tokenAmount — that mixed
+  // units (USD-seeded vs chain-count) and corrupted the fraction. Instead: use the chain-authoritative
+  // fraction (balance / mint supply) when the event carries one; otherwise preserve the existing
+  // intent (or 0 for a brand-new holding with no basis yet).
   const before = holding?.tokenAmount;
   const after = event.tokenAmount; // validated finite & non-negative above
-  const ownershipPct =
-    holding && holding.tokenAmount > 0
-      ? holding.ownershipPct * (after / holding.tokenAmount)
-      : (holding?.ownershipPct ?? 0);
+  const providedPct =
+    typeof event.ownershipPct === "number" &&
+    Number.isFinite(event.ownershipPct) &&
+    event.ownershipPct >= 0
+      ? Math.min(1, event.ownershipPct)
+      : undefined;
+  const ownershipPct = providedPct ?? holding?.ownershipPct ?? 0;
 
   if (holding) {
     await ctx.db.patch(holding._id, { tokenAmount: after, ownershipPct });

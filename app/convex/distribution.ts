@@ -127,10 +127,13 @@ export const runDistribution = internalMutation({
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
       .collect();
 
-    // Aggregate weight by user (a holder is a user, not an individual holding row).
+    // Aggregate weight by user (a holder is a user, not an individual holding row). Weight is
+    // `ownershipPct`, NOT `tokenAmount`: tokenAmount carries different units across the two purchase
+    // paths (USD in the Convex-stub settle, chain token count once reconciled), so weighting by it
+    // would mis-pay dividends. ownershipPct is the single unit-safe ownership basis both paths maintain.
     const weightByUser = new Map<Id<"users">, number>();
     for (const h of holdings) {
-      const w = Number.isFinite(h.tokenAmount) ? h.tokenAmount : 0;
+      const w = Number.isFinite(h.ownershipPct) ? h.ownershipPct : 0;
       weightByUser.set(h.userId, (weightByUser.get(h.userId) ?? 0) + w);
     }
     const users = [...weightByUser.entries()];
@@ -222,9 +225,11 @@ export const distributionTargets = internalQuery({
       .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
       .collect();
 
+    // Weight by ownershipPct (unit-safe), identical to runDistribution — the two aggregations MUST
+    // stay in lockstep so the pushed amount matches the scheduled ledger amount.
     const weightByUser = new Map<Id<"users">, number>();
     for (const h of holdings) {
-      const w = Number.isFinite(h.tokenAmount) ? h.tokenAmount : 0;
+      const w = Number.isFinite(h.ownershipPct) ? h.ownershipPct : 0;
       weightByUser.set(h.userId, (weightByUser.get(h.userId) ?? 0) + w);
     }
 
