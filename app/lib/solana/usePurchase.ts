@@ -106,14 +106,14 @@ export function usePurchase(): UsePurchaseResult {
         const { transaction: base64 } = (await res.json()) as {
           transaction: string;
         };
-        const tx = VersionedTransaction.deserialize(
-          base64ToBytes(base64),
-        );
+        // The endpoint returns the serialized unsigned tx; sign those bytes directly (no
+        // deserialize→re-serialize round-trip, which would just reproduce the same bytes).
+        const txBytes = base64ToBytes(base64);
 
         // 2. Sign with the Privy embedded wallet (no broadcast — we do that next).
         setStatus("signing");
         const { signedTransaction } = await signTransaction({
-          transaction: tx.serialize(),
+          transaction: txBytes,
           wallet,
           chain: "solana:devnet",
         });
@@ -123,13 +123,23 @@ export function usePurchase(): UsePurchaseResult {
         setStatus("confirming");
         const sig = await connection.sendRawTransaction(signed.serialize());
         await connection.confirmTransaction(sig, "confirmed");
+        // The purchase is now economically settled (USDC debited, tokens delivered). Commit to
+        // "confirmed" BEFORE the mirror step so a mirror failure can never surface as a retry-inviting
+        // error — a retry would re-broadcast and DOUBLE-CHARGE the buyer.
         setSignature(sig);
-
-        // 4. Mirror the buyer's new holding into Convex (chain stays authoritative).
-        await confirmSettlement({ signature: sig });
-
         setStatus("confirmed");
+
+        // 4. Mirror the buyer's new holding into Convex (chain stays authoritative). Best-effort: the
+        //    on-chain settle is already durable, so a mirror failure is non-fatal — the Helius webhook
+        //    (or a later confirm) reconciles the holding. Never flip back to "error" here.
+        try {
+          await confirmSettlement({ signature: sig });
+        } catch {
+          // Intentionally swallowed — surfacing this as a failure would invite a double-charging retry.
+        }
       } catch (err) {
+        // Reached only for a failure BEFORE on-chain confirmation (build / sign / broadcast / confirm),
+        // where nothing settled — safe to surface as a retryable error.
         setStatus("error");
         setError(err instanceof Error ? err.message : "Purchase failed");
       }

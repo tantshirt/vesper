@@ -1,5 +1,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
 import { findUserByIdentity, identityKey, requireUnsafeStubs } from "./security";
 
@@ -169,6 +170,17 @@ export const recordEligibility = mutation({
         action: eligible ? "acl.thawed" : "acl.frozen",
         target: user._id,
         meta: { propertyId: args.propertyId },
+      });
+
+      // Project the entitlement decision onto the chain: write the on-chain Eligibility attestation so
+      // the buyer's frozen-by-default property token account can actually be thawed at purchase time.
+      // Without this, buildSettlePurchaseTransaction injects a thaw that the program reverts (NotEligible),
+      // breaking first-time on-chain purchases. Scheduled (not awaited) — attestation is an async chain
+      // effect, not part of this mutation's atomic Convex write. Only fires on a real state transition.
+      await ctx.scheduler.runAfter(0, internal.eligibilityAttest.attestEligibilityOnChain, {
+        userId: user._id,
+        propertyId: args.propertyId,
+        eligible,
       });
     }
 

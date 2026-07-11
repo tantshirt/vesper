@@ -1,7 +1,17 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { api } from "./_generated/api";
+
+// recordEligibility schedules attestEligibilityOnChain via scheduler.runAfter(0) (a setTimeout under
+// convex-test). Fake timers let finishAllScheduledFunctions(vi.runAllTimers) drain that job inside the
+// test, instead of it firing after teardown and rejecting.
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+async function drainScheduled(t: ReturnType<typeof convexTest>) {
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+}
 
 // Story 3.2 — mutation-level coverage for the eligibility surface (the story's real risk surface:
 // the eligibility→Token-ACL mirror, idempotent upsert, and audit writes). DOM-less; uses convex-test
@@ -57,6 +67,7 @@ describe("recordEligibility — eligibility→ACL mirror + audit", () => {
       verified: true,
     });
     expect(res).toEqual({ verified: true, eligible: true, regAAnnualLimit: 10_000 });
+    await drainScheduled(t);
 
     const { user, elig } = await t.run(async (ctx) => ({
       user: await ctx.db.get(userId),
@@ -88,6 +99,7 @@ describe("recordEligibility — eligibility→ACL mirror + audit", () => {
       verified: true,
     });
     expect(res.eligible).toBe(false);
+    await drainScheduled(t);
 
     const elig = await t.run(async (ctx) =>
       ctx.db
@@ -140,6 +152,7 @@ describe("recordEligibility — eligibility→ACL mirror + audit", () => {
 
     await asUser(t).mutation(api.eligibility.recordEligibility, args);
     await asUser(t).mutation(api.eligibility.recordEligibility, args);
+    await drainScheduled(t);
 
     const { rows, recorded, thawed } = await t.run(async (ctx) => {
       const all = await ctx.db.query("auditLog").collect();
