@@ -47,6 +47,22 @@ export default defineSchema({
     .index("by_timestamp", ["timestamp"])
     .index("by_actor", ["actor"]),
 
+  // --- Admin Story 1.2: segregation-of-duties — the listing-revenue-vs-diligence wall ---
+  // Records that a staff member holds a fee/listing/billing stake in a specific property. A row here
+  // BARS that staff from signing that property's diligence gates (assertNoFeeConflict, sod.ts).
+  // Append-only in spirit: rows are added/removed ONLY via the audited internalMutations in sod.ts,
+  // never on the public `api`. `by_staff_property` answers "does this staff conflict on this property?"
+  // in one indexed lookup; `by_property` lists every conflicted staff for a property.
+  staffPropertyInterest: defineTable({
+    workosId: v.string(), // the staff member with the stake (their WorkOS `sub` — the identity, not a name)
+    propertyId: v.id("properties"),
+    kind: v.union(v.literal("listing"), v.literal("billing"), v.literal("fee")),
+    recordedBy: v.string(), // the human who recorded this interest — audited as the actor
+    createdAt: v.number(),
+  })
+    .index("by_staff_property", ["workosId", "propertyId"])
+    .index("by_property", ["propertyId"]),
+
   // --- E1.4: the rest of the core (seed shape; refined by their owning stories) ---
   properties: defineTable({
     name: v.string(),
