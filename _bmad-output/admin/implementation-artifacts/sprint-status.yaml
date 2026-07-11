@@ -1,9 +1,8 @@
 # Vesper Admin — Sprint Status
 # Generated from admin/planning-artifacts/epics-and-stories.md + sprint-plan.md
 # STATUS: backlog | ready-for-dev | in-progress | review | done
-# Build order: AE1 → (AE6 intake + AE2 evidence) → AE3 spine → AE4 → AE5 alongside
-# NOTE: admin runs as its OWN loop target — source_epics + story_location below point at the admin tree,
-#       NOT the consumer tree. Repoint _bmad/bmm/config.yaml planning/implementation paths (or run scoped) before launch.
+# Epics are numbered 1–6 here to match the loop's numeric parser; they correspond to AE1–AE6 in the prose.
+# Build order: 1 (AE1 foundation) → (6 intake + 2 evidence) → 3 spine → 4 → 5 alongside
 
 generated: 2026-07-11
 last_updated: 2026-07-11
@@ -15,78 +14,77 @@ source_epics: "_bmad-output/admin/planning-artifacts/epics-and-stories.md"
 readiness: "admin/planning-artifacts/readiness-report.md — CONDITIONAL GO"
 
 development_status:
-  # ---- AE1: Admin Foundation, RBAC & Segregation of Duties (Sprint 0–1; GO now) ----
-  epic-ae1: ready-for-dev
-  ae1-1-scaffold-workos-rbac: ready-for-dev      # Sprint 0. FIRST story. LAYOUT DECISION: MONOREPO WORKSPACE — convert repo to npm workspaces (root package.json), keep consumer at app/, add admin/ app (desktop-first Next.js), hoist Convex to a shared workspace package both apps import, share design tokens as a package. Do NOT break the working consumer app build. Then: WorkOS as a 2nd Convex auth provider (auth.config.ts), per-request RBAC for the 6 roles. Verify consumer app still builds before finishing.
-  ae1-3-audit-log: ready-for-dev                 # Sprint 0. Extends existing auditLog/writeAudit with named-human (WorkOS) actor + on-chain-ref; append-only views/export.
-  ae1-5-design-system-extension: ready-for-dev   # Sprint 0. Density scale + mono-data type + operational status chips over globals.css tokens. Light-first only (no dark mode).
-  ae1-2-segregation-of-duties: backlog           # Sprint 1. Net-new RBAC/SoD tables + per-request enforcement.
-  ae1-4-platform-admin-break-glass: backlog      # Sprint 1. Needs ae1-2.
-  epic-ae1-retrospective: notify
+  # ---- Epic 1 (AE1): Admin Foundation, RBAC & Segregation of Duties (Sprint 0–1; GO now) ----
+  epic-1: ready-for-dev
+  1-1-scaffold-workos-rbac: ready-for-dev      # Sprint 0. FIRST story. LAYOUT: MONOREPO WORKSPACE — root package.json workspaces, keep consumer at app/, add admin/ app (desktop-first Next.js), hoist Convex to a shared package both apps import, share design tokens. Same Convex deployment; WorkOS as 2nd auth provider in auth.config.ts; per-request RBAC for 6 roles. DO NOT break the consumer build; verify it still builds.
+  1-3-audit-log: ready-for-dev                 # Sprint 0. Extend existing auditLog/writeAudit with named-human (WorkOS) actor + on-chain-ref; append-only views/export.
+  1-5-design-system-extension: ready-for-dev   # Sprint 0. Density scale + mono-data type + operational status chips over globals.css tokens. Light-first only (no dark mode).
+  1-2-segregation-of-duties: backlog           # Sprint 1. Net-new RBAC/SoD tables + per-request enforcement. Needs 1-1.
+  1-4-platform-admin-break-glass: backlog      # Sprint 1. Needs 1-2.
+  epic-1-retrospective: notify
 
-  # ---- AE2: Diligence & AI Evidence (Sprint 1–2; GO) ----
-  epic-ae2: backlog
-  ae2-1-ai-extraction-review: backlog            # Sprint 1. Injection-isolated extraction + cite-or-refuse via AI Gateway (ZDR).
-  ae2-2-evidence-assembly: backlog               # Sprint 2. "assembled, not approved"; no sign capability. Needs ae2-1.
-  epic-ae2-retrospective: notify
+  # ---- Epic 2 (AE2): Diligence & AI Evidence (Sprint 1–2; GO) ----
+  epic-2: backlog
+  2-1-ai-extraction-review: backlog            # Sprint 1. Injection-isolated extraction + cite-or-refuse via AI Gateway (ZDR).
+  2-2-evidence-assembly: backlog               # Sprint 2. "assembled, not approved"; no sign capability. Needs 2-1.
+  epic-2-retrospective: notify
 
-  # ---- AE3: Gate → Mint → List ★ (Sprint 2–3) ----
-  epic-ae3: backlog
-  ae3-1-gate-signature-ceremony: backlog         # Sprint 2. SoD-enforced human signing. NEEDS ae1-2 + ae2-2. Partial-BLOCKED by B3 (gate defs).
-  ae3-2-mint-listing-console: backlog            # Sprint 3. Token-2022 mint (ACL frozen), step-up. BLOCKED_PARTIAL by B2 (step-up) + B3. Mint-creation flow is net-new (only a script today).
-  ae3-3-mint-reconciliation: backlog             # Sprint 3. Reuses reconcile.ts/Helius. Needs ae3-2.
-  epic-ae3-retrospective: notify
+  # ---- Epic 3 (AE3): Gate → Mint → List ★ (Sprint 2–3) ----
+  epic-3: backlog
+  3-1-gate-signature-ceremony: backlog         # Sprint 2. SoD-enforced human signing. Needs 1-2 + 2-2. Partial-BLOCKED by B3 (gate defs).
+  3-2-mint-listing-console: backlog            # Sprint 3. Token-2022 mint (ACL frozen), step-up. BLOCKED_PARTIAL by B2 (step-up) + B3. Mint-creation flow is net-new (only a script today).
+  3-3-mint-reconciliation: backlog             # Sprint 3. Reuses reconcile.ts/Helius. Needs 3-2.
+  epic-3-retrospective: notify
 
-  # ---- AE4: Distributions (Sprint 4–5) ----
-  epic-ae4: backlog
-  ae4-1-distribution-builder: backlog            # Sprint 4. Waterfall + matches-target; extends distribution.ts computeShares. Needs ae3-3.
-  ae4-3-distribution-reconciliation: backlog     # Sprint 4. Paused-with-reason; reuses reconcile pipeline. Needs ae4-1.
-  ae4-2-fund-push: backlog                        # Sprint 5. BLOCKED by B1 (custody) + B2 (step-up). No on-chain distribution program yet; push is stubbed.
-  epic-ae4-retrospective: notify
+  # ---- Epic 4 (AE4): Distributions (Sprint 4–5) ----
+  epic-4: backlog
+  4-1-distribution-builder: backlog            # Sprint 4. Waterfall + matches-target; extends distribution.ts computeShares. Needs 3-3.
+  4-3-distribution-reconciliation: backlog     # Sprint 4. Paused-with-reason; reuses reconcile pipeline. Needs 4-1.
+  4-2-fund-push: backlog                        # Sprint 5. BLOCKED by B1 (custody) + B2 (step-up). No on-chain distribution program yet; push is stubbed.
+  epic-4-retrospective: notify
 
-  # ---- AE5: Compliance & Reg A+ (alongside AE3) ----
-  epic-ae5: backlog
-  ae5-1-kyc-acl-eligibility: backlog             # Sprint 3. KYC/AML adjudication → Token ACL (set_eligibility exists on-chain; signing seam stubbed).
-  ae5-2-rega-cap-enforcement: backlog            # Sprint 4. Reg A+ caps as blocks. Needs ae5-1.
-  ae5-3-marketing-signoff-export: backlog        # Sprint 5. BLOCKED_PARTIAL by B4 (marketing limits). Audit export.
-  epic-ae5-retrospective: notify
+  # ---- Epic 5 (AE5): Compliance & Reg A+ (alongside Epic 3) ----
+  epic-5: backlog
+  5-1-kyc-acl-eligibility: backlog             # Sprint 3. KYC/AML adjudication → Token ACL (set_eligibility exists on-chain; signing seam stubbed).
+  5-2-rega-cap-enforcement: backlog            # Sprint 4. Reg A+ caps as blocks. Needs 5-1.
+  5-3-marketing-signoff-export: backlog        # Sprint 5. BLOCKED_PARTIAL by B4 (marketing limits). Audit export.
+  epic-5-retrospective: notify
 
-  # ---- AE6: Sponsor Portal (Sprint 1–5) ----
-  epic-ae6: backlog
-  ae6-1-sponsor-onboarding-kyb: backlog          # Sprint 1. Walled tenant + KYB/Gate 0. Net-new SponsorDeal + tenant-isolation primitive.
-  ae6-2-intake-checklist-upload: backlog         # Sprint 2. Validated upload + status timeline. Needs ae6-1.
-  ae6-3-monthly-update-composer: backlog         # Sprint 4. Feeds ae4-1; overdue flagging (scheduled fn). Reuses propertyUpdates.
-  ae6-4-sponsor-funding-dashboard: backlog       # Sprint 5. Own-deal-only. Needs a listed offering (AE3).
-  epic-ae6-retrospective: notify
+  # ---- Epic 6 (AE6): Sponsor Portal (Sprint 1–5) ----
+  epic-6: backlog
+  6-1-sponsor-onboarding-kyb: backlog          # Sprint 1. Walled tenant + KYB/Gate 0. Net-new SponsorDeal + tenant-isolation primitive.
+  6-2-intake-checklist-upload: backlog         # Sprint 2. Validated upload + status timeline. Needs 6-1.
+  6-3-monthly-update-composer: backlog         # Sprint 4. Feeds 4-1; overdue flagging (scheduled fn). Reuses propertyUpdates.
+  6-4-sponsor-funding-dashboard: backlog       # Sprint 5. Own-deal-only. Needs a listed offering (Epic 3).
+  epic-6-retrospective: notify
 
 blockers:
   - id: B1
     decision: "Escrow / fund-custody vendor"
-    blocks: [ae4-2-fund-push]
+    blocks: [4-2-fund-push]
     owner: "founders + counsel"
     note: "Same blocker as consumer DD-001/4-4. Stub escrow/settlement boundary; build UI + Convex shells on a mock."
   - id: B2
     decision: "MFA / step-up posture (irreversible on-chain actions)"
-    blocks: [ae3-2-mint-listing-console, ae4-2-fund-push]
+    blocks: [3-2-mint-listing-console, 4-2-fund-push]
     owner: "eng + security"
     note: "Recommend WebAuthn hardware-key step-up. Stub behind an interface if it slips."
   - id: B3
     decision: "Internal Gate 0-7 evidence defs + which gates are multi-party"
-    blocks_partial: [ae3-1-gate-signature-ceremony, ae3-2-mint-listing-console]
+    blocks_partial: [3-1-gate-signature-ceremony, 3-2-mint-listing-console]
     owner: "product + compliance"
-    note: "Must land before Sprint 2 (AE3.1 ceremony content)."
+    note: "Must land before Sprint 2 (3-1 ceremony content)."
   - id: B4
     decision: "Reg A+ pre-auth marketing limits"
-    blocks_partial: [ae5-3-marketing-signoff-export]
+    blocks_partial: [5-3-marketing-signoff-export]
     owner: "counsel"
 
 sprint_0_goal: >
-  Stand up the admin substrate: AE1.1 (desktop-first Next.js app + WorkOS SSO + per-request Convex RBAC
-  for the 6 roles), AE1.3 (AuditLog with named-human actor + on-chain-ref + export views), and AE1.5
-  (design-system extension as code over globals.css). Demoable: log in as each role, role-scoped shell
-  renders, every mutation writes an audit entry. Resolve B3 in parallel so AE3.1 unblocks for Sprint 2.
+  Stand up the admin substrate: 1-1 (monorepo workspace + desktop-first admin app + WorkOS SSO +
+  per-request Convex RBAC for the 6 roles), 1-3 (AuditLog with named-human actor + on-chain-ref + export
+  views), and 1-5 (design-system extension as code over globals.css). Demoable: log in as each role,
+  role-scoped shell renders, every mutation writes an audit entry. Resolve B3 in parallel so 3-1 unblocks.
 
 action_items:
-  - "DECIDE repo layout for the admin app (bakes into ae1-1 context)."
-  - "Repoint _bmad/bmm/config.yaml planning_artifacts/implementation_artifacts to the admin tree (or run scoped) before first loop run."
-  - "Recommend policy.toml isolation = worktree for the admin run (kill-prone env)."
+  - "Repoint done: _bmad/bmm/config.yaml → admin tree."
+  - "isolation = none (worktree lacks gitignored node_modules/Convex env the new app needs)."
