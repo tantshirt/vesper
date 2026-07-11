@@ -17,7 +17,7 @@ readiness: "admin/planning-artifacts/readiness-report.md — CONDITIONAL GO"
 development_status:
   # ---- AE1: Admin Foundation, RBAC & Segregation of Duties (Sprint 0–1; GO now) ----
   epic-ae1: ready-for-dev
-  ae1-1-scaffold-workos-rbac: ready-for-dev      # Sprint 0. FIRST story creates the admin app. NEEDS repo-layout decision baked into context (standalone admin/ vs workspace). Separate app, shared Convex, WorkOS as 2nd auth provider, 6 roles.
+  ae1-1-scaffold-workos-rbac: ready-for-dev      # Sprint 0. FIRST story. LAYOUT DECISION: MONOREPO WORKSPACE — convert repo to npm workspaces (root package.json), keep consumer at app/, add admin/ app (desktop-first Next.js), hoist Convex to a shared workspace package both apps import, share design tokens as a package. Do NOT break the working consumer app build. Then: WorkOS as a 2nd Convex auth provider (auth.config.ts), per-request RBAC for the 6 roles. Verify consumer app still builds before finishing.
   ae1-3-audit-log: ready-for-dev                 # Sprint 0. Extends existing auditLog/writeAudit with named-human (WorkOS) actor + on-chain-ref; append-only views/export.
   ae1-5-design-system-extension: ready-for-dev   # Sprint 0. Density scale + mono-data type + operational status chips over globals.css tokens. Light-first only (no dark mode).
   ae1-2-segregation-of-duties: backlog           # Sprint 1. Net-new RBAC/SoD tables + per-request enforcement.

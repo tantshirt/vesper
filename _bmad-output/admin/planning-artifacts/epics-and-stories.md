@@ -81,6 +81,7 @@ As a developer, I want the desktop-first admin app wired to WorkOS and Convex RB
 **Acceptance Criteria:**
 **Given** the admin app is scaffolded (Next.js App Router on Vercel, desktop-first, shared Convex) **When** a staff user signs in with WorkOS SSO **Then** their roles resolve in Convex and every query/mutation is checked **per-request** **And** no consumer-wallet scope is reachable from this surface. *(AFR1, AI1)*
 **Given** the six roles (Ops, Compliance, AI-Reviewer, Sponsor-Principal, Sponsor-Ops, Platform-Admin) **When** a user opens the console **Then** they see only their permission-scoped views. *(AFR1)*
+**Implementation note (repo layout — decided):** Convert the repo to an **npm workspace** (root `package.json` with `workspaces`). Keep the working consumer app at `app/`; add a new **`admin/`** desktop-first Next.js app; **hoist the Convex backend to a shared workspace package** both apps import (or expose `app/convex/_generated` via the workspace), and share the design tokens as a package. The admin app points at the **same Convex deployment** (`NEXT_PUBLIC_CONVEX_URL`) and adds **WorkOS** as a *second* Convex auth provider in `auth.config.ts` alongside Privy — no consumer-wallet scope reaches admin. **Do not break the consumer app build; verify it still builds before finishing.**
 
 ### Story AE1.2: Segregation-of-duties engine
 As the platform, I want SoD enforced server-side, so that fee interests can never touch a gate and no one can self-approve.
