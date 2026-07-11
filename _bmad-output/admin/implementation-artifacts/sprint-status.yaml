@@ -1,0 +1,92 @@
+# Vesper Admin — Sprint Status
+# Generated from admin/planning-artifacts/epics-and-stories.md + sprint-plan.md
+# STATUS: backlog | ready-for-dev | in-progress | review | done
+# Build order: AE1 → (AE6 intake + AE2 evidence) → AE3 spine → AE4 → AE5 alongside
+# NOTE: admin runs as its OWN loop target — source_epics + story_location below point at the admin tree,
+#       NOT the consumer tree. Repoint _bmad/bmm/config.yaml planning/implementation paths (or run scoped) before launch.
+
+generated: 2026-07-11
+last_updated: 2026-07-11
+project: Vesper Admin
+project_key: VSPR-ADM
+tracking_system: file-system
+story_location: "_bmad-output/admin/implementation-artifacts/stories"
+source_epics: "_bmad-output/admin/planning-artifacts/epics-and-stories.md"
+readiness: "admin/planning-artifacts/readiness-report.md — CONDITIONAL GO"
+
+development_status:
+  # ---- AE1: Admin Foundation, RBAC & Segregation of Duties (Sprint 0–1; GO now) ----
+  epic-ae1: ready-for-dev
+  ae1-1-scaffold-workos-rbac: ready-for-dev      # Sprint 0. FIRST story creates the admin app. NEEDS repo-layout decision baked into context (standalone admin/ vs workspace). Separate app, shared Convex, WorkOS as 2nd auth provider, 6 roles.
+  ae1-3-audit-log: ready-for-dev                 # Sprint 0. Extends existing auditLog/writeAudit with named-human (WorkOS) actor + on-chain-ref; append-only views/export.
+  ae1-5-design-system-extension: ready-for-dev   # Sprint 0. Density scale + mono-data type + operational status chips over globals.css tokens. Light-first only (no dark mode).
+  ae1-2-segregation-of-duties: backlog           # Sprint 1. Net-new RBAC/SoD tables + per-request enforcement.
+  ae1-4-platform-admin-break-glass: backlog      # Sprint 1. Needs ae1-2.
+  epic-ae1-retrospective: notify
+
+  # ---- AE2: Diligence & AI Evidence (Sprint 1–2; GO) ----
+  epic-ae2: backlog
+  ae2-1-ai-extraction-review: backlog            # Sprint 1. Injection-isolated extraction + cite-or-refuse via AI Gateway (ZDR).
+  ae2-2-evidence-assembly: backlog               # Sprint 2. "assembled, not approved"; no sign capability. Needs ae2-1.
+  epic-ae2-retrospective: notify
+
+  # ---- AE3: Gate → Mint → List ★ (Sprint 2–3) ----
+  epic-ae3: backlog
+  ae3-1-gate-signature-ceremony: backlog         # Sprint 2. SoD-enforced human signing. NEEDS ae1-2 + ae2-2. Partial-BLOCKED by B3 (gate defs).
+  ae3-2-mint-listing-console: backlog            # Sprint 3. Token-2022 mint (ACL frozen), step-up. BLOCKED_PARTIAL by B2 (step-up) + B3. Mint-creation flow is net-new (only a script today).
+  ae3-3-mint-reconciliation: backlog             # Sprint 3. Reuses reconcile.ts/Helius. Needs ae3-2.
+  epic-ae3-retrospective: notify
+
+  # ---- AE4: Distributions (Sprint 4–5) ----
+  epic-ae4: backlog
+  ae4-1-distribution-builder: backlog            # Sprint 4. Waterfall + matches-target; extends distribution.ts computeShares. Needs ae3-3.
+  ae4-3-distribution-reconciliation: backlog     # Sprint 4. Paused-with-reason; reuses reconcile pipeline. Needs ae4-1.
+  ae4-2-fund-push: backlog                        # Sprint 5. BLOCKED by B1 (custody) + B2 (step-up). No on-chain distribution program yet; push is stubbed.
+  epic-ae4-retrospective: notify
+
+  # ---- AE5: Compliance & Reg A+ (alongside AE3) ----
+  epic-ae5: backlog
+  ae5-1-kyc-acl-eligibility: backlog             # Sprint 3. KYC/AML adjudication → Token ACL (set_eligibility exists on-chain; signing seam stubbed).
+  ae5-2-rega-cap-enforcement: backlog            # Sprint 4. Reg A+ caps as blocks. Needs ae5-1.
+  ae5-3-marketing-signoff-export: backlog        # Sprint 5. BLOCKED_PARTIAL by B4 (marketing limits). Audit export.
+  epic-ae5-retrospective: notify
+
+  # ---- AE6: Sponsor Portal (Sprint 1–5) ----
+  epic-ae6: backlog
+  ae6-1-sponsor-onboarding-kyb: backlog          # Sprint 1. Walled tenant + KYB/Gate 0. Net-new SponsorDeal + tenant-isolation primitive.
+  ae6-2-intake-checklist-upload: backlog         # Sprint 2. Validated upload + status timeline. Needs ae6-1.
+  ae6-3-monthly-update-composer: backlog         # Sprint 4. Feeds ae4-1; overdue flagging (scheduled fn). Reuses propertyUpdates.
+  ae6-4-sponsor-funding-dashboard: backlog       # Sprint 5. Own-deal-only. Needs a listed offering (AE3).
+  epic-ae6-retrospective: notify
+
+blockers:
+  - id: B1
+    decision: "Escrow / fund-custody vendor"
+    blocks: [ae4-2-fund-push]
+    owner: "founders + counsel"
+    note: "Same blocker as consumer DD-001/4-4. Stub escrow/settlement boundary; build UI + Convex shells on a mock."
+  - id: B2
+    decision: "MFA / step-up posture (irreversible on-chain actions)"
+    blocks: [ae3-2-mint-listing-console, ae4-2-fund-push]
+    owner: "eng + security"
+    note: "Recommend WebAuthn hardware-key step-up. Stub behind an interface if it slips."
+  - id: B3
+    decision: "Internal Gate 0-7 evidence defs + which gates are multi-party"
+    blocks_partial: [ae3-1-gate-signature-ceremony, ae3-2-mint-listing-console]
+    owner: "product + compliance"
+    note: "Must land before Sprint 2 (AE3.1 ceremony content)."
+  - id: B4
+    decision: "Reg A+ pre-auth marketing limits"
+    blocks_partial: [ae5-3-marketing-signoff-export]
+    owner: "counsel"
+
+sprint_0_goal: >
+  Stand up the admin substrate: AE1.1 (desktop-first Next.js app + WorkOS SSO + per-request Convex RBAC
+  for the 6 roles), AE1.3 (AuditLog with named-human actor + on-chain-ref + export views), and AE1.5
+  (design-system extension as code over globals.css). Demoable: log in as each role, role-scoped shell
+  renders, every mutation writes an audit entry. Resolve B3 in parallel so AE3.1 unblocks for Sprint 2.
+
+action_items:
+  - "DECIDE repo layout for the admin app (bakes into ae1-1 context)."
+  - "Repoint _bmad/bmm/config.yaml planning_artifacts/implementation_artifacts to the admin tree (or run scoped) before first loop run."
+  - "Recommend policy.toml isolation = worktree for the admin run (kill-prone env)."

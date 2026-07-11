@@ -82,9 +82,9 @@ Inherits Vesper's honesty and restraint; tuned for **precision + accountability*
 
 ---
 
-## Dark mode
+## Light-first only (matches the consumer app)
 
-Same flip as canonical (midnight becomes the field, champagne holds). Admin tables/panes redefine under `@media (prefers-color-scheme:dark)` + `:root[data-theme]` using the same token swaps — status colors keep their icon+label pairing in both themes.
+The consumer app is **light-first only — dark mode was intentionally removed** and a CI token-guard (`app/scripts/check-tokens.mjs`) fails the build on any hardcoded hex outside `globals.css`. The admin surface follows the same rule: **no dark mode**, all color from the canonical CSS custom properties, status colors keep their color + icon + label pairing. (If dark mode is ever reintroduced, it must be reintroduced for both surfaces together.)
 
 ---
 

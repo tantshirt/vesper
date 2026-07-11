@@ -21,7 +21,7 @@ The admin plan is coherent and traceable end-to-end, and consistent with the con
 | UX / Design | 6 Scenarios (A1–A6) + index · admin design-system extension | ✅ |
 | Architecture | admin architecture.md (spine, AI1–AI7, extends consumer I1–I7) | ✅ |
 | Delivery | DD-A01 · DD-A02 · 00-handoff | ✅ (DD-A02 money-movement flagged blocked) |
-| Epics/Stories | epics-and-stories.md (6 epics / 21 stories, GWT AC) | ✅ |
+| Epics/Stories | epics-and-stories.md (6 epics / 20 stories, GWT AC) | ✅ |
 
 ---
 
