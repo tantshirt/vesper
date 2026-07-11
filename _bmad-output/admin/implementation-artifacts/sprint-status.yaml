@@ -54,7 +54,7 @@ development_status:
   epic-6: in-progress
   6-1-sponsor-onboarding-kyb: done             # ✅ requireSponsor tenant-isolation primitive (org resolved server-side, never client arg); sponsorOrgs/Members/Deals; two-way wall (internal↔sponsor); getDeal/submitDeal not-owned→not-found; KYB/Gate 0 (stubbed Middesk, requireUnsafeStubs) gates submitted; provisionSponsor internal via applyGrant; walled /sponsor shell. 11 tests, 645 total pass.
   6-2-intake-checklist-upload: done            # ✅ sponsorIntake.ts: uploadDocument (sponsor.documents — both roles; validate kind → received|rejected+reason, no throw), checklistStatus/dealTimeline/listDealDocuments (org-scoped via resolveOwnedDeal). submitDeal extended: KYB gate then checklist gate. sponsorDocuments table. 9 tests, 681 total pass.
-  6-3-monthly-update-composer: backlog         # Sprint 4. Feeds 4-1; overdue flagging (scheduled fn). Reuses propertyUpdates.
+  6-3-monthly-update-composer: done            # ✅ sponsorUpdates.ts: publishUpdate (sponsor.updates both roles; tenant-scoped to operatorSponsorOrgId; ALL fields required incl. quiet months) + myOperatedProperties/listMyUpdates. properties +operatorSponsorOrgId (populated at listing/Epic3). Reuses existing propertyUpdates + flagOverdueUpdates unchanged. 7 tests, 697 total pass.
   6-4-sponsor-funding-dashboard: backlog       # Sprint 5. Own-deal-only. Needs a listed offering (Epic 3).
   epic-6-retrospective: notify
 

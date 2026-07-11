@@ -156,7 +156,15 @@ export default defineSchema({
     minInvestment: v.number(),
     mint: v.optional(v.string()), // E1.3: on-chain token address → routes chain events to this property
     firstDistributionDate: v.optional(v.string()), // E4.5: YYYY-MM-DD; optional so existing docs stay valid (no migration)
-  }).index("by_status", ["status"]).index("by_mint", ["mint"]), // by_mint: E1.3 chain-event routing
+    // Admin Story 6.3: the sponsor↔property OPERATOR link. When set, this is the ONE sponsor org that
+    // operates the property and may author its monthly updates; `sponsorUpdates` scopes every read/write
+    // by it (a property whose link ≠ the caller's org reads as not-found). Optional so every existing
+    // property stays valid with no migration — it is POPULATED at listing (Epic 3); tests seed it.
+    operatorSponsorOrgId: v.optional(v.id("sponsorOrgs")),
+  })
+    .index("by_status", ["status"])
+    .index("by_mint", ["mint"]) // by_mint: E1.3 chain-event routing
+    .index("by_operator", ["operatorSponsorOrgId"]), // Admin 6.3: a sponsor's operated properties in one lookup
 
   diligenceGates: defineTable({
     propertyId: v.id("properties"),

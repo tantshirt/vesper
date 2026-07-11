@@ -68,6 +68,11 @@ export const PERMISSIONS = {
   // sponsor.manage (which stays principal-only for startDeal/submitDeal). Not operational (touches no
   // money/ownership/eligibility on chain), so it is a plain tenant-scoped capability.
   "sponsor.documents": "Upload/manage sponsor deal documents",
+  // Admin Story 6.3: author a monthly property update for a property the sponsor operates. Granted to
+  // BOTH sponsor roles because Sofia (sponsor_ops) authors the update per her persona — like
+  // sponsor.documents this is deliberately WIDER than sponsor.manage. Not operational (touches no
+  // money/ownership/eligibility on chain), so it is a plain tenant-scoped capability.
+  "sponsor.updates": "Author monthly updates for an operated property",
   "rbac.manage": "Configure staff roles and permissions",
   "breakglass.use": "Invoke time-boxed break-glass access",
   // Admin Story 1.3: OVERSIGHT permissions over the append-only audit trail (read the trail / export
@@ -119,10 +124,11 @@ export const ROLE_PERMISSIONS: Record<StaffRole, readonly Permission[]> = {
   ],
   compliance: ["property.read", "compliance.review", "freeze.execute", "audit.read", "audit.export"],
   ai_reviewer: ["property.read", "ai.review"],
-  sponsor_principal: ["sponsor.read", "sponsor.manage", "sponsor.documents"],
-  // sponsor_ops (Sofia) uploads intake documents but cannot start/submit deals — sponsor.documents
-  // WITHOUT sponsor.manage. This is the split the 6.2 intake flow depends on.
-  sponsor_ops: ["sponsor.read", "sponsor.documents"],
+  sponsor_principal: ["sponsor.read", "sponsor.manage", "sponsor.documents", "sponsor.updates"],
+  // sponsor_ops (Sofia) uploads intake documents AND authors monthly updates but cannot start/submit
+  // deals — sponsor.documents + sponsor.updates WITHOUT sponsor.manage. This is the split the 6.2 intake
+  // and 6.3 update-composer flows depend on.
+  sponsor_ops: ["sponsor.read", "sponsor.documents", "sponsor.updates"],
   // audit.read/export are oversight, not operational — platform_admin holds them without gaining any
   // money/ownership/eligibility power.
   platform_admin: ["rbac.manage", "breakglass.use", "audit.read", "audit.export"],
