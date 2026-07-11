@@ -44,10 +44,10 @@ development_status:
   epic-4-retrospective: notify
 
   # ---- Epic 5 (AE5): Compliance & Reg A+ (alongside Epic 3) ----
-  epic-5: in-progress
+  epic-5: done                                 # ✅ EPIC AE5 COMPLETE — compliance: KYC/AML adjudication→ACL (5-1), Reg A+ cap oversight (5-2), marketing sign-off gate (5-3; export reused from 1-3). 762 tests pass.
   5-1-kyc-acl-eligibility: done                # ✅ compliance.ts adjudication over existing eligibility table: adjudicateEligibility (compliance.review, non-empty reason, ineligible→frozen, schedules on-chain attestation), setTokenAclState (freeze.execute), screenAml (stubbed AML). No PII in audit/queue; consumer recordEligibility unaffected. 11 tests, 672 total pass.
   5-2-rega-cap-enforcement: done               # ✅ OVERSIGHT only — enforcement already exists in settlement.businessGateDecision. regACapStatus pure helper (mirrors settlement's rule: unset→over, invested≥limit→over, ≥80%→near); listCapUsage (compliance.review, no PII); cap-usage table. settlement untouched. 9 tests, 690 total pass.
-  5-3-marketing-signoff-export: backlog        # Sprint 5. BLOCKED_PARTIAL by B4 (marketing limits). Audit export.
+  5-3-marketing-signoff-export: done           # ✅ marketing.ts: draft→signed_off|blocked lifecycle; signOffMarketing/blockMarketing (compliance.review-gated; block requires non-empty note; audited named human); isMarketingSignedOff pure gate (only signed_off shippable — consumer wiring noted). Audit export REUSED from 1-3 (linked, not rebuilt). B4 = reviewer policy. platform_admin denied. 8 tests, 762 total pass.
   epic-5-retrospective: notify
 
   # ---- Epic 6 (AE6): Sponsor Portal (Sprint 1–5) ----

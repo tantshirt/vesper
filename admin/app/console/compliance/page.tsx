@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { useConvexAuth, useQuery, useMutation } from "convex/react";
 import { api } from "vesper-app/convex/_generated/api";
@@ -63,6 +64,30 @@ function capState(state: CapUsageRow["state"]): { kind: StatusKind; label: strin
   return { kind: "blocked", label: "No cap" }; // no-limit ⇒ blocking, like settlement's unset-limit gate
 }
 
+// Story 5.3 — the MARKETING SIGN-OFF gate. Public/marketing copy has a lifecycle draft → signed_off |
+// blocked. Nothing ships unsigned: only a `signed_off` item is shippable (the server helper
+// `isMarketingSignedOff` is the gate a public-render path consults). Only compliance.review may sign off
+// or block (with a mandatory note). The regulator-ready record is the EXISTING 1-3 audit export — linked
+// below, never rebuilt here.
+type MarketingItem = {
+  id: string;
+  propertyId: string | null;
+  kind: string;
+  body: string;
+  status: "draft" | "signed_off" | "blocked";
+  submittedBy: string;
+  reviewedBy: string | null;
+  reviewNote: string | null;
+  createdAt: number;
+  reviewedAt: number | null;
+};
+
+function marketingStatus(status: MarketingItem["status"]): { kind: StatusKind; label: string } {
+  if (status === "signed_off") return { kind: "passed", label: "Signed off" };
+  if (status === "blocked") return { kind: "blocked", label: "Blocked" };
+  return { kind: "draft", label: "Draft" };
+}
+
 const btnBase: React.CSSProperties = {
   font: "600 12px var(--sans)",
   background: "var(--surface)",
@@ -88,9 +113,16 @@ export default function CompliancePage() {
     canReview ? {} : "skip",
   );
 
+  const marketing = useQuery(
+    api.marketing.listMarketingQueue,
+    canReview ? {} : "skip",
+  );
+
   const adjudicate = useMutation(api.compliance.adjudicateEligibility);
   const setAcl = useMutation(api.compliance.setTokenAclState);
   const screenAml = useMutation(api.compliance.screenAml);
+  const signOffMarketing = useMutation(api.marketing.signOffMarketing);
+  const blockMarketing = useMutation(api.marketing.blockMarketing);
 
   const onAdjudicate = useCallback(
     async (row: ComplianceCase, eligible: boolean) => {
@@ -147,6 +179,43 @@ export default function CompliancePage() {
       }
     },
     [screenAml],
+  );
+
+  const onSignOff = useCallback(
+    async (row: MarketingItem) => {
+      const note = window.prompt(
+        "Optional policy note for this sign-off (Reg A+ marketing criteria / B4)? Leave blank to sign off with no note.",
+      );
+      if (note === null) return; // cancelled
+      setBusy(row.id);
+      try {
+        await signOffMarketing({
+          id: row.id as Id<"marketingContent">,
+          note: note.trim() ? note : undefined,
+        });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [signOffMarketing],
+  );
+
+  const onBlock = useCallback(
+    async (row: MarketingItem) => {
+      const note = window.prompt("Reason for BLOCKING this marketing copy? (required)");
+      if (note === null) return; // cancelled
+      if (!note.trim()) {
+        window.alert("A non-empty note is required to block marketing copy.");
+        return;
+      }
+      setBusy(row.id);
+      try {
+        await blockMarketing({ id: row.id as Id<"marketingContent">, note });
+      } finally {
+        setBusy(null);
+      }
+    },
+    [blockMarketing],
   );
 
   const columns = useMemo<Column<ComplianceCase>[]>(
@@ -327,6 +396,92 @@ export default function CompliancePage() {
     [],
   );
 
+  const marketingColumns = useMemo<Column<MarketingItem>[]>(
+    () => [
+      {
+        key: "kind",
+        header: "Kind",
+        render: (r) => <span style={{ color: "var(--ink)", fontWeight: 500 }}>{r.kind}</span>,
+      },
+      {
+        key: "body",
+        header: "Copy",
+        render: (r) => (
+          <span
+            style={{ color: "var(--sub)", display: "inline-block", maxWidth: "48ch", lineHeight: 1.5 }}
+            title={r.body}
+          >
+            {r.body}
+          </span>
+        ),
+      },
+      {
+        key: "submittedBy",
+        header: "Submitted by",
+        render: (r) => <span style={{ color: "var(--sub)" }}>{r.submittedBy}</span>,
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (r) => {
+          const s = marketingStatus(r.status);
+          return (
+            <StatusChip
+              status={s.kind}
+              label={s.label}
+              title={r.reviewNote ? `Note: ${r.reviewNote}` : undefined}
+            />
+          );
+        },
+      },
+      {
+        key: "reviewedBy",
+        header: "Reviewed by",
+        render: (r) =>
+          r.reviewedBy ? (
+            <span style={{ color: "var(--ink)", fontWeight: 500 }}>{r.reviewedBy}</span>
+          ) : (
+            <span style={{ color: "var(--muted)" }}>— pending</span>
+          ),
+      },
+      {
+        key: "actions",
+        header: "",
+        align: "num",
+        render: (r) => {
+          const disabled = busy === r.id;
+          // A signed-off item is done — the gate is open; only a draft/blocked item takes a decision.
+          if (r.status === "signed_off") {
+            return <span style={{ color: "var(--muted)" }}>—</span>;
+          }
+          return (
+            <span style={{ display: "inline-flex", gap: "8px", justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onSignOff(r)}
+                style={{ ...btnBase, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, color: "var(--gain)", border: "1px solid var(--gain)" }}
+              >
+                Sign off
+              </button>
+              {r.status !== "blocked" && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onBlock(r)}
+                  style={{ ...btnBase, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, color: "var(--loss)", border: "1px solid var(--loss)" }}
+                >
+                  Block
+                </button>
+              )}
+            </span>
+          );
+        },
+      },
+    ],
+    [busy, onSignOff, onBlock],
+  );
+
   if (authLoading || me === undefined) {
     return (
       <div style={{ minHeight: "60vh", display: "grid", placeItems: "center", color: "var(--sub)" }}>
@@ -351,6 +506,8 @@ export default function CompliancePage() {
 
   const rows = (queue ?? []) as ComplianceCase[];
   const capRows = (capUsage ?? []) as CapUsageRow[];
+  const marketingRows = (marketing ?? []) as MarketingItem[];
+  const canExport = me.permissions.includes("audit.export");
 
   return (
     <section style={{ padding: "var(--space-6)" }}>
@@ -399,6 +556,62 @@ export default function CompliancePage() {
           subCaption={`${capRows.length} investor${capRows.length === 1 ? "" : "s"} with a computed cap · oversight mirrors settlement's enforcement rule`}
           emptyLabel={capUsage === undefined ? "Loading…" : "No investors with a computed Reg A+ cap yet."}
         />
+      </div>
+
+      <div style={{ marginTop: "var(--space-7)" }}>
+        <header style={{ marginBottom: "var(--space-4)" }}>
+          <h2 style={{ fontFamily: "var(--serif)", color: "var(--ink)", fontSize: "22px", margin: "0 0 var(--space-1)" }}>
+            Marketing sign-off
+          </h2>
+          <p style={{ color: "var(--sub)", maxWidth: "72ch", lineHeight: 1.6 }}>
+            Public/marketing copy <strong>cannot ship unsigned</strong>. Each item is a draft until a
+            compliance officer signs it off — the counsel gate — or blocks it with a mandatory note. A
+            block records the reason; a sign-off records the named reviewer. The Reg A+ pre-authorization
+            marketing limits (B4) are the criteria you apply here, weighed at sign-off — an optional
+            policy note captures your rationale.
+          </p>
+        </header>
+
+        <DataTable<MarketingItem>
+          columns={marketingColumns}
+          rows={marketingRows}
+          rowKey={(r) => r.id}
+          caption="Marketing queue"
+          subCaption={`${marketingRows.length} item${marketingRows.length === 1 ? "" : "s"} · only a signed-off item is shippable · a block requires a note`}
+          emptyLabel={marketing === undefined ? "Loading…" : "No marketing copy submitted for review yet."}
+        />
+      </div>
+
+      <div style={{ marginTop: "var(--space-7)" }}>
+        <header style={{ marginBottom: "var(--space-3)" }}>
+          <h2 style={{ fontFamily: "var(--serif)", color: "var(--ink)", fontSize: "22px", margin: "0 0 var(--space-1)" }}>
+            Regulator-ready audit export
+          </h2>
+          <p style={{ color: "var(--sub)", maxWidth: "72ch", lineHeight: 1.6 }}>
+            The regulator-ready record is the append-only audit trail — every compliance decision here
+            (adjudications, ACL freezes/thaws, marketing sign-offs and blocks) is written to it, naming
+            the human. Export it from the Audit console; this surface links to that existing export rather
+            than duplicating it.
+          </p>
+        </header>
+        {canExport ? (
+          <Link
+            href="/console/audit"
+            style={{
+              ...btnBase,
+              display: "inline-block",
+              textDecoration: "none",
+              color: "var(--ink)",
+              border: "1px solid var(--hairline-2)",
+            }}
+          >
+            Open the Audit trail &amp; export &rarr;
+          </Link>
+        ) : (
+          <p style={{ color: "var(--muted)", fontSize: "13px" }}>
+            Exporting the audit trail requires the <code>audit.export</code> permission.
+          </p>
+        )}
       </div>
     </section>
   );

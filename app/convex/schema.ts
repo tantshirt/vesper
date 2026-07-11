@@ -395,6 +395,31 @@ export default defineSchema({
     .index("by_run", ["runId"])
     .index("by_property", ["propertyId"]),
 
+  // --- Admin Story 5.3: marketing sign-off gate (public copy cannot ship unsigned) ---
+  // Public/marketing copy has a lifecycle `draft → signed_off | blocked`. Nothing ships unsigned: a
+  // public-render path consults `isMarketingSignedOff` (marketing.ts) — only a `signed_off` item is
+  // shippable. Only `compliance.review` may sign off (counsel gate) or block (with a MANDATORY note);
+  // `submittedBy` is the named human who drafted it, `reviewedBy` the compliance human who signed/blocked
+  // — attribution, never a system. `propertyId` is OPTIONAL (platform-wide copy has no property). The
+  // Reg A+ pre-authorization marketing limits (B4) are the reviewer's CRITERIA applied at sign-off, not
+  // hardcoded here — optionally captured in `reviewNote`. `by_status` drives the review queue (draft items
+  // awaiting a decision). Additive — no migration.
+  marketingContent: defineTable({
+    propertyId: v.optional(v.id("properties")), // the property this copy is about; absent ⇒ platform-wide
+    kind: v.string(), // e.g. "property_headline" | "email_blast" | "explore_blurb" — free-form until a story fixes it
+    body: v.string(), // the public copy under review (never PII — this is outward-facing marketing text)
+    status: v.union(
+      v.literal("draft"), // submitted, awaiting a compliance decision — NOT shippable
+      v.literal("signed_off"), // counsel-gated sign-off recorded — the ONLY shippable state
+      v.literal("blocked"), // refused with a mandatory reviewNote — not shippable
+    ),
+    submittedBy: v.string(), // the named human who drafted/submitted — attribution, never a system
+    reviewedBy: v.optional(v.string()), // the compliance human who signed off / blocked — set on review
+    reviewNote: v.optional(v.string()), // MANDATORY on block (the refusal reason); optional policy note on sign-off
+    createdAt: v.number(),
+    reviewedAt: v.optional(v.number()), // epoch ms the sign-off / block decision was recorded
+  }).index("by_status", ["status"]),
+
   // --- Admin Story 2.2: human evidence verification + assembly ("assembled, not approved") ---
   // An evidence package is a HAND-OFF, never an approval. A human reviewer (ai_reviewer, holding
   // `ai.review` and NO `gate.sign`) verifies extracted fields against their sources, then assembles the
