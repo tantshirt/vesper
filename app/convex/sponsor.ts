@@ -6,6 +6,7 @@ import { writeAudit } from "./audit";
 import { isWorkosIdentity, requireUnsafeStubs } from "./security";
 import { requireStaff, requirePermission, applyGrant } from "./rbac";
 import { isSponsorRole, sponsorRoleValidator } from "./roles";
+import { missingRequiredKinds, DOC_KIND_LABELS, type DocKind } from "./sponsorIntake";
 
 // Admin Story 6.1 — the SPONSOR half of the scope wall + KYB/Gate 0.
 //
@@ -54,7 +55,9 @@ export async function requireSponsor(ctx: SponsorReadCtx): Promise<SponsorContex
 
 // The audit actor for a sponsor action — the named human, never a system label (spine I4). Falls back
 // through email → name → workosId so an entry always names someone.
-function sponsorActor(staff: Doc<"staff">): string {
+// Exported so Story 6.2's `sponsorIntake.ts` attributes document uploads to the SAME resolved human
+// through one helper (no second copy of the actor rule).
+export function sponsorActor(staff: Doc<"staff">): string {
   return staff.email || staff.name || staff.workosId;
 }
 
@@ -216,6 +219,16 @@ export const submitDeal = mutation({
     const org = await ctx.db.get(orgId);
     if (org?.kybStatus !== "passed") {
       throw new Error("Complete KYB first: Gate 0 (KYB) must be passed before a deal can be submitted");
+    }
+
+    // Story 6.2: the intake CHECKLIST joins Gate 0 on the SAME (single) submit path — every required
+    // document kind must be `received` before a deal can leave draft. Block with a plain reason naming
+    // exactly what is still missing (never a bare "incomplete"). This reuses the checklist computed by
+    // sponsorIntake so there is one definition of "what's required".
+    const missing = await missingRequiredKinds(ctx, deal._id);
+    if (missing.length > 0) {
+      const labels = missing.map((k) => DOC_KIND_LABELS[k as DocKind] ?? k).join(", ");
+      throw new Error(`Upload required documents first: still missing ${labels}`);
     }
 
     if (deal.status !== "submitted") {

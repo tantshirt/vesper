@@ -63,6 +63,11 @@ export const PERMISSIONS = {
   "distribution.execute": "Execute an income distribution",
   "sponsor.read": "View own sponsor-deal data (tenant-isolated)",
   "sponsor.manage": "Manage own sponsor-deal submissions",
+  // Admin Story 6.2: upload/manage a deal's intake documents. Granted to BOTH sponsor roles because
+  // Sofia (sponsor_ops) does the uploading per her persona — this is deliberately WIDER than
+  // sponsor.manage (which stays principal-only for startDeal/submitDeal). Not operational (touches no
+  // money/ownership/eligibility on chain), so it is a plain tenant-scoped capability.
+  "sponsor.documents": "Upload/manage sponsor deal documents",
   "rbac.manage": "Configure staff roles and permissions",
   "breakglass.use": "Invoke time-boxed break-glass access",
   // Admin Story 1.3: OVERSIGHT permissions over the append-only audit trail (read the trail / export
@@ -114,8 +119,10 @@ export const ROLE_PERMISSIONS: Record<StaffRole, readonly Permission[]> = {
   ],
   compliance: ["property.read", "compliance.review", "freeze.execute", "audit.read", "audit.export"],
   ai_reviewer: ["property.read", "ai.review"],
-  sponsor_principal: ["sponsor.read", "sponsor.manage"],
-  sponsor_ops: ["sponsor.read"],
+  sponsor_principal: ["sponsor.read", "sponsor.manage", "sponsor.documents"],
+  // sponsor_ops (Sofia) uploads intake documents but cannot start/submit deals — sponsor.documents
+  // WITHOUT sponsor.manage. This is the split the 6.2 intake flow depends on.
+  sponsor_ops: ["sponsor.read", "sponsor.documents"],
   // audit.read/export are oversight, not operational — platform_admin holds them without gaining any
   // money/ownership/eligibility power.
   platform_admin: ["rbac.manage", "breakglass.use", "audit.read", "audit.export"],

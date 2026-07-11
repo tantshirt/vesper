@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { provisionSponsor, requireSponsor, myDeals } from "./sponsor";
+import { REQUIRED_DOC_KINDS } from "./sponsorIntake";
 import type { Id } from "./_generated/dataModel";
 
 // Story 6.1 — tenant isolation is the story's core claim, so it is PROVEN here, not asserted. The wall
@@ -184,11 +185,18 @@ describe("KYB / Gate 0 gates the submitted state", () => {
       t.withIdentity(workos("sp_a")).mutation(api.sponsor.submitDeal, { dealId }),
     ).rejects.toThrow("Complete KYB first");
 
-    // Record PASSED → Gate 0 open; submission succeeds and is audited.
+    // Record PASSED → Gate 0 open. Story 6.2 added the intake CHECKLIST to the SAME submit gate, so
+    // every required document must also be `received` before submit succeeds — upload them all.
     const kyb = await t
       .withIdentity(workos("sp_a"))
       .mutation(api.sponsor.recordKyb, { result: "passed" });
     expect(kyb.kybStatus).toBe("passed");
+
+    for (const kind of REQUIRED_DOC_KINDS) {
+      await t
+        .withIdentity(workos("sp_a"))
+        .mutation(api.sponsorIntake.uploadDocument, { dealId, kind, storageRef: `ref://${kind}` });
+    }
 
     const submitted = await t
       .withIdentity(workos("sp_a"))

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "vesper-app/convex/_generated/api";
+import type { Id } from "vesper-app/convex/_generated/dataModel";
 import { StatusChip, type StatusKind } from "@/app/components/ui/StatusChip";
 import { kybChip } from "./layout";
 
@@ -20,6 +21,19 @@ function dealChip(status: "draft" | "kyb_pending" | "submitted"): { status: Stat
       return { status: "pending", label: "KYB pending" };
     default:
       return { status: "draft", label: "Draft" };
+  }
+}
+
+// A timeline stage state (Story 6.2, derived server-side) → StatusChip. passed = done; needs-you = the
+// sponsor must act (warning); pending = waiting on a prerequisite / in review (neutral).
+function timelineChip(state: "passed" | "pending" | "needs-you"): { status: StatusKind; label: string } {
+  switch (state) {
+    case "passed":
+      return { status: "passed", label: "Done" };
+    case "needs-you":
+      return { status: "pending", label: "Needs you" };
+    default:
+      return { status: "draft", label: "Waiting" };
   }
 }
 
@@ -49,6 +63,26 @@ const buttonStyle = {
   cursor: "pointer",
 };
 
+const ghostButtonStyle = {
+  background: "transparent",
+  color: "var(--sub)",
+  padding: "var(--space-2) var(--space-3)",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--hairline)",
+  fontWeight: 600,
+  fontSize: "13px",
+  cursor: "pointer",
+};
+
+const fieldStyle = {
+  padding: "var(--space-2) var(--space-3)",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--hairline)",
+  background: "var(--bg)",
+  color: "var(--ink)",
+  fontSize: "14px",
+};
+
 export default function SponsorPage() {
   const org = useQuery(api.sponsor.mySponsorOrg);
   const deals = useQuery(api.sponsor.myDeals);
@@ -59,6 +93,7 @@ export default function SponsorPage() {
   const [propertyName, setPropertyName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openDealId, setOpenDealId] = useState<string | null>(null);
 
   // The layout already gated on `org` (null → "no sponsor access"), so it is present here. Guard for
   // the loading frame anyway so the first paint never throws.
@@ -177,31 +212,192 @@ export default function SponsorPage() {
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
             {deals.map((d) => {
               const dc = dealChip(d.status);
+              const isOpen = openDealId === d._id;
               return (
-                <li
-                  key={d._id}
-                  style={{ ...cardStyle, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-4)" }}
-                >
-                  <span style={{ color: "var(--ink)", fontWeight: 500 }}>{d.propertyName}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                    <StatusChip status={dc.status} label={dc.label} />
-                    {canManage && d.status !== "submitted" && (
+                <li key={d._id} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-4)" }}>
+                    <span style={{ color: "var(--ink)", fontWeight: 500 }}>{d.propertyName}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                      <StatusChip status={dc.status} label={dc.label} />
                       <button
-                        style={{ ...buttonStyle, opacity: busy ? 0.6 : 1 }}
-                        disabled={busy}
-                        title={kybPassed ? undefined : "Complete KYB first"}
-                        onClick={() => run(() => submitDeal({ dealId: d._id }))}
+                        style={ghostButtonStyle}
+                        aria-expanded={isOpen}
+                        onClick={() => setOpenDealId(isOpen ? null : d._id)}
                       >
-                        Submit for review
+                        {isOpen ? "Hide intake" : "Intake"}
                       </button>
-                    )}
+                      {canManage && d.status !== "submitted" && (
+                        <button
+                          style={{ ...buttonStyle, opacity: busy ? 0.6 : 1 }}
+                          disabled={busy}
+                          title={kybPassed ? undefined : "Complete KYB first"}
+                          onClick={() => run(() => submitDeal({ dealId: d._id }))}
+                        >
+                          Submit for review
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  {isOpen && <DealIntake dealId={d._id} />}
                 </li>
               );
             })}
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+// DealIntake (Story 6.2) — the per-deal intake panel: the required-document CHECKLIST, an upload
+// control with inline validation/reject reason, and the derived status TIMELINE. Every read/write is
+// org-scoped server-side (requireSponsor + deal-ownership assert); this component only renders what the
+// server returns. Both sponsor roles hold `sponsor.documents`, so the upload control shows for all —
+// the server re-checks the permission on every call regardless.
+function DealIntake({ dealId }: { dealId: Id<"sponsorDeals"> }) {
+  const checklist = useQuery(api.sponsorIntake.checklistStatus, { dealId });
+  const timeline = useQuery(api.sponsorIntake.dealTimeline, { dealId });
+  const documents = useQuery(api.sponsorIntake.listDealDocuments, { dealId });
+  const uploadDocument = useMutation(api.sponsorIntake.uploadDocument);
+
+  const [kind, setKind] = useState("");
+  const [storageRef, setStorageRef] = useState("");
+  const [busy, setBusy] = useState(false);
+  // The last upload's INLINE outcome — a validation rejection is a business result shown here, never an
+  // error toast (the mutation resolves; it does not throw on a rejection).
+  const [reject, setReject] = useState<string | null>(null);
+
+  // Default the kind picker to the first still-missing item once the checklist loads.
+  const firstMissing = checklist?.find((c) => c.status === "missing")?.kind ?? checklist?.[0]?.kind ?? "";
+  const selectedKind = kind || firstMissing;
+
+  async function onUpload(e: React.FormEvent) {
+    e.preventDefault();
+    const ref = storageRef.trim();
+    if (!selectedKind || !ref) return;
+    setBusy(true);
+    setReject(null);
+    try {
+      const res = await uploadDocument({ dealId, kind: selectedKind, storageRef: ref });
+      if (res.status === "rejected") {
+        setReject(res.rejectReason);
+      } else {
+        setStorageRef("");
+      }
+    } catch (err) {
+      setReject(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        borderTop: "1px solid var(--hairline)",
+        paddingTop: "var(--space-4)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-5)",
+      }}
+    >
+      {/* Checklist */}
+      <div>
+        <h3 style={{ ...sectionHeading, marginBottom: "var(--space-2)" }}>Required documents</h3>
+        {checklist === undefined ? (
+          <p style={{ color: "var(--sub)", fontSize: "14px" }}>Loading checklist…</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            {checklist.map((item) => (
+              <li key={item.kind} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" }}>
+                <span style={{ color: "var(--ink)", fontSize: "14px" }}>{item.label}</span>
+                {item.status === "received" ? (
+                  <StatusChip status="passed" label="Received" />
+                ) : (
+                  <StatusChip status="draft" label="Not uploaded" />
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Upload control with inline validation */}
+      <form onSubmit={onUpload} style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          <select
+            aria-label="Document type"
+            value={selectedKind}
+            onChange={(e) => setKind(e.target.value)}
+            style={{ ...fieldStyle, minWidth: "12rem" }}
+          >
+            {(checklist ?? []).map((item) => (
+              <option key={item.kind} value={item.kind}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <input
+            value={storageRef}
+            onChange={(e) => setStorageRef(e.target.value)}
+            placeholder="File reference (e.g. storage id / URL)"
+            aria-label="File reference"
+            style={{ ...fieldStyle, flex: 1, minWidth: "12rem" }}
+          />
+          <button type="submit" disabled={busy || !storageRef.trim()} style={{ ...buttonStyle, opacity: busy || !storageRef.trim() ? 0.6 : 1 }}>
+            Upload
+          </button>
+        </div>
+        {reject && (
+          <p role="alert" style={{ color: "var(--loss)", fontSize: "13px", margin: 0 }}>
+            {reject}
+          </p>
+        )}
+      </form>
+
+      {/* Uploaded documents — includes rejected rows with their reason */}
+      {documents && documents.length > 0 && (
+        <div>
+          <h3 style={{ ...sectionHeading, marginBottom: "var(--space-2)" }}>Uploads</h3>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            {documents.map((doc) => (
+              <li key={doc._id} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" }}>
+                  <span style={{ color: "var(--ink)", fontSize: "14px" }}>{doc.kind || "(no type)"}</span>
+                  {doc.status === "received" ? (
+                    <StatusChip status="passed" label="Received" />
+                  ) : (
+                    <StatusChip status="blocked" label="Rejected" />
+                  )}
+                </div>
+                {doc.status === "rejected" && doc.rejectReason && (
+                  <span style={{ color: "var(--loss)", fontSize: "13px" }}>{doc.rejectReason}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Derived status timeline */}
+      <div>
+        <h3 style={{ ...sectionHeading, marginBottom: "var(--space-2)" }}>Status timeline</h3>
+        {timeline === undefined ? (
+          <p style={{ color: "var(--sub)", fontSize: "14px" }}>Loading timeline…</p>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            {timeline.map((stage) => {
+              const tc = timelineChip(stage.state);
+              return (
+                <li key={stage.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" }}>
+                  <span style={{ color: "var(--ink)", fontSize: "14px" }}>{stage.label}</span>
+                  <StatusChip status={tc.status} label={tc.label} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

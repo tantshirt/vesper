@@ -122,6 +122,26 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_org", ["sponsorOrgId"]),
 
+  // --- Admin Story 6.2: sponsor intake documents (DEAL-keyed, tenant-isolated) ---
+  // A document uploaded against a sponsor deal's intake checklist. DELIBERATELY separate from 2-1's
+  // property-keyed `diligenceDocuments` (that table is internal-diligence storage): sponsor docs are
+  // keyed to a `sponsorDeals` row and are reachable ONLY through `requireSponsor` + a deal-ownership
+  // assert, so one tenant can never read/write another's. `status` is the validation-on-upload
+  // outcome: `received` (a valid required kind with a non-empty storageRef) or `rejected` (a durable
+  // business rejection carrying a human `rejectReason` — never a thrown/rolled-back error, per the
+  // 1-2/1-4 lesson). `storageRef` is an OPAQUE locator — validation is on kind/metadata, never bytes
+  // (no OCR / live storage vendor in this story). `uploadedBy` is the named sponsor human. `by_deal`
+  // is the only read path — the checklist, timeline, and submit gate all fan out from it.
+  sponsorDocuments: defineTable({
+    dealId: v.id("sponsorDeals"),
+    kind: v.string(), // free-form on the wire so a WRONG kind is a business rejection, not a validator throw
+    storageRef: v.string(), // opaque storage locator; empty ⇒ rejected
+    status: v.union(v.literal("received"), v.literal("rejected")),
+    rejectReason: v.optional(v.string()), // set iff status === "rejected" — the plain human reason
+    uploadedBy: v.string(), // the named sponsor human — attribution, never a system
+    createdAt: v.number(),
+  }).index("by_deal", ["dealId"]),
+
   // --- E1.4: the rest of the core (seed shape; refined by their owning stories) ---
   properties: defineTable({
     name: v.string(),
