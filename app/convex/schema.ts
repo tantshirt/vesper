@@ -32,13 +32,20 @@ export default defineSchema({
   }).index("by_workosId", ["workosId"]),
 
   // Append-only. Every money/ownership/eligibility/diligence mutation writes here (FR16 / spine I3).
+  // Admin Story 1.3: `onchainRef` is OPTIONAL — the on-chain reference (tx sig / mint) an admin
+  // on-chain action produces. Optional keeps all 25 existing consumer callers compiling unchanged and
+  // every legacy row valid (no migration). `by_actor` supports the audit view's actor filter.
   auditLog: defineTable({
     actor: v.string(),
     action: v.string(),
     target: v.string(),
     meta: v.optional(v.any()),
+    onchainRef: v.optional(v.string()),
     timestamp: v.number(),
-  }).index("by_target", ["target"]).index("by_timestamp", ["timestamp"]),
+  })
+    .index("by_target", ["target"])
+    .index("by_timestamp", ["timestamp"])
+    .index("by_actor", ["actor"]),
 
   // --- E1.4: the rest of the core (seed shape; refined by their owning stories) ---
   properties: defineTable({

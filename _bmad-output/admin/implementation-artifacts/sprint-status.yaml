@@ -17,7 +17,7 @@ development_status:
   # ---- Epic 1 (AE1): Admin Foundation, RBAC & Segregation of Duties (Sprint 0–1; GO now) ----
   epic-1: in-progress
   1-1-scaffold-workos-rbac: done               # ✅ monorepo workspace (app/+admin/), admin Next16 app, WorkOS as 2nd Convex provider (conditional), staff model + roles.ts/rbac.ts (grantRoles internalMutation, scope wall), 19 RBAC tests. Consumer intact: 599 tests pass, build/lint/token-guard green. Verified independently.
-  1-3-audit-log: ready-for-dev                 # Sprint 0. Extend existing auditLog/writeAudit with named-human (WorkOS) actor + on-chain-ref; append-only views/export.
+  1-3-audit-log: done                          # ✅ auditLog +onchainRef +by_actor index; writeAudit threads onchainRef (25 callers intact); audit.read/export perms (compliance+platform_admin export, ops read); listAudit/exportAudit permission-gated read-only queries; append-only proven structurally; admin Audit console page + nav. 609 tests pass.
   1-5-design-system-extension: done            # ✅ admin data layer: density scale + mono-data + StatusChip/DataTable/MonoData/OnChainActionPanel/Money primitives + styleguide route, all token-derived. check:tokens/lint/tsc/build:admin green; consumer untouched.
   1-2-segregation-of-duties: backlog           # Sprint 1. Net-new RBAC/SoD tables + per-request enforcement. Needs 1-1.
   1-4-platform-admin-break-glass: backlog      # Sprint 1. Needs 1-2.

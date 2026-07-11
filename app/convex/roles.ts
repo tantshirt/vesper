@@ -45,6 +45,12 @@ export const PERMISSIONS = {
   "sponsor.manage": "Manage own sponsor-deal submissions",
   "rbac.manage": "Configure staff roles and permissions",
   "breakglass.use": "Invoke time-boxed break-glass access",
+  // Admin Story 1.3: OVERSIGHT permissions over the append-only audit trail (read the trail / export
+  // it for regulators). These are NOT operational — they touch no money/ownership/eligibility on
+  // chain — so platform_admin MAY hold them without violating "Platform-Admin has no operational
+  // powers." They only ever read; there is no write/patch/delete of auditLog anywhere.
+  "audit.read": "View the append-only audit trail",
+  "audit.export": "Export the audit trail for regulators",
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -61,12 +67,16 @@ export const ROLE_PERMISSIONS: Record<StaffRole, readonly Permission[]> = {
     "gate.sign",
     "mint.execute",
     "distribution.execute",
+    // Oversight read of the trail (not export) — diligence sees the record, compliance owns export.
+    "audit.read",
   ],
-  compliance: ["property.read", "compliance.review", "freeze.execute"],
+  compliance: ["property.read", "compliance.review", "freeze.execute", "audit.read", "audit.export"],
   ai_reviewer: ["property.read", "ai.review"],
   sponsor_principal: ["sponsor.read", "sponsor.manage"],
   sponsor_ops: ["sponsor.read"],
-  platform_admin: ["rbac.manage", "breakglass.use"],
+  // audit.read/export are oversight, not operational — platform_admin holds them without gaining any
+  // money/ownership/eligibility power.
+  platform_admin: ["rbac.manage", "breakglass.use", "audit.read", "audit.export"],
 };
 
 // THE single permission-derivation path. A role change takes effect immediately because permissions

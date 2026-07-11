@@ -12,7 +12,8 @@ import type { Permission } from "vesper-app/convex/roles";
 // built; a later story adds its own entry when it ships the route (no dead links).
 type NavItem = { href: string; label: string; perm?: Permission; exact?: boolean };
 const NAV: NavItem[] = [
-  { href: "/console", label: "Overview", exact: true }, // the only built route in Story 1.1
+  { href: "/console", label: "Overview", exact: true }, // Story 1.1
+  { href: "/console/audit", label: "Audit", perm: "audit.read" }, // Story 1.3 — gated on audit.read
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {
