@@ -25,6 +25,7 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
   getAccount,
+  TokenAccountNotFoundError,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 
@@ -538,8 +539,17 @@ export async function buildSettlePurchaseTransaction(
         TOKEN_2022_PROGRAM_ID,
       );
       thawInjected = acct.isFrozen;
-    } catch {
-      thawInjected = true; // ATA doesn't exist yet → it will be created frozen in this tx
+    } catch (err) {
+      // ONLY a genuinely missing ATA means "it will be created frozen in this tx → inject a thaw".
+      // Any other failure (a transient RPC/network error) must NOT be swallowed into thawInjected=true:
+      // for a returning buyer whose ATA already exists and is thawed, a spurious thaw re-thaws an
+      // already-thawed account and reverts the whole settle. Surface the error instead of building a
+      // transaction that is guaranteed to fail on-chain.
+      if (err instanceof TokenAccountNotFoundError) {
+        thawInjected = true;
+      } else {
+        throw err;
+      }
     }
   }
 

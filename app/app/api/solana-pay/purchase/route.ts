@@ -123,8 +123,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Build against live devnet. A missing/closed Offering surfaces as a 400 with
-  // the underlying reason rather than an opaque 500.
+  // Build against live devnet.
   try {
     const { transaction } = await buildSettlePurchaseTransaction({
       connection: getConnection(),
@@ -141,7 +140,14 @@ export async function POST(req: Request) {
       message: `Buy ${params.tokenAmount} ${shares} of ${params.propertyMint.toBase58()}`,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to build transaction";
-    return NextResponse.json({ error: message }, { status: 400 });
+    // A build failure here is a server/upstream fault (RPC error, missing/closed Offering, decode
+    // failure) — NOT a client bad-request. Log the detail server-side and return a generic 502 rather
+    // than echoing err.message to the caller: the raw message leaks internal RPC/endpoint detail, and
+    // this endpoint is reachable unauthenticated whenever VESPER_ENABLE_SOLANA_PAY is true.
+    console.error("[solana-pay/purchase] buildSettlePurchaseTransaction failed:", err);
+    return NextResponse.json(
+      { error: "Unable to build the purchase transaction. Please try again." },
+      { status: 502 },
+    );
   }
 }
