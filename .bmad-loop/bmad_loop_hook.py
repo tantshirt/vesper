@@ -15,8 +15,13 @@ normal interactive sessions are unaffected.
 
 import json
 import os
+import re
 import sys
 import time
+
+
+def _safe_filename_part(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", value) or "unknown"
 
 
 def main() -> int:
@@ -47,7 +52,9 @@ def main() -> int:
     }
     events_dir = os.path.join(run_dir, "events")
     os.makedirs(events_dir, exist_ok=True)
-    final = os.path.join(events_dir, f"{ts}-{task_id}-{event_name}.json")
+    safe_task_id = _safe_filename_part(task_id)
+    safe_event_name = _safe_filename_part(event_name)
+    final = os.path.join(events_dir, f"{ts}-{safe_task_id}-{safe_event_name}.json")
     tmp = final + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(event, f)
