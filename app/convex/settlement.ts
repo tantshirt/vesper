@@ -142,7 +142,7 @@ export type SettlementResult = { ok: true } | { ok: false; reason: SettlementRea
 // the seam — so the real Quasar DvP program swaps in behind `dvpSettle` with no risk of settling for
 // an ineligible/over-cap/underfunded caller ("Convex never self-settles", enforced structurally).
 export function businessGateDecision(input: {
-  propertyStatus?: "open" | "funded" | "closed";
+  propertyStatus?: "gating" | "open" | "funded" | "closed";
   offeringSize?: number;
   offeringSettledAmount?: number;
   eligible: boolean;
@@ -202,7 +202,7 @@ export function businessGateDecision(input: {
 // first and only invokes the DvP seam once it passes, then applies the DvP result. DvP never surfaces
 // unless every business gate already passed.
 export function settlementDecision(input: {
-  propertyStatus?: "open" | "funded" | "closed";
+  propertyStatus?: "gating" | "open" | "funded" | "closed";
   offeringSize?: number;
   offeringSettledAmount?: number;
   eligible: boolean;

@@ -151,7 +151,16 @@ export default defineSchema({
     targetNetYield: v.number(), // e.g. 0.062
     offeringSize: v.number(), // USD basis for ownership % (B2 open decision)
     fundedPct: v.number(),
-    status: v.union(v.literal("open"), v.literal("funded"), v.literal("closed")),
+    // Admin Story 3.1 adds the pre-open `"gating"` state: a property under active diligence, its 8
+    // gates being signed, NOT yet browsable by investors (listOpen still filters status:"open"). A
+    // property advances open only after every gate is signed (allGatesSigned, gates.ts). Additive — no
+    // migration; every existing row stays valid.
+    status: v.union(
+      v.literal("gating"),
+      v.literal("open"),
+      v.literal("funded"),
+      v.literal("closed"),
+    ),
     spvName: v.string(),
     minInvestment: v.number(),
     mint: v.optional(v.string()), // E1.3: on-chain token address → routes chain events to this property
@@ -166,14 +175,26 @@ export default defineSchema({
     .index("by_mint", ["mint"]) // by_mint: E1.3 chain-event routing
     .index("by_operator", ["operatorSponsorOrgId"]), // Admin 6.3: a sponsor's operated properties in one lookup
 
+  // Admin Story 3.1 — the gate SIGNATURE ceremony's storage. A gate is `pending` until a human (or,
+  // for a multi-party gate, TWO distinct humans) signs it through the SoD engine (1-2). The added
+  // fields carry the ceremony's state:
+  //   • `multiParty` — DATA (B3 placeholder): true ⇒ the gate needs 2 DISTINCT signers, false/absent ⇒ 1.
+  //     Which gates are multi-party is a data edit (GATE_DEFINITIONS + this field), never a rebuild.
+  //   • `signerWorkosIds` — the distinct human IDENTITIES that have signed so far. Passed into 1-2's
+  //     requireGateSigner as the existing-signer set so a self-approval (same human twice) is blocked.
+  //   • `evidencePackageId` — the 2-2 evidence package the signer acted on (evidence, never an approval).
+  // All optional so every pre-existing (seeded, already-passed) gate row stays valid with no migration.
   diligenceGates: defineTable({
     propertyId: v.id("properties"),
     gateNo: v.number(), // 0..7
     label: v.string(),
     status: v.union(v.literal("pending"), v.literal("passed"), v.literal("failed")),
-    signedByHuman: v.optional(v.string()), // NEVER an AI (spine I4)
+    signedByHuman: v.optional(v.string()), // NEVER an AI (spine I4) — the distinct human signer(s)
     signedAt: v.optional(v.number()),
     evidenceRef: v.optional(v.string()),
+    multiParty: v.optional(v.boolean()), // true ⇒ requires 2 DISTINCT signers (B3 data placeholder)
+    signerWorkosIds: v.optional(v.array(v.string())), // the distinct human identities that have signed
+    evidencePackageId: v.optional(v.id("evidencePackages")), // the 2-2 evidence acted on (never an approval)
   }).index("by_property", ["propertyId"]),
 
   orders: defineTable({

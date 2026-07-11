@@ -30,8 +30,8 @@ development_status:
   epic-2-retrospective: notify
 
   # ---- Epic 3 (AE3): Gate → Mint → List ★ (Sprint 2–3) ----
-  epic-3: backlog
-  3-1-gate-signature-ceremony: backlog         # Sprint 2. SoD-enforced human signing. Needs 1-2 + 2-2. Partial-BLOCKED by B3 (gate defs).
+  epic-3: in-progress
+  3-1-gate-signature-ceremony: done            # ✅ THE SPINE. gates.ts: signGate (ACTION → 1-2 requireGateSigner, no forked SoD); multi-party (gate 6, DATA/GATE_DEFINITIONS placeholder pending B3) needs 2 distinct signers (self-approval blocked+durably audited); fee-conflict blocked; platform_admin denied; allGatesSigned advancement gate; evidence(2-2) shown as flags never approvals; no AI/non-human sign path. beginGating + workspace. 11 tests, 708 total pass. (B3 = data edit to GATE_DEFINITIONS.multiParty, not a rebuild.)
   3-2-mint-listing-console: backlog            # Sprint 3. Token-2022 mint (ACL frozen), step-up. BLOCKED_PARTIAL by B2 (step-up) + B3. Mint-creation flow is net-new (only a script today).
   3-3-mint-reconciliation: backlog             # Sprint 3. Reuses reconcile.ts/Helius. Needs 3-2.
   epic-3-retrospective: notify

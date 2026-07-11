@@ -41,7 +41,12 @@ export const getOnChainProof = query({
       name: v.string(),
       mint: v.optional(v.string()),
       spvName: v.string(),
-      status: v.union(v.literal("open"), v.literal("funded"), v.literal("closed")),
+      status: v.union(
+        v.literal("gating"),
+        v.literal("open"),
+        v.literal("funded"),
+        v.literal("closed"),
+      ),
       holderCount: v.number(),
       receipts: v.array(v.object({ dvpTxSig: v.string() })),
     }),
