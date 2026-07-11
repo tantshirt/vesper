@@ -246,9 +246,116 @@ export default function SponsorPage() {
         )}
       </section>
 
+      {/* Funding & holders (Story 6.4) */}
+      <FundingAndHolders />
+
       {/* Monthly updates (Story 6.3) */}
       <MonthlyUpdates />
     </div>
+  );
+}
+
+// FundingAndHolders (Story 6.4) — the sponsor funding / holder dashboard over the offerings their org
+// OPERATES. For each operated property it shows funding progress (fundedPct), amount raised / offering
+// size, the holder COUNT, and an ownership-concentration signal (the largest single holding). Every
+// value the server returns is an AGGREGATE — there is deliberately no investor identity, wallet, name,
+// or per-investor amount anywhere here; a sponsor sees the SHAPE of their cap table, not who is in it.
+// The server re-resolves the caller through requireSponsor + the operator link on every read, so this
+// component only renders offerings the caller's org operates.
+const usd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+// A holder-concentration reading from the largest single holding → StatusChip. Never color alone: the
+// chip pairs an icon + label. Diffuse (small top holding) is healthy; concentrated (a large single
+// holder) is a watch signal, not an error.
+function concentrationChip(topHoldingPct: number): { status: StatusKind; label: string } {
+  const pct = Math.round(topHoldingPct * 100);
+  if (topHoldingPct >= 0.25) return { status: "pending", label: `Concentrated — top holder ${pct}%` };
+  if (topHoldingPct <= 0) return { status: "draft", label: "No holders yet" };
+  return { status: "passed", label: `Diffuse — top holder ${pct}%` };
+}
+
+function FundingAndHolders() {
+  const offerings = useQuery(api.sponsorFunding.myOfferingFunding);
+
+  return (
+    <section>
+      <h2 style={sectionHeading}>Funding &amp; holders</h2>
+      <p style={{ color: "var(--sub)", fontSize: "14px", margin: "0 0 var(--space-4)", lineHeight: 1.6 }}>
+        Funding progress and the shape of the cap table for each offering you operate — a holder count
+        and concentration, never individual investors.
+      </p>
+
+      {offerings === undefined ? (
+        <p style={{ color: "var(--sub)" }}>Loading offerings…</p>
+      ) : offerings.length === 0 ? (
+        <div style={cardStyle}>
+          <p style={{ color: "var(--sub)", fontSize: "14px", margin: 0 }}>
+            No operated offerings yet. Once a property you operate is listed, its funding and holder
+            summary appears here.
+          </p>
+        </div>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          {offerings.map((o) => {
+            const fundedPct = Math.round(o.fundedPct * 100);
+            const cc = concentrationChip(o.topHoldingPct);
+            return (
+              <li key={o.propertyId} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" }}>
+                  <span style={{ color: "var(--ink)", fontWeight: 600 }}>{o.name}</span>
+                  <span style={{ color: "var(--sub)", fontSize: "13px" }}>{fundedPct}% funded</span>
+                </div>
+
+                {/* Funding progress bar — fundedPct, with the raised / offering size beneath it. */}
+                <div>
+                  <div
+                    role="progressbar"
+                    aria-valuenow={fundedPct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${o.name} funding progress`}
+                    style={{
+                      height: "8px",
+                      borderRadius: "var(--radius-md)",
+                      background: "var(--hairline)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.min(100, fundedPct)}%`,
+                        height: "100%",
+                        background: "var(--accent)",
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-3)", marginTop: "var(--space-2)" }}>
+                    <span style={{ color: "var(--ink)", fontSize: "14px" }}>
+                      {usd.format(o.amountRaised)} raised
+                    </span>
+                    <span style={{ color: "var(--sub)", fontSize: "14px" }}>
+                      of {usd.format(o.offeringSize)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Holder aggregates — a COUNT + a concentration signal. No investor identities. */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", flexWrap: "wrap" }}>
+                  <span style={{ color: "var(--sub)", fontSize: "13px" }}>
+                    {o.holderCount} {o.holderCount === 1 ? "holder" : "holders"}
+                  </span>
+                  <StatusChip status={cc.status} label={cc.label} title="Ownership concentration — largest single holding" />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
