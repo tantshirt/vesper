@@ -274,3 +274,41 @@ export const rejectExtractedField = mutation({
     return { rejected: true as const };
   },
 });
+
+// verifyExtractedField — a HUMAN (ai.review) verifies an extracted field against its source (Story 2-2).
+// This is the human half of AI4's loop: the AI extracted the field (cite-or-refuse), and now a named
+// reviewer confirms it holds. It ONLY moves a field `extracted → verified` (with an optional note) and
+// audits `ai.field.verified` to that human. It is NOT an approval: `verified` confers no gate signature
+// and no permission — a different human SIGNER (3-1) acts on the assembled evidence later. Only an
+// `extracted` field may be verified: an `uncited` field lacks a source (verify it and cite-or-refuse
+// would be defeated), and a `rejected`/already-`verified` field is not a fresh extraction to confirm.
+export const verifyExtractedField = mutation({
+  args: { fieldId: v.id("extractedFields"), note: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const staff: Doc<"staff"> = await requirePermission(ctx, "ai.review");
+    const actor = staff.email || staff.name || staff.workosId;
+
+    const field = await ctx.db.get(args.fieldId);
+    if (!field) throw new Error("Extracted field not found");
+    // Only a cited, unreviewed field may be verified — never an uncited (no source), a rejected, or an
+    // already-verified one. This keeps cite-or-refuse intact: verification requires a citation.
+    if (field.status !== "extracted") {
+      throw new Error(`Only an extracted field may be verified (this one is ${field.status})`);
+    }
+
+    const note = args.note?.trim();
+    await ctx.db.patch(args.fieldId, {
+      status: "verified",
+      reviewNote: note || undefined,
+    });
+
+    await writeAudit(ctx, {
+      actor,
+      action: "ai.field.verified",
+      target: args.fieldId,
+      meta: { propertyId: field.propertyId, runId: field.runId, field: field.field, note: note ?? "" },
+    });
+
+    return { verified: true as const };
+  },
+});

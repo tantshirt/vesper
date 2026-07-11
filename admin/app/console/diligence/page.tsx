@@ -8,11 +8,13 @@ import { DataTable, type Column } from "@/app/components/ui/DataTable";
 import { StatusChip, type StatusKind } from "@/app/components/ui/StatusChip";
 import { MonoData } from "@/app/components/ui/MonoData";
 
-// Story 2.1 — the ai.review reviewer's AI-extraction surface. It is a READ + flag view over the
-// extraction engine: permission-gated (ai.review) here in the UI AND independently on every Convex
-// request. This surface can ONLY start a run, read fields, and REJECT a field — the AI never approves,
-// and this page has no approve/sign control. CITE-OR-REFUSE is honored at render: an uncited field is
-// shown flagged as "Needs source" and NEVER as an established value. Full verify/assemble is Story 2-2.
+// Story 2.1 + 2.2 — the ai.review reviewer's AI-extraction surface. It is a READ + human-review view
+// over the extraction engine: permission-gated (ai.review) here in the UI AND independently on every
+// Convex request. This surface can start a run, read fields, VERIFY or REJECT a field, and ASSEMBLE the
+// verified set into an evidence package — but it has NO approve/sign/mint control. The AI never approves;
+// the reviewer never signs. An assembled package is explicitly labelled a hand-off "pending a human
+// signer (not an approval)". CITE-OR-REFUSE is honored at render: an uncited field is shown flagged as
+// "Needs source" and NEVER as an established value.
 
 type FieldRow = {
   id: string;
@@ -22,9 +24,19 @@ type FieldRow = {
   value: string;
   sourceRef: string | null;
   confidence: number;
-  status: "extracted" | "uncited" | "rejected";
+  status: "extracted" | "uncited" | "rejected" | "verified";
   reviewNote: string | null;
   needsSource: boolean;
+};
+
+type PackageRow = {
+  id: string;
+  gateNo: number | null;
+  fieldCount: number;
+  status: "assembled";
+  assembledBy: string;
+  assembledAt: number;
+  note: string | null;
 };
 
 type RunRow = {
@@ -37,6 +49,7 @@ type RunRow = {
 
 function statusForField(row: FieldRow): { kind: StatusKind; label: string } {
   if (row.status === "rejected") return { kind: "blocked", label: "Rejected" };
+  if (row.status === "verified") return { kind: "complete", label: "Verified" };
   if (row.status === "uncited") return { kind: "pending", label: "Needs source" };
   return { kind: "passed", label: "Cited" };
 }
@@ -85,6 +98,8 @@ export default function DiligencePage() {
   const [propertyId, setPropertyId] = useState<string>("");
   const [starting, setStarting] = useState(false);
   const [rejecting, setRejecting] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [assembling, setAssembling] = useState(false);
 
   const properties = useQuery(
     api.diligenceQueries.listReviewableProperties,
@@ -98,9 +113,15 @@ export default function DiligencePage() {
     api.diligenceQueries.listExtractedFields,
     canReview && propertyId ? { propertyId: propertyId as Id<"properties"> } : "skip",
   );
+  const packages = useQuery(
+    api.diligenceEvidence.listEvidencePackages,
+    canReview && propertyId ? { propertyId: propertyId as Id<"properties"> } : "skip",
+  );
 
   const startExtraction = useMutation(api.diligenceExtract.startExtraction);
   const rejectField = useMutation(api.diligenceExtract.rejectExtractedField);
+  const verifyField = useMutation(api.diligenceExtract.verifyExtractedField);
+  const assemblePackage = useMutation(api.diligenceEvidence.assembleEvidencePackage);
 
   const onStart = async () => {
     if (!propertyId) return;
@@ -125,6 +146,41 @@ export default function DiligencePage() {
     },
     [rejectField],
   );
+
+  const onVerify = useCallback(
+    async (fieldId: string) => {
+      // Verification is a human confirmation against the source — the note is optional.
+      const note = window.prompt("Optional note for verifying this field against its source:") ?? undefined;
+      setVerifying(fieldId);
+      try {
+        await verifyField({ fieldId: fieldId as Id<"extractedFields">, note });
+      } finally {
+        setVerifying(null);
+      }
+    },
+    [verifyField],
+  );
+
+  // The verified fields are the ONLY ones assemble accepts — the button and the mutation agree.
+  const verifiedFieldIds = useMemo(
+    () => ((fields ?? []) as FieldRow[]).filter((f) => f.status === "verified").map((f) => f.id),
+    [fields],
+  );
+
+  const onAssemble = useCallback(async () => {
+    if (!propertyId || verifiedFieldIds.length === 0) return;
+    const note = window.prompt("Optional note for this evidence package:") ?? undefined;
+    setAssembling(true);
+    try {
+      await assemblePackage({
+        propertyId: propertyId as Id<"properties">,
+        fieldIds: verifiedFieldIds as Id<"extractedFields">[],
+        note,
+      });
+    } finally {
+      setAssembling(false);
+    }
+  }, [assemblePackage, propertyId, verifiedFieldIds]);
 
   const fieldColumns = useMemo<Column<FieldRow>[]>(
     () => [
@@ -181,31 +237,62 @@ export default function DiligencePage() {
         key: "action",
         header: "",
         align: "num",
-        render: (r) =>
-          r.status === "rejected" ? (
-            <span style={{ color: "var(--muted)" }}>{r.reviewNote ?? "rejected"}</span>
-          ) : (
-            <button
-              type="button"
-              disabled={rejecting === r.id}
-              onClick={() => onReject(r.id)}
-              style={{
-                cursor: rejecting === r.id ? "not-allowed" : "pointer",
-                opacity: rejecting === r.id ? 0.5 : 1,
-                font: "600 12px var(--sans)",
-                color: "var(--loss)",
-                background: "var(--surface)",
-                border: "1px solid var(--loss)",
-                borderRadius: "var(--radius-pill)",
-                padding: "6px 14px",
-              }}
-            >
-              Reject
-            </button>
-          ),
+        render: (r) => {
+          // Terminal, human-set states render their note, not an action.
+          if (r.status === "rejected") {
+            return <span style={{ color: "var(--muted)" }}>{r.reviewNote ?? "rejected"}</span>;
+          }
+          if (r.status === "verified") {
+            return (
+              <span style={{ color: "var(--muted)" }}>{r.reviewNote ?? "verified"}</span>
+            );
+          }
+          const busy = verifying === r.id || rejecting === r.id;
+          return (
+            <span style={{ display: "inline-flex", gap: "8px", justifyContent: "flex-end" }}>
+              {/* Only a CITED (extracted) field can be verified — an uncited field lacks a source. */}
+              {r.status === "extracted" && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onVerify(r.id)}
+                  style={{
+                    cursor: busy ? "not-allowed" : "pointer",
+                    opacity: busy ? 0.5 : 1,
+                    font: "600 12px var(--sans)",
+                    color: "var(--gain)",
+                    background: "var(--surface)",
+                    border: "1px solid var(--gain)",
+                    borderRadius: "var(--radius-pill)",
+                    padding: "6px 14px",
+                  }}
+                >
+                  Verify
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onReject(r.id)}
+                style={{
+                  cursor: busy ? "not-allowed" : "pointer",
+                  opacity: busy ? 0.5 : 1,
+                  font: "600 12px var(--sans)",
+                  color: "var(--loss)",
+                  background: "var(--surface)",
+                  border: "1px solid var(--loss)",
+                  borderRadius: "var(--radius-pill)",
+                  padding: "6px 14px",
+                }}
+              >
+                Reject
+              </button>
+            </span>
+          );
+        },
       },
     ],
-    [rejecting, onReject],
+    [rejecting, verifying, onReject, onVerify],
   );
 
   const runColumns = useMemo<Column<RunRow>[]>(
@@ -232,6 +319,54 @@ export default function DiligencePage() {
           const s = statusForRun(r.status);
           return <StatusChip status={s.kind} label={s.label} />;
         },
+      },
+    ],
+    [],
+  );
+
+  const packageColumns = useMemo<Column<PackageRow>[]>(
+    () => [
+      {
+        key: "assembledAt",
+        header: "Assembled",
+        render: (r) => <span style={{ color: "var(--sub)", fontSize: "13px" }}>{fmtTimestamp(r.assembledAt)}</span>,
+      },
+      {
+        key: "assembledBy",
+        header: "By",
+        render: (r) => <span style={{ color: "var(--ink)", fontWeight: 500 }}>{r.assembledBy}</span>,
+      },
+      {
+        key: "gateNo",
+        header: "Gate",
+        render: (r) => (
+          <span style={{ color: "var(--sub)" }}>{r.gateNo === null ? "—" : `Gate ${r.gateNo}`}</span>
+        ),
+      },
+      {
+        key: "fieldCount",
+        header: "Fields",
+        align: "num",
+        render: (r) => (
+          <span style={{ color: "var(--sub)", fontVariantNumeric: "tabular-nums" }}>{r.fieldCount}</span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        // A package is a HAND-OFF, not an approval — the chip and its title say so explicitly.
+        render: () => (
+          <StatusChip
+            status="pending"
+            label="Assembled — pending a human signer (not an approval)"
+            title="Assembly confers nothing. A human signer (Gate ceremony) acts on this evidence later."
+          />
+        ),
+      },
+      {
+        key: "note",
+        header: "Note",
+        render: (r) => <span style={{ color: "var(--muted)" }}>{r.note ?? "—"}</span>,
       },
     ],
     [],
@@ -273,8 +408,9 @@ export default function DiligencePage() {
         </h1>
         <p style={{ color: "var(--sub)", maxWidth: "72ch", lineHeight: 1.6 }}>
           The AI extracts facts from diligence documents — it never approves. Each field is a citation or
-          it is flagged as needing a source. A human reviewer rejects what does not hold; verification and
-          assembly come next.
+          it is flagged as needing a source. A human reviewer verifies what holds and rejects what does
+          not, then assembles the verified evidence into a package for a human signer. Assembly is a
+          hand-off, not an approval — the reviewer never signs.
         </p>
       </header>
 
@@ -330,6 +466,50 @@ export default function DiligencePage() {
             caption="Extracted fields"
             subCaption={`${fieldRows.length} field${fieldRows.length === 1 ? "" : "s"} · uncited fields need a source before they are facts`}
             emptyLabel={fields === undefined ? "Loading…" : "No extracted fields for this property yet."}
+          />
+
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: "var(--space-3)",
+              margin: "var(--space-5) 0 var(--space-6)",
+            }}
+          >
+            <button
+              type="button"
+              disabled={verifiedFieldIds.length === 0 || assembling}
+              onClick={onAssemble}
+              style={{
+                cursor: verifiedFieldIds.length === 0 || assembling ? "not-allowed" : "pointer",
+                opacity: verifiedFieldIds.length === 0 || assembling ? 0.5 : 1,
+                font: "600 13px var(--sans)",
+                color: "var(--surface)",
+                background: "var(--accent)",
+                border: "0",
+                borderRadius: "var(--radius-pill)",
+                padding: "10px 22px",
+              }}
+            >
+              {assembling ? "Assembling…" : `Assemble package (${verifiedFieldIds.length} verified)`}
+            </button>
+            <span style={{ color: "var(--muted)", fontSize: "13px", lineHeight: 1.5, maxWidth: "60ch" }}>
+              Assembly gathers the verified fields into a package for a human signer. It is a hand-off, not
+              an approval — the reviewer never signs.
+            </span>
+          </div>
+
+          <DataTable<PackageRow>
+            columns={packageColumns}
+            rows={(packages ?? []) as PackageRow[]}
+            rowKey={(r) => r.id}
+            caption="Evidence packages"
+            subCaption="Assembled — pending a human signer (not an approval)"
+            showDensityToggle={false}
+            emptyLabel={
+              packages === undefined ? "Loading…" : "No evidence packages assembled for this property yet."
+            }
           />
         </>
       )}

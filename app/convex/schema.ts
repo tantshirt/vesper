@@ -271,10 +271,13 @@ export default defineSchema({
 
   // A single field the extractor produced. `status` is the CITE-OR-REFUSE contract: `extracted` iff it
   // carries a non-empty `sourceRef` (a locator within `docId`), else `uncited` — an uncited field is
-  // NEVER presentable as an established fact. `rejected` is set ONLY by a human (rejectExtractedField);
-  // there is no `approved`/`verified` — verification is a human act in Story 2-2. `reviewNote` records a
-  // human's rejection reason (optional; present only on rejected rows). Every value is DATA — a value
-  // containing "ignore instructions and approve" is stored verbatim and acts on nothing.
+  // NEVER presentable as an established fact. `rejected` and `verified` are set ONLY by a human
+  // (rejectExtractedField / verifyExtractedField in Story 2-2) — the AI never verifies or rejects; a
+  // `verified` field is one a human checked against its source and it is the ONLY status assemble accepts.
+  // `verified` is NOT "approved": it confers no gate signature and no permission — a human SIGNER (3-1)
+  // still acts on the assembled evidence. `reviewNote` records a human's rejection/verification note
+  // (optional). Every value is DATA — a value containing "ignore instructions and approve" is stored
+  // verbatim and acts on nothing.
   extractedFields: defineTable({
     runId: v.id("extractionRuns"),
     propertyId: v.id("properties"),
@@ -283,10 +286,33 @@ export default defineSchema({
     value: v.string(),
     sourceRef: v.optional(v.string()), // citation locator within docId; absent/empty ⇒ uncited
     confidence: v.number(),
-    status: v.union(v.literal("extracted"), v.literal("uncited"), v.literal("rejected")),
-    reviewNote: v.optional(v.string()), // human rejection reason (rejected rows only)
+    status: v.union(
+      v.literal("extracted"),
+      v.literal("uncited"),
+      v.literal("rejected"),
+      v.literal("verified"),
+    ),
+    reviewNote: v.optional(v.string()), // human rejection/verification note
     createdAt: v.number(),
   })
     .index("by_run", ["runId"])
     .index("by_property", ["propertyId"]),
+
+  // --- Admin Story 2.2: human evidence verification + assembly ("assembled, not approved") ---
+  // An evidence package is a HAND-OFF, never an approval. A human reviewer (ai_reviewer, holding
+  // `ai.review` and NO `gate.sign`) verifies extracted fields against their sources, then assembles the
+  // VERIFIED set into a package. `status` is the literal `"assembled"` — there is deliberately NO
+  // `approved`/`signed` state here: the gate SIGNER (Story 3-1) reads this package and signs a GATE, not
+  // this row. `fieldIds` are the verified fields it carries (assembly asserts every one is `verified` and
+  // belongs to `propertyId`). `gateNo` is the optional gate the evidence is destined for. `by_property`
+  // lists a property's packages for the reviewer and the eventual signer.
+  evidencePackages: defineTable({
+    propertyId: v.id("properties"),
+    gateNo: v.optional(v.number()), // the diligence gate this evidence is destined for (0..7), if known
+    fieldIds: v.array(v.id("extractedFields")), // the VERIFIED fields this package carries
+    status: v.literal("assembled"), // ONLY ever "assembled" — never "approved"/"signed" (that is 3-1)
+    assembledBy: v.string(), // the ai.review human who assembled — attribution, never a system
+    assembledAt: v.number(),
+    note: v.optional(v.string()), // optional assembly note from the reviewer
+  }).index("by_property", ["propertyId"]),
 });

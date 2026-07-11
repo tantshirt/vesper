@@ -24,9 +24,9 @@ development_status:
   epic-1-retrospective: notify
 
   # ---- Epic 2 (AE2): Diligence & AI Evidence (Sprint 1–2; GO) ----
-  epic-2: in-progress
+  epic-2: done                                 # ✅ EPIC AE2 COMPLETE — AI diligence: extraction (2-1) + human verify/assemble (2-2). AI extracts, human verifies, evidence "assembled not approved" routes to a (different) human signer. 661 tests pass.
   2-1-ai-extraction-review: done               # ✅ diligenceExtract module (STRUCTURALLY isolated: no gate/mint/sign imports; public surface = startExtraction+rejectExtractedField data writes only; model seam internalAction requireUnsafeStubs-stubbed). Cite-or-refuse (uncited fields never presented as fact); injection strings stay inert data (proven: gate stays unsigned, roles unchanged). ai.review-gated. 8 tests, 653 total pass.
-  2-2-evidence-assembly: backlog               # Sprint 2. "assembled, not approved"; no sign capability. Needs 2-1.
+  2-2-evidence-assembly: done                  # ✅ verifyExtractedField (extracted→verified, human); assembleEvidencePackage (ONLY verified fields; status v.literal("assembled") — "approved" unrepresentable; module has no sign/approve/mint export). Routes to a human signer (3-1). 8 tests, 661 total pass.
   epic-2-retrospective: notify
 
   # ---- Epic 3 (AE3): Gate → Mint → List ★ (Sprint 2–3) ----
