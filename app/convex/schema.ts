@@ -169,6 +169,9 @@ export default defineSchema({
     .index("by_property", ["propertyId"]) // by_property: E2.4 count holders per property without a scan
     .index("by_user_property", ["userId", "propertyId"]), // settle/reconcile fetch one holding by (user, property)
 
+  // Admin Story 5.1 adds the compliance-adjudication fields (`amlFlag`, `reviewedBy`, `reviewReason`)
+  // — all OPTIONAL so the consumer `recordEligibility` path (E3.2) leaves them unset and no migration
+  // is needed. `by_property` lists a property's eligibility rows for the compliance review queue.
   eligibility: defineTable({
     userId: v.id("users"),
     propertyId: v.id("properties"),
@@ -176,7 +179,12 @@ export default defineSchema({
     jurisdiction: v.string(),
     tokenAclState: v.union(v.literal("frozen"), v.literal("thawed")),
     personaInquiryId: v.optional(v.string()), // E3.2: ref to the (stubbed) Persona KYC inquiry that produced this result
-  }).index("by_user_property", ["userId", "propertyId"]),
+    amlFlag: v.optional(v.union(v.literal("clear"), v.literal("flagged"))), // Admin 5.1: (stubbed) AML screening result recorded for the reviewer
+    reviewedBy: v.optional(v.string()), // Admin 5.1: the compliance human who last adjudicated / set the ACL — attribution, never a system
+    reviewReason: v.optional(v.string()), // Admin 5.1: the recorded reason for the compliance override (mandatory on adjudication)
+  })
+    .index("by_user_property", ["userId", "propertyId"])
+    .index("by_property", ["propertyId"]),
 
   // E3.2: restricted-jurisdiction waitlist — never a dead-end. One row per (user, property);
   // idempotent join via by_user_property. Fed only by joinWaitlist (audited).
