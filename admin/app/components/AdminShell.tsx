@@ -13,6 +13,8 @@ import type { Permission } from "vesper-app/convex/roles";
 type NavItem = { href: string; label: string; perm?: Permission; exact?: boolean };
 const NAV: NavItem[] = [
   { href: "/console", label: "Overview", exact: true }, // Story 1.1
+  { href: "/console/roles", label: "Roles", perm: "rbac.manage" }, // Story 1.4 — gated on rbac.manage
+  { href: "/console/break-glass", label: "Break-glass", perm: "breakglass.use" }, // Story 1.4 — gated on breakglass.use
   { href: "/console/audit", label: "Audit", perm: "audit.read" }, // Story 1.3 — gated on audit.read
 ];
 

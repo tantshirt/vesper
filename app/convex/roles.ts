@@ -55,6 +55,28 @@ export const PERMISSIONS = {
 
 export type Permission = keyof typeof PERMISSIONS;
 
+// The four OPERATIONAL permissions — the ones that touch money / ownership / eligibility / gates on
+// chain. Platform-Admin holds NONE of them (ROLE_PERMISSIONS below), and Story 1.4's grant surface
+// refuses to combine any of them with `platform_admin`. Named here once so "operational" has a single
+// definition every guard reads from, rather than a hand-copied list that could drift.
+export const OPERATIONAL_PERMISSIONS = [
+  "gate.sign",
+  "mint.execute",
+  "freeze.execute",
+  "distribution.execute",
+] as const satisfies readonly Permission[];
+
+// rolesWithOperationalPower — the subset of the given roles whose derived permissions include ANY
+// operational permission. Used by the platform-admin-operational grant guard (rbacAdmin.ts) so it can
+// name the offending roles in the rejection reason.
+export function rolesWithOperationalPower(roles: readonly string[]): StaffRole[] {
+  const op = new Set<string>(OPERATIONAL_PERMISSIONS);
+  return roles.filter((r) => {
+    const perms = ROLE_PERMISSIONS[r as StaffRole];
+    return perms ? perms.some((p) => op.has(p)) : false;
+  }) as StaffRole[];
+}
+
 // Role → permissions. Platform-Admin deliberately holds NO operational permission — it configures
 // RBAC and holds break-glass only. NOTE: this table alone does not make "Platform-Admin has no
 // operational power" *structurally* true — it holds `rbac.manage`, the power to grant, so it can

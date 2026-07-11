@@ -63,6 +63,23 @@ export default defineSchema({
     .index("by_staff_property", ["workosId", "propertyId"])
     .index("by_property", ["propertyId"]),
 
+  // --- Admin Story 1.4: audited, time-boxed break-glass ---
+  // A break-glass grant confers its `scope` (a set of permissions) to `workosId` ONLY while
+  // `Date.now() < expiresAt` AND `status === "active"` (see rbac.ts effectivePermissions). Expired
+  // (by clock) or revoked records confer NOTHING. Every row is created ONLY via the audited
+  // `breakglass.use`-gated `invokeBreakGlass` mutation, carries a MANDATORY human reason, and is
+  // compliance-visible via `listActiveBreakGlass`. `by_workosId` answers "what active elevation does
+  // this staff member hold right now?" in one indexed lookup on the permission-resolution hot path.
+  breakGlass: defineTable({
+    workosId: v.string(), // the staff member the elevated scope is conferred to (their WorkOS `sub`)
+    scope: v.array(v.string()), // the permissions conferred while active (validated against the catalog at write time)
+    reason: v.string(), // MANDATORY non-empty justification — a break-glass entry naming no reason is worthless
+    invokedBy: v.string(), // the human who authorized the elevation — audited as the actor
+    createdAt: v.number(),
+    expiresAt: v.number(), // bounded (≤ 60 min from creation); permissions lapse the instant now ≥ this
+    status: v.union(v.literal("active"), v.literal("expired"), v.literal("revoked")),
+  }).index("by_workosId", ["workosId"]),
+
   // --- E1.4: the rest of the core (seed shape; refined by their owning stories) ---
   properties: defineTable({
     name: v.string(),

@@ -1,10 +1,16 @@
 import { query, internalMutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
 import { isWorkosIdentity } from "./security";
-import { permissionsForRoles, roleValidator, type Permission } from "./roles";
+import {
+  permissionsForRoles,
+  roleValidator,
+  PERMISSIONS,
+  type Permission,
+  type StaffRole,
+} from "./roles";
 
 // Per-request RBAC enforcement — the surface EVERY admin query and mutation resolves the caller
 // through before reading or writing any data. RBAC is decided server-side on every request; a UI
@@ -34,8 +40,36 @@ export async function requireStaff(ctx: StaffReadCtx): Promise<Doc<"staff">> {
   return staff;
 }
 
-// requirePermission — requireStaff, then check the derived permission set. On a MUTATION a denial
-// first writes an `rbac.denied` audit entry naming the actor, the permission, and the roles held.
+// effectivePermissions — the SINGLE permission-resolution path, now including audited break-glass.
+// The base is `permissionsForRoles(staff.roles)` (still the only role-derivation path — unchanged, so
+// a staff member with no break-glass row resolves to EXACTLY their role permissions, and every 1-1
+// test stays green). On top of that we UNION the scope of every ACTIVE, NON-EXPIRED break-glass grant
+// for this staff member (Admin Story 1.4). "Active" means both `status === "active"` AND
+// `Date.now() < expiresAt` — a revoked grant (status) OR a lapsed one (clock) contributes NOTHING, so
+// break-glass confers scope only inside its time box. Scope entries are re-validated against the
+// permission catalog here as a belt-and-braces guard (invokeBreakGlass already validates at write).
+export async function effectivePermissions(
+  ctx: StaffReadCtx,
+  staff: Doc<"staff">,
+): Promise<Permission[]> {
+  const out = new Set<Permission>(permissionsForRoles(staff.roles));
+  const now = Date.now();
+  const grants = await ctx.db
+    .query("breakGlass")
+    .withIndex("by_workosId", (q) => q.eq("workosId", staff.workosId))
+    .collect();
+  for (const g of grants) {
+    if (g.status !== "active" || now >= g.expiresAt) continue; // expired/revoked confers nothing
+    for (const p of g.scope) {
+      if (p in PERMISSIONS) out.add(p as Permission);
+    }
+  }
+  return [...out];
+}
+
+// requirePermission — requireStaff, then check the EFFECTIVE permission set (roles ∪ active
+// break-glass). On a MUTATION a denial first writes an `rbac.denied` audit entry naming the actor, the
+// permission, and the roles held.
 //
 // HONEST LIMITATION: that write is inside the failing mutation's transaction, so it rolls back with
 // the throw — it is NOT a durable blocked-attempt record today. Durable blocked-attempt logging is
@@ -46,7 +80,7 @@ export async function requirePermission(
   permission: Permission,
 ): Promise<Doc<"staff">> {
   const staff = await requireStaff(ctx);
-  const permissions = permissionsForRoles(staff.roles);
+  const permissions = await effectivePermissions(ctx, staff);
   if (permissions.includes(permission)) return staff;
 
   if ("insert" in ctx.db) {
@@ -79,7 +113,10 @@ export const me = query({
       name: staff.name,
       email: staff.email,
       roles: staff.roles,
-      permissions: permissionsForRoles(staff.roles),
+      // EFFECTIVE permissions — role permissions plus any active break-glass scope (Story 1.4). The
+      // nav/console read the same set the server enforces, so an active elevation shows immediately and
+      // vanishes the instant it expires.
+      permissions: await effectivePermissions(ctx, staff),
     };
   },
 });
@@ -104,50 +141,71 @@ export const grantRoles = internalMutation({
     status: v.optional(v.union(v.literal("active"), v.literal("revoked"))),
   },
   handler: async (ctx, args) => {
-    const workosId = args.workosId.trim();
-    const email = args.email.trim();
-    const name = args.name.trim();
-    const grantedBy = args.grantedBy.trim();
-    // Reject empty identity/actor fields — an audit entry naming no human is worthless, and a role
-    // grant is the platform's most security-relevant write.
-    if (!workosId || !email || !name || !grantedBy || args.roles.length === 0) {
-      throw new Error(
-        "grantRoles requires non-empty workosId, email, name, grantedBy, and at least one role",
-      );
-    }
-
-    const existing = await ctx.db
-      .query("staff")
-      .withIndex("by_workosId", (q) => q.eq("workosId", workosId))
-      .unique();
-
-    let staffId;
-    let resolvedStatus: "active" | "revoked";
-    if (existing) {
-      // Preserve an existing `revoked` status unless `status` is passed explicitly. A name/role edit
-      // must never silently reactivate revoked staff.
-      resolvedStatus = args.status ?? existing.status;
-      await ctx.db.patch(existing._id, { email, name, roles: args.roles, status: resolvedStatus });
-      staffId = existing._id;
-    } else {
-      resolvedStatus = args.status ?? "active";
-      staffId = await ctx.db.insert("staff", {
-        workosId,
-        email,
-        name,
-        roles: args.roles,
-        status: resolvedStatus,
-        createdAt: Date.now(),
-      });
-    }
-
-    await writeAudit(ctx, {
-      actor: grantedBy, // the authorizer, never the grantee
-      action: "staff.granted",
-      target: workosId,
-      meta: { roles: args.roles, email, name, status: resolvedStatus },
-    });
-
-    return staffId;
+    return await applyGrant(ctx, args);
   },
 });
+
+// applyGrant — the SINGLE grant core, shared verbatim by the internal `grantRoles` (1-1, the
+// deployment-owner bootstrap path) and the public `rbac.manage`-gated `manageStaffRoles` (1-4). There
+// is exactly ONE place that trims/validates identity fields, upserts the `staff` row (revoke-preserving
+// on edits), and writes the `staff.granted` audit attributing the AUTHORIZER — so the two surfaces can
+// never drift on what a grant means. `manageStaffRoles` layers its self-grant / SoD / platform-admin
+// guards BEFORE calling this; this function itself performs no permission check (its two callers own
+// that: `grantRoles` is internal-only, `manageStaffRoles` is `rbac.manage`-gated).
+export async function applyGrant(
+  ctx: MutationCtx,
+  args: {
+    workosId: string;
+    email: string;
+    name: string;
+    roles: StaffRole[];
+    grantedBy: string;
+    status?: "active" | "revoked";
+  },
+): Promise<Id<"staff">> {
+  const workosId = args.workosId.trim();
+  const email = args.email.trim();
+  const name = args.name.trim();
+  const grantedBy = args.grantedBy.trim();
+  // Reject empty identity/actor fields — an audit entry naming no human is worthless, and a role
+  // grant is the platform's most security-relevant write.
+  if (!workosId || !email || !name || !grantedBy || args.roles.length === 0) {
+    throw new Error(
+      "grantRoles requires non-empty workosId, email, name, grantedBy, and at least one role",
+    );
+  }
+
+  const existing = await ctx.db
+    .query("staff")
+    .withIndex("by_workosId", (q) => q.eq("workosId", workosId))
+    .unique();
+
+  let staffId: Id<"staff">;
+  let resolvedStatus: "active" | "revoked";
+  if (existing) {
+    // Preserve an existing `revoked` status unless `status` is passed explicitly. A name/role edit
+    // must never silently reactivate revoked staff.
+    resolvedStatus = args.status ?? existing.status;
+    await ctx.db.patch(existing._id, { email, name, roles: args.roles, status: resolvedStatus });
+    staffId = existing._id;
+  } else {
+    resolvedStatus = args.status ?? "active";
+    staffId = await ctx.db.insert("staff", {
+      workosId,
+      email,
+      name,
+      roles: args.roles,
+      status: resolvedStatus,
+      createdAt: Date.now(),
+    });
+  }
+
+  await writeAudit(ctx, {
+    actor: grantedBy, // the authorizer, never the grantee
+    action: "staff.granted",
+    target: workosId,
+    meta: { roles: args.roles, email, name, status: resolvedStatus },
+  });
+
+  return staffId;
+}
