@@ -83,6 +83,28 @@ export function requireUnsafeStubs(feature: string): void {
   }
 }
 
+// Admin Story 3.2 — the STEP-UP seam (B2 placeholder). The irreversible mint (mintOffering) demands a
+// step-up RE-AUTHENTICATION at the moment of the act — proof the operator physically re-authorized this
+// one on-chain, irreversible operation, not merely that a valid session exists. The REAL implementation
+// is a WebAuthn hardware-key / passkey challenge (blocker B2): mintOffering would present a challenge,
+// the operator taps their security key, and this verifies the resulting assertion against the caller's
+// registered credential (via ctx) before the mint fires. That provider is not wired in this environment,
+// so — mirroring `requireUnsafeStubs` posture exactly — this is a DOCUMENTED STUB: satisfied in test /
+// behind the flag so the mint path is exercisable, and REFUSED otherwise (the irreversible act is never
+// allowed without a real step-up). `ctx` is accepted now so the real WebAuthn verification (which needs
+// the caller identity) drops in behind this signature with no caller change. Flag it pending B2.
+export function stepUpEnabled(): boolean {
+  return process.env.VESPER_ENABLE_UNSAFE_STUBS === "true" || process.env.NODE_ENV === "test";
+}
+
+export function requireStepUp(_ctx: unknown, action: string): void {
+  if (!stepUpEnabled()) {
+    throw new Error(
+      `Step-up authentication is required for ${action} (pending B2 WebAuthn hardware-key step-up)`,
+    );
+  }
+}
+
 export function seedWritesEnabled(): boolean {
   return process.env.VESPER_ENABLE_DEMO_SEED === "true" || process.env.NODE_ENV === "test";
 }

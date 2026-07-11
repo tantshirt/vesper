@@ -164,6 +164,15 @@ export default defineSchema({
     spvName: v.string(),
     minInvestment: v.number(),
     mint: v.optional(v.string()), // E1.3: on-chain token address → routes chain events to this property
+    // Admin Story 3.2 — the mint-intent lifecycle for the mint & listing console. `minting` is set the
+    // instant the STUB-MINT server-wallet seam returns (optimistic intent, on-chain-unconfirmed);
+    // `confirmed` is set ONLY once the mint is reconciled from chain truth (3-3 Helius confirm — a stub
+    // confirm helper stands in for the demo). Listing (status gating→open) is gated on `confirmed`, so a
+    // property can never be listed on an unconfirmed mint. Optional/absent ⇒ never minted; additive, no
+    // migration — every existing row stays valid.
+    mintStatus: v.optional(
+      v.union(v.literal("none"), v.literal("minting"), v.literal("confirmed")),
+    ),
     firstDistributionDate: v.optional(v.string()), // E4.5: YYYY-MM-DD; optional so existing docs stay valid (no migration)
     // Admin Story 6.3: the sponsor↔property OPERATOR link. When set, this is the ONE sponsor org that
     // operates the property and may author its monthly updates; `sponsorUpdates` scopes every read/write

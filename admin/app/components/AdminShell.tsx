@@ -15,6 +15,7 @@ const NAV: NavItem[] = [
   { href: "/console", label: "Overview", exact: true }, // Story 1.1
   { href: "/console/diligence", label: "Diligence", perm: "ai.review" }, // Story 2.1 — gated on ai.review
   { href: "/console/diligence/gates", label: "Gates", perm: "gate.sign" }, // Story 3.1 — gated on gate.sign
+  { href: "/console/mint", label: "Mint", perm: "mint.execute" }, // Story 3.2 — gated on mint.execute
   { href: "/console/compliance", label: "Compliance", perm: "compliance.review" }, // Story 5.1 — gated on compliance.review
   { href: "/console/roles", label: "Roles", perm: "rbac.manage" }, // Story 1.4 — gated on rbac.manage
   { href: "/console/break-glass", label: "Break-glass", perm: "breakglass.use" }, // Story 1.4 — gated on breakglass.use
