@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
 import { requirePermission } from "./rbac";
 import { requireUnsafeStubs } from "./security";
+import { regACapStatus, type RegACapState } from "./eligibility";
 
 // Admin Story 5.1 — the compliance officer's KYC/AML adjudication → Token-ACL surface.
 //
@@ -312,5 +313,63 @@ export const getComplianceCase = query({
     const row = await findEligibility(ctx, userId, propertyId);
     if (!row) return null;
     return await toCase(ctx, row);
+  },
+});
+
+// A display-safe Reg A+ cap-usage row. `limit`/`invested`/`remaining` are the COMPUTED cap + cumulative
+// invested (both regulated-decision outputs, not raw inputs) — NO income/net-worth PII ever surfaces
+// (those raw inputs aren't even stored on `users`). Only the computed cap + state + a safe handle.
+type CapUsageRow = {
+  userId: Id<"users">;
+  handle: string;
+  kycStatus: Doc<"users">["kycStatus"];
+  limit: number | null;
+  invested: number;
+  remaining: number;
+  state: RegACapState;
+};
+
+// listCapUsage — Admin 5.2 Reg A+ cap OVERSIGHT, gated on `compliance.review`. Lists every investor who
+// has a COMPUTED cap (`regAAnnualLimit` set by the KYC-verified path), each with headroom + state via the
+// shared `regACapStatus` helper — which MIRRORS settlement's enforcement rule, so the oversight view and
+// the settlement gate can never disagree. Optional `state` filter narrows to (e.g.) only `near`/`over`.
+// This is enforcement's read-only mirror: it never blocks a purchase and never touches the regA fields.
+export const listCapUsage = query({
+  args: {
+    state: v.optional(
+      v.union(
+        v.literal("no-limit"),
+        v.literal("ok"),
+        v.literal("near"),
+        v.literal("over"),
+      ),
+    ),
+  },
+  handler: async (ctx, { state }): Promise<CapUsageRow[]> => {
+    await requirePermission(ctx, "compliance.review");
+
+    const users = await ctx.db.query("users").collect();
+    const rows: CapUsageRow[] = [];
+    for (const user of users) {
+      // Oversight covers only investors with a COMPUTED Reg A+ cap (the verified KYC path set it).
+      if (typeof user.regAAnnualLimit !== "number" || !Number.isFinite(user.regAAnnualLimit)) {
+        continue;
+      }
+      const status = regACapStatus({
+        limit: user.regAAnnualLimit,
+        invested: user.regAInvestedThisYear,
+      });
+      if (state && status.state !== state) continue;
+      rows.push({
+        userId: user._id,
+        handle: userHandle(user),
+        kycStatus: user.kycStatus,
+        limit: status.limit,
+        invested: status.invested,
+        remaining: status.remaining,
+        state: status.state,
+      });
+    }
+    return rows;
   },
 });

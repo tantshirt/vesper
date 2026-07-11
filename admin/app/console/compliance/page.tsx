@@ -7,6 +7,7 @@ import type { Id } from "vesper-app/convex/_generated/dataModel";
 import { DataTable, type Column } from "@/app/components/ui/DataTable";
 import { StatusChip, type StatusKind } from "@/app/components/ui/StatusChip";
 import { MonoData } from "@/app/components/ui/MonoData";
+import { Money } from "@/app/components/ui/Money";
 
 // Story 5.1 — the compliance officer's KYC/AML adjudication → Token-ACL surface. It is a review queue
 // over the SAME `eligibility` data the consumer self-service path writes — NOT a second eligibility
@@ -43,6 +44,25 @@ function kycStatus(status: ComplianceCase["kycStatus"]): { kind: StatusKind; lab
   return { kind: "draft", label: "None" };
 }
 
+// Story 5.2 — Reg A+ cap OVERSIGHT (read-only). `regACapStatus` on the server MIRRORS settlement's
+// enforcement rule, so this view can never disagree with the gate that actually blocks a purchase.
+type CapUsageRow = {
+  userId: string;
+  handle: string;
+  kycStatus: ComplianceCase["kycStatus"];
+  limit: number | null;
+  invested: number;
+  remaining: number;
+  state: "no-limit" | "ok" | "near" | "over";
+};
+
+function capState(state: CapUsageRow["state"]): { kind: StatusKind; label: string } {
+  if (state === "ok") return { kind: "passed", label: "Within cap" };
+  if (state === "near") return { kind: "pending", label: "Near cap" };
+  if (state === "over") return { kind: "blocked", label: "Over cap" };
+  return { kind: "blocked", label: "No cap" }; // no-limit ⇒ blocking, like settlement's unset-limit gate
+}
+
 const btnBase: React.CSSProperties = {
   font: "600 12px var(--sans)",
   background: "var(--surface)",
@@ -60,6 +80,11 @@ export default function CompliancePage() {
 
   const queue = useQuery(
     api.compliance.listComplianceQueue,
+    canReview ? {} : "skip",
+  );
+
+  const capUsage = useQuery(
+    api.compliance.listCapUsage,
     canReview ? {} : "skip",
   );
 
@@ -252,6 +277,56 @@ export default function CompliancePage() {
     [busy, canFreeze, onAdjudicate, onSetAcl, onScreen],
   );
 
+  const capColumns = useMemo<Column<CapUsageRow>[]>(
+    () => [
+      {
+        key: "user",
+        header: "Investor",
+        render: (r) => <MonoData value={r.handle} label="investor handle" />,
+      },
+      {
+        key: "kyc",
+        header: "KYC",
+        render: (r) => {
+          const s = kycStatus(r.kycStatus);
+          return <StatusChip status={s.kind} label={s.label} />;
+        },
+      },
+      {
+        key: "limit",
+        header: "Reg A+ cap",
+        align: "num",
+        render: (r) =>
+          r.limit === null ? (
+            <span style={{ color: "var(--muted)" }}>—</span>
+          ) : (
+            <Money value={r.limit} currency="USD" />
+          ),
+      },
+      {
+        key: "invested",
+        header: "Invested",
+        align: "num",
+        render: (r) => <Money value={r.invested} currency="USD" />,
+      },
+      {
+        key: "remaining",
+        header: "Remaining",
+        align: "num",
+        render: (r) => <Money value={r.remaining} currency="USD" signed />,
+      },
+      {
+        key: "state",
+        header: "Status",
+        render: (r) => {
+          const s = capState(r.state);
+          return <StatusChip status={s.kind} label={s.label} />;
+        },
+      },
+    ],
+    [],
+  );
+
   if (authLoading || me === undefined) {
     return (
       <div style={{ minHeight: "60vh", display: "grid", placeItems: "center", color: "var(--sub)" }}>
@@ -275,6 +350,7 @@ export default function CompliancePage() {
   }
 
   const rows = (queue ?? []) as ComplianceCase[];
+  const capRows = (capUsage ?? []) as CapUsageRow[];
 
   return (
     <section style={{ padding: "var(--space-6)" }}>
@@ -301,6 +377,29 @@ export default function CompliancePage() {
         subCaption={`${rows.length} case${rows.length === 1 ? "" : "s"} · adjudication requires a recorded reason`}
         emptyLabel={queue === undefined ? "Loading…" : "No eligibility cases to review yet."}
       />
+
+      <div style={{ marginTop: "var(--space-7)" }}>
+        <header style={{ marginBottom: "var(--space-4)" }}>
+          <h2 style={{ fontFamily: "var(--serif)", color: "var(--ink)", fontSize: "22px", margin: "0 0 var(--space-1)" }}>
+            Reg A+ cap usage
+          </h2>
+          <p style={{ color: "var(--sub)", maxWidth: "72ch", lineHeight: 1.6 }}>
+            Read-only oversight of every investor&apos;s Reg A+ per-investor headroom. The status mirrors
+            the exact rule the settlement gate enforces — an unset cap or an investor at/over their limit
+            is <strong>blocking</strong>, and ≥80% consumed reads as <strong>near cap</strong>. This view
+            never blocks a purchase itself; enforcement lives in settlement.
+          </p>
+        </header>
+
+        <DataTable<CapUsageRow>
+          columns={capColumns}
+          rows={capRows}
+          rowKey={(r) => r.userId}
+          caption="Cap usage"
+          subCaption={`${capRows.length} investor${capRows.length === 1 ? "" : "s"} with a computed cap · oversight mirrors settlement's enforcement rule`}
+          emptyLabel={capUsage === undefined ? "Loading…" : "No investors with a computed Reg A+ cap yet."}
+        />
+      </div>
     </section>
   );
 }

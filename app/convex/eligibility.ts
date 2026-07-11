@@ -26,6 +26,59 @@ export function computeRegALimit(input: { annualIncome: number; netWorth: number
   return 0.1 * Math.max(income, netWorth);
 }
 
+// Reg A+ per-investor cap STATUS for the compliance-oversight view (Admin 5.2). Pure + ctx-free.
+//
+// ENFORCEMENT AUTHORITY: `settlement.businessGateDecision` is the single place a purchase is blocked —
+// its inline rule is `typeof limit !== "number" || !Number.isFinite(limit) || invested + amount > limit`
+// ⇒ reason "reg-a-cap" (an unset/non-finite limit blocks entirely). This helper does NOT enforce; it
+// MIRRORS that same rule for a read-only headroom view so the oversight surface and the settlement gate
+// can never disagree:
+//   • unset / non-finite limit ⇒ "over" (blocking — exactly settlement's "unset limit blocks"),
+//   • cumulative invested at/above the limit ⇒ "over" (settlement's `invested + amount > limit` at the
+//     boundary: any further amount > 0 breaches),
+//   • ≥80% of the cap consumed ⇒ "near" (a headroom warning; not itself blocking),
+//   • otherwise ⇒ "ok".
+// "no-limit" is a reserved blocking-equivalent state; the unset-limit case collapses to "over" so the
+// view reads identically to settlement's decision.
+export type RegACapState = "no-limit" | "ok" | "near" | "over";
+
+export function regACapStatus(input: {
+  limit: number | null | undefined;
+  invested: number | null | undefined;
+}): {
+  limit: number | null;
+  invested: number;
+  remaining: number;
+  pctUsed: number;
+  state: RegACapState;
+} {
+  const invested =
+    typeof input.invested === "number" && Number.isFinite(input.invested)
+      ? Math.max(0, input.invested)
+      : 0;
+
+  // Unset / non-finite limit ⇒ blocking, exactly as settlement treats it (no cap → no purchase).
+  if (typeof input.limit !== "number" || !Number.isFinite(input.limit)) {
+    return { limit: null, invested, remaining: 0, pctUsed: 1, state: "over" };
+  }
+
+  const limit = input.limit;
+  const remaining = limit - invested;
+  // A zero cap is fully consumed by definition (avoid 0/0 NaN); otherwise the fraction used.
+  const pctUsed = limit > 0 ? invested / limit : 1;
+
+  let state: RegACapState;
+  if (invested >= limit) {
+    state = "over"; // at/above the cap — mirrors settlement's `invested + amount > limit` at the edge
+  } else if (pctUsed >= 0.8) {
+    state = "near";
+  } else {
+    state = "ok";
+  }
+
+  return { limit, invested, remaining, pctUsed, state };
+}
+
 // Jurisdiction rule (MVP allowlist): US ("US" / "United States", case/space-insensitive) is
 // eligible; anything else is restricted → waitlist. State-by-state blue-sky handling is out of scope.
 export function isEligibleJurisdiction(jurisdiction: string): boolean {

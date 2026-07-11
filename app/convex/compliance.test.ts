@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { regACapStatus } from "./eligibility";
 
 // Admin Story 5.1 — the compliance adjudication → Token-ACL surface. The story's real risk surface is
 // PROVEN here, not asserted:
@@ -333,5 +334,144 @@ describe("consumer recordEligibility is unaffected by the compliance fields", ()
     expect(elig?.reviewedBy).toBeUndefined();
     expect(elig?.reviewReason).toBeUndefined();
     expect(elig?.amlFlag).toBeUndefined();
+  });
+});
+
+// Admin Story 5.2 — Reg A+ cap OVERSIGHT. The pure `regACapStatus` helper MIRRORS settlement's
+// enforcement rule (settlement.businessGateDecision: unset/non-finite limit blocks; invested at/above
+// limit blocks), so the oversight view and the settlement gate can never disagree.
+describe("regACapStatus — mirrors settlement's Reg A+ cap enforcement rule", () => {
+  test("invested ABOVE the limit ⇒ over (blocking)", () => {
+    const s = regACapStatus({ limit: 10_000, invested: 12_000 });
+    expect(s.state).toBe("over");
+    expect(s.remaining).toBe(-2_000);
+  });
+
+  test("invested exactly AT the limit ⇒ over (settlement blocks any further amount)", () => {
+    const s = regACapStatus({ limit: 10_000, invested: 10_000 });
+    expect(s.state).toBe("over");
+    expect(s.remaining).toBe(0);
+    expect(s.pctUsed).toBe(1);
+  });
+
+  test("no finite limit (unset) ⇒ over (blocking) — matching settlement's 'unset limit blocks'", () => {
+    expect(regACapStatus({ limit: undefined, invested: 0 }).state).toBe("over");
+    expect(regACapStatus({ limit: null, invested: 0 }).state).toBe("over");
+    const nan = regACapStatus({ limit: Number.NaN, invested: 500 });
+    expect(nan.state).toBe("over");
+    expect(nan.limit).toBeNull();
+  });
+
+  test("≥80% of the cap consumed ⇒ near (headroom warning, not blocking)", () => {
+    const at80 = regACapStatus({ limit: 10_000, invested: 8_000 });
+    expect(at80.state).toBe("near");
+    expect(at80.pctUsed).toBeCloseTo(0.8);
+    expect(regACapStatus({ limit: 10_000, invested: 9_500 }).state).toBe("near");
+  });
+
+  test("below 80% consumed ⇒ ok", () => {
+    const s = regACapStatus({ limit: 10_000, invested: 2_500 });
+    expect(s.state).toBe("ok");
+    expect(s.remaining).toBe(7_500);
+    expect(s.pctUsed).toBeCloseTo(0.25);
+  });
+
+  test("missing invested defaults to 0 (never NaN/negative garbage)", () => {
+    const s = regACapStatus({ limit: 10_000, invested: undefined });
+    expect(s.invested).toBe(0);
+    expect(s.remaining).toBe(10_000);
+    expect(s.state).toBe("ok");
+  });
+});
+
+describe("listCapUsage — compliance.review-gated Reg A+ cap oversight, no PII", () => {
+  // Seed three investors with COMPUTED caps at different headroom levels + one with NO computed cap
+  // (never surfaces in the oversight list). No income/net worth is stored on `users` at all.
+  async function seedCapUsers(t: ReturnType<typeof convexTest>) {
+    return await t.run(async (ctx) => {
+      const ok = await ctx.db.insert("users", {
+        privyId: "did:privy:cap-ok",
+        kycStatus: "verified",
+        walletAddress: "OkWaLLeT111111111111111111111111111111111111",
+        regAAnnualLimit: 10_000,
+        regAInvestedThisYear: 2_000, // 20% → ok
+        createdAt: Date.now(),
+      });
+      const near = await ctx.db.insert("users", {
+        privyId: "did:privy:cap-near",
+        kycStatus: "verified",
+        walletAddress: "NeArWaLLeT2222222222222222222222222222222222",
+        regAAnnualLimit: 10_000,
+        regAInvestedThisYear: 9_000, // 90% → near
+        createdAt: Date.now(),
+      });
+      const over = await ctx.db.insert("users", {
+        privyId: "did:privy:cap-over",
+        kycStatus: "verified",
+        walletAddress: "OvErWaLLeT3333333333333333333333333333333333",
+        regAAnnualLimit: 10_000,
+        regAInvestedThisYear: 11_000, // over cap
+        createdAt: Date.now(),
+      });
+      // No computed cap → excluded from oversight entirely.
+      await ctx.db.insert("users", {
+        privyId: "did:privy:cap-none",
+        kycStatus: "pending",
+        walletAddress: "NoNeWaLLeT4444444444444444444444444444444444",
+        createdAt: Date.now(),
+      });
+      return { ok, near, over };
+    });
+  }
+
+  test("returns display-safe cap rows for investors with a computed limit; ops is DENIED", async () => {
+    const t = convexTest(schema, modules);
+    await seedCapUsers(t);
+    await seedStaff(t, { workosId: "user_compliance", roles: ["compliance"] });
+    await seedStaff(t, { workosId: "user_ops", roles: ["ops_diligence"] });
+
+    const rows = await asCompliance(t).query(api.compliance.listCapUsage, {});
+    // Exactly the three with a computed cap — the no-cap investor is excluded.
+    expect(rows).toHaveLength(3);
+    const byState = Object.fromEntries(rows.map((r) => [r.state, r]));
+    expect(byState.ok.remaining).toBe(8_000);
+    expect(byState.near.state).toBe("near");
+    expect(byState.over.remaining).toBe(-1_000);
+    // Display-safe handle — never the raw full wallet.
+    expect(rows.every((r) => !r.handle.includes("11111111"))).toBe(true);
+
+    await expect(asOps(t).query(api.compliance.listCapUsage, {})).rejects.toThrow(
+      "Not permitted: compliance.review",
+    );
+  });
+
+  test("surfaces NO income/net-worth PII — only computed limit / invested / remaining / state", async () => {
+    const t = convexTest(schema, modules);
+    await seedCapUsers(t);
+    await seedStaff(t, { workosId: "user_compliance", roles: ["compliance"] });
+
+    const rows = await asCompliance(t).query(api.compliance.listCapUsage, {});
+    for (const r of rows) {
+      expect(Object.keys(r).sort()).toEqual(
+        ["handle", "invested", "kycStatus", "limit", "remaining", "state", "userId"].sort(),
+      );
+    }
+    const json = JSON.stringify(rows);
+    expect(json).not.toContain("annualIncome");
+    expect(json).not.toContain("netWorth");
+  });
+
+  test("state filter narrows to a single cap state", async () => {
+    const t = convexTest(schema, modules);
+    await seedCapUsers(t);
+    await seedStaff(t, { workosId: "user_compliance", roles: ["compliance"] });
+
+    const over = await asCompliance(t).query(api.compliance.listCapUsage, { state: "over" });
+    expect(over).toHaveLength(1);
+    expect(over[0].state).toBe("over");
+
+    const near = await asCompliance(t).query(api.compliance.listCapUsage, { state: "near" });
+    expect(near).toHaveLength(1);
+    expect(near[0].state).toBe("near");
   });
 });

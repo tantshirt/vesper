@@ -46,7 +46,7 @@ development_status:
   # ---- Epic 5 (AE5): Compliance & Reg A+ (alongside Epic 3) ----
   epic-5: in-progress
   5-1-kyc-acl-eligibility: done                # ✅ compliance.ts adjudication over existing eligibility table: adjudicateEligibility (compliance.review, non-empty reason, ineligible→frozen, schedules on-chain attestation), setTokenAclState (freeze.execute), screenAml (stubbed AML). No PII in audit/queue; consumer recordEligibility unaffected. 11 tests, 672 total pass.
-  5-2-rega-cap-enforcement: backlog            # Sprint 4. Reg A+ caps as blocks. Needs 5-1.
+  5-2-rega-cap-enforcement: done               # ✅ OVERSIGHT only — enforcement already exists in settlement.businessGateDecision. regACapStatus pure helper (mirrors settlement's rule: unset→over, invested≥limit→over, ≥80%→near); listCapUsage (compliance.review, no PII); cap-usage table. settlement untouched. 9 tests, 690 total pass.
   5-3-marketing-signoff-export: backlog        # Sprint 5. BLOCKED_PARTIAL by B4 (marketing limits). Audit export.
   epic-5-retrospective: notify
 
