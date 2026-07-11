@@ -279,6 +279,23 @@ export default defineSchema({
     status: v.union(v.literal("scheduled"), v.literal("paid"), v.literal("missed")),
   }).index("by_user", ["userId"]).index("by_property_period", ["propertyId", "period"]),
 
+  // --- Admin Story 4.2: distribution ESCROW funding (B1 custody STUB seam) ---
+  // Records that a distribution's net pool has been FUNDED into escrow for a (property, period) BEFORE
+  // any on-chain push fires — the fund-before-push gate. It is a documented STUB for the real custody
+  // deposit (blocker B1): `fundDistributionEscrow` (requireUnsafeStubs, mirroring the STUB-MINT/-DIST
+  // posture) writes this row; the live custody vendor replaces the seam with no shape change. One row
+  // per (property, period), upserted idempotently via `by_property_period`. `custodyRef` is the
+  // (stubbed) custody deposit reference; `fundedBy` is the named human who funded — attribution, never
+  // a system. Additive — no migration; the push refuses unless a row exists here for the period.
+  distributionEscrow: defineTable({
+    propertyId: v.id("properties"),
+    period: v.string(), // "2026-07"
+    fundedAmount: v.number(), // the net pool funded into escrow (dollars) — must cover the push
+    custodyRef: v.string(), // ref to the (stubbed) custody deposit that funded this escrow
+    fundedBy: v.string(), // the named human who funded — attribution, never a system
+    fundedAt: v.number(),
+  }).index("by_property_period", ["propertyId", "period"]),
+
   // --- E1.3: on-chain reconciliation (chain-wins mirror sync) ---
   // Append-only record of every processed on-chain event. `by_signature` is the idempotency key
   // (a tx signature is applied at most once) and the store for any Convex↔chain discrepancy.

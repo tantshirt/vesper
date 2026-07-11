@@ -40,7 +40,7 @@ development_status:
   epic-4: in-progress
   4-1-distribution-builder: done               # ✅ distributionBuild.ts: buildDistribution (distribution.execute) reuses computeShares + splitDistribution (mgmt fee INSIDE net, pool=gross-costs, not re-charged); scheduled rows only (never paid); idempotent upsert per (user,period), paid rows untouched; matchesTarget vs targetNetYield (variance surfaces, no throw); unlisted refused; platform_admin denied. 11 tests, 737 total pass.
   4-3-distribution-reconciliation: backlog     # Sprint 4. Paused-with-reason; reuses reconcile pipeline. Needs 4-1.
-  4-2-fund-push: backlog                        # Sprint 5. BLOCKED by B1 (custody) + B2 (step-up). No on-chain distribution program yet; push is stubbed.
+  4-2-fund-push: done                          # ✅ distributionPay.ts: fundDistributionEscrow (B1 stub, requireUnsafeStubs) → pushDistribution (action, distribution.execute, requireStepUp, fund-before-push) reuses runDistributionPush (STUB-DIST) — stamps txSig but NEVER sets paid (NO self-settle; paid flip owned by reconcile income.reconciled via confirmDistributionStub→applyChainEventInner, actor helius). Push-failure safe+retryable+no-double-pay; platform_admin denied. 9 tests, 746 total pass.
   epic-4-retrospective: notify
 
   # ---- Epic 5 (AE5): Compliance & Reg A+ (alongside Epic 3) ----

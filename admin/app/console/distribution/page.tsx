@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useConvexAuth, useQuery, useMutation } from "convex/react";
+import { useConvexAuth, useQuery, useMutation, useAction } from "convex/react";
 import { api } from "vesper-app/convex/_generated/api";
 import type { Id } from "vesper-app/convex/_generated/dataModel";
 import { StatusChip, type StatusKind } from "@/app/components/ui/StatusChip";
@@ -36,6 +36,19 @@ type Draft = {
   variance: number;
   matchesTarget: boolean;
   reason: string | null;
+};
+
+type PayStatus = {
+  period: string;
+  mint: string | null;
+  rowCount: number;
+  scheduledCount: number;
+  pushedCount: number;
+  paidCount: number;
+  netTotal: number;
+  escrow:
+    | { funded: true; fundedAmount: number; custodyRef: string; fundedBy: string; fundedAt: number }
+    | { funded: false };
 };
 
 const inputStyle: React.CSSProperties = {
@@ -95,7 +108,25 @@ export default function DistributionPage() {
       : "skip",
   ) as Draft | null | undefined;
 
+  const payStatus = useQuery(
+    api.distributionPay.distributionPayStatus,
+    canDistribute && selected && period
+      ? { propertyId: selected as Id<"properties">, period }
+      : "skip",
+  ) as PayStatus | null | undefined;
+
   const build = useMutation(api.distributionBuild.buildDistribution);
+  const fundEscrow = useMutation(api.distributionPay.fundDistributionEscrow);
+  const pushDist = useAction(api.distributionPay.pushDistribution);
+  const confirmDist = useMutation(api.distributionPay.confirmDistributionStub);
+
+  // The pay-lane action state (fund / push / confirm) is separate from the build state so a push error
+  // never clears a build error and vice-versa.
+  const [payBusy, setPayBusy] = useState<null | "fund" | "push" | "confirm">(null);
+  const [payError, setPayError] = useState<string | null>(null);
+  // The push is IRREVERSIBLE — it must state consequence + cost + finality and demand an explicit
+  // confirm before firing (the server independently re-enforces step-up).
+  const [pushArming, setPushArming] = useState(false);
 
   const selectedProp = useMemo(
     () => (properties ?? []).find((p) => p.id === selected) ?? null,
@@ -126,6 +157,46 @@ export default function DistributionPage() {
       setBusy(false);
     }
   }, [build, selected, period, grossNum, costsNum]);
+
+  const onFund = useCallback(async () => {
+    if (!selected) return;
+    setPayBusy("fund");
+    setPayError(null);
+    try {
+      await fundEscrow({ propertyId: selected as Id<"properties">, period });
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : "Funding blocked.");
+    } finally {
+      setPayBusy(null);
+    }
+  }, [fundEscrow, selected, period]);
+
+  const onPush = useCallback(async () => {
+    if (!selected) return;
+    setPayBusy("push");
+    setPayError(null);
+    try {
+      await pushDist({ propertyId: selected as Id<"properties">, period });
+      setPushArming(false);
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : "Push blocked.");
+    } finally {
+      setPayBusy(null);
+    }
+  }, [pushDist, selected, period]);
+
+  const onConfirm = useCallback(async () => {
+    if (!selected) return;
+    setPayBusy("confirm");
+    setPayError(null);
+    try {
+      await confirmDist({ propertyId: selected as Id<"properties">, period });
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : "Confirm blocked.");
+    } finally {
+      setPayBusy(null);
+    }
+  }, [confirmDist, selected, period]);
 
   if (authLoading || me === undefined) {
     return (
@@ -365,6 +436,195 @@ export default function DistributionPage() {
               No draft yet for {selectedProp?.name ?? "this property"} · {period}. Enter the month&apos;s
               gross rent and operating costs, then build the draft.
             </p>
+          )}
+
+          {/* FUND + PUSH LANE (4-2) — fund the escrow (B1 custody stub), then push on-chain behind a
+              step-up re-auth stating the irreversible consequence + cost. The paid flip is owned by
+              reconcile — the push only records signatures; Convex never self-settles. */}
+          {draft && draft.rowCount > 0 && draft.scheduledCount > 0 && (
+            <div
+              style={{
+                margin: "var(--space-5) 0 0",
+                padding: "var(--space-5)",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--hairline-2)",
+                background: "color-mix(in srgb, var(--accent) 3%, var(--surface))",
+              }}
+            >
+              <p style={{ color: "var(--muted)", font: "600 11px var(--sans)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>
+                Fund &amp; push · {draft.period}
+              </p>
+
+              {/* PAY-STATUS VIEW — escrow / pushed / paid at a glance. */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-5)", marginBottom: "var(--space-4)", fontSize: "13px", color: "var(--sub)" }}>
+                <span>
+                  Escrow:{" "}
+                  <strong style={{ color: payStatus?.escrow.funded ? "var(--gain)" : "var(--ink)" }}>
+                    {payStatus === undefined
+                      ? "…"
+                      : payStatus?.escrow.funded
+                        ? <>funded · <Money value={payStatus.escrow.fundedAmount} /></>
+                        : "not funded"}
+                  </strong>
+                </span>
+                <span>
+                  Pushed: <strong style={{ color: "var(--ink)" }}>{payStatus?.pushedCount ?? 0}</strong> / {draft.rowCount}
+                </span>
+                <span>
+                  Paid: <strong style={{ color: "var(--ink)" }}>{payStatus?.paidCount ?? 0}</strong> / {draft.rowCount}
+                </span>
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)", alignItems: "center" }}>
+                {/* FUND — the B1 custody stub. Idempotent (re-fund updates in place). */}
+                <button
+                  type="button"
+                  disabled={payBusy !== null}
+                  onClick={onFund}
+                  style={{
+                    cursor: payBusy !== null ? "not-allowed" : "pointer",
+                    opacity: payBusy !== null ? 0.5 : 1,
+                    font: "600 13px var(--sans)",
+                    color: "var(--ink)",
+                    background: "var(--surface)",
+                    border: "1px solid var(--hairline-2)",
+                    borderRadius: "var(--radius-pill)",
+                    padding: "10px 20px",
+                  }}
+                >
+                  {payBusy === "fund" ? "Funding…" : payStatus?.escrow.funded ? "Re-fund escrow" : "Fund escrow"}
+                </button>
+
+                {/* PUSH — irreversible. Arms a confirmation stating consequence + cost + finality. */}
+                {!pushArming ? (
+                  <button
+                    type="button"
+                    disabled={payBusy !== null || !payStatus?.escrow.funded}
+                    onClick={() => {
+                      setPayError(null);
+                      setPushArming(true);
+                    }}
+                    title={payStatus?.escrow.funded ? undefined : "Fund the escrow before pushing"}
+                    style={{
+                      cursor: payBusy !== null || !payStatus?.escrow.funded ? "not-allowed" : "pointer",
+                      opacity: payBusy !== null || !payStatus?.escrow.funded ? 0.5 : 1,
+                      font: "600 13px var(--sans)",
+                      color: "var(--surface)",
+                      background: "var(--accent)",
+                      border: "0",
+                      borderRadius: "var(--radius-pill)",
+                      padding: "10px 22px",
+                    }}
+                  >
+                    Push distribution
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "var(--space-2)",
+                      padding: "var(--space-3) var(--space-4)",
+                      borderRadius: "var(--radius-md)",
+                      border: "1px solid var(--loss)",
+                      background: "color-mix(in srgb, var(--loss) 8%, transparent)",
+                      maxWidth: "62ch",
+                    }}
+                  >
+                    <p style={{ color: "var(--ink)", fontSize: "13px", lineHeight: 1.5, fontWeight: 600 }}>
+                      Pays {draft.rowCount} owner{draft.rowCount === 1 ? "" : "s"} ·{" "}
+                      <Money value={draft.totals.netPaid} /> · this on-chain push is{" "}
+                      <span style={{ textTransform: "uppercase" }}>irreversible</span>.
+                    </p>
+                    <p style={{ color: "var(--sub)", fontSize: "12px", lineHeight: 1.5 }}>
+                      Confirming requires a step-up re-authentication. The push records the on-chain
+                      signatures; owners are marked paid only once the chain confirms.
+                    </p>
+                    <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-1)" }}>
+                      <button
+                        type="button"
+                        disabled={payBusy !== null}
+                        onClick={onPush}
+                        style={{
+                          cursor: payBusy !== null ? "not-allowed" : "pointer",
+                          opacity: payBusy !== null ? 0.5 : 1,
+                          font: "600 13px var(--sans)",
+                          color: "var(--surface)",
+                          background: "var(--loss)",
+                          border: "0",
+                          borderRadius: "var(--radius-pill)",
+                          padding: "9px 20px",
+                        }}
+                      >
+                        {payBusy === "push" ? "Pushing…" : "Confirm push (step-up)"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={payBusy !== null}
+                        onClick={() => setPushArming(false)}
+                        style={{
+                          cursor: payBusy !== null ? "not-allowed" : "pointer",
+                          font: "600 13px var(--sans)",
+                          color: "var(--sub)",
+                          background: "transparent",
+                          border: "1px solid var(--hairline-2)",
+                          borderRadius: "var(--radius-pill)",
+                          padding: "9px 20px",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* CONFIRM — the reconcile stub (demo stand-in for the Helius confirm) flips pushed → paid. */}
+                {(payStatus?.pushedCount ?? 0) > 0 && (
+                  <button
+                    type="button"
+                    disabled={payBusy !== null}
+                    onClick={onConfirm}
+                    title="Stand-in for the Helius reconcile — chain owns the paid flip"
+                    style={{
+                      cursor: payBusy !== null ? "not-allowed" : "pointer",
+                      opacity: payBusy !== null ? 0.5 : 1,
+                      font: "600 13px var(--sans)",
+                      color: "var(--ink)",
+                      background: "var(--surface)",
+                      border: "1px solid var(--hairline-2)",
+                      borderRadius: "var(--radius-pill)",
+                      padding: "10px 20px",
+                    }}
+                  >
+                    {payBusy === "confirm" ? "Confirming…" : "Confirm on-chain (reconcile)"}
+                  </button>
+                )}
+              </div>
+
+              {payError && (
+                <p
+                  role="alert"
+                  style={{
+                    margin: "var(--space-3) 0 0",
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--loss)",
+                    color: "var(--loss)",
+                    background: "color-mix(in srgb, var(--loss) 8%, transparent)",
+                    fontSize: "13px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Blocked: {payError}
+                </p>
+              )}
+
+              <p style={{ color: "var(--muted)", fontSize: "12px", lineHeight: 1.5, margin: "var(--space-3) 0 0", maxWidth: "80ch" }}>
+                Fund the escrow first, then push. The push records the on-chain signatures but never marks
+                anyone paid — the <strong>scheduled → paid</strong> flip is owned by the reconcile
+                (chain-authoritative). A failed push marks no one paid and can be retried without double-paying.
+              </p>
+            </div>
           )}
         </div>
       )}
