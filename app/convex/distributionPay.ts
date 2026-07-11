@@ -35,6 +35,17 @@ function pushSeamShouldFail(): boolean {
   return process.env.VESPER_STUB_DIST_PUSH_FAIL === "true";
 }
 
+// ── The 4-3 pause reason — a STRUCTURED, closed set (never a silent/free-form pause) ──────────────────
+// pauseDistribution NEVER pauses without one of these. The arg is a plain string that the handler
+// VALIDATES against this closed set and REJECTS otherwise — so the never-silent guarantee lives in the
+// handler (layer-independent), not only in the wire validator. Mirrors the `incomeLedger.pauseReason`
+// schema union so the stored value and the accepted set can never drift.
+const PAUSE_REASONS = ["insufficient_cash_flow", "missing_operator_numbers", "other"] as const;
+type PauseReason = (typeof PAUSE_REASONS)[number];
+function isPauseReason(x: string): x is PauseReason {
+  return (PAUSE_REASONS as readonly string[]).includes(x);
+}
+
 // resolveDistributor — the permission gate for the ACTION half (pushDistribution has no db of its own).
 // Reuses 1-1's `requirePermission` on a QueryCtx: platform_admin (no distribution.execute) is denied
 // HERE, before any escrow/step-up/seam work — proving the 1-1 wall. Returns the caller's staff doc so
@@ -70,6 +81,9 @@ export const loadPushState = internalQuery({
       mint: property.mint ?? null,
       scheduledCount: rows.filter((r) => r.status === "scheduled").length,
       paidCount: rows.filter((r) => r.status === "paid").length,
+      // 4-3: a paused period's rows are `missed` (carrying a pauseReason) — the push refuses it until a
+      // resume flips them back to `scheduled`. Counted here so pushDistribution can refuse EXPLICITLY.
+      missedCount: rows.filter((r) => r.status === "missed").length,
       // The full built net pool (all non-missed rows) — runDistributionPush re-apportions this exact
       // amount, so the per-holder push equals the scheduled draft.
       poolNet: roundCents(rows.reduce((s, r) => s + (r.status === "missed" ? 0 : r.netPaid), 0)),
@@ -186,6 +200,14 @@ export const pushDistribution = action({
 
     const state = await ctx.runQuery(internal.distributionPay.loadPushState, { propertyId, period });
     if (!state) throw new Error("Property not found");
+    // 4-3 PAUSED GUARD — a paused period (its rows flipped `missed` with a pauseReason) can NEVER be
+    // pushed until it is resumed. This fires BEFORE the generic "no scheduled draft" wall so the operator
+    // gets the honest reason (paused, not un-built). A fully-PAID period (nothing scheduled, nothing
+    // missed) still falls through to the un-built message below — a confirmed distribution is never
+    // re-pushed.
+    if (state.scheduledCount === 0 && state.missedCount > 0) {
+      throw new Error("Cannot push: distribution is paused — resume it first");
+    }
     if (state.scheduledCount === 0) {
       throw new Error("No scheduled distribution draft to push — build the draft first");
     }
@@ -276,6 +298,108 @@ export const confirmDistributionStub = mutation({
   },
 });
 
+// ── pauseDistribution — PAUSED-WITH-REASON, never silent (mutation, distribution.execute-gated) ───────
+// When a distribution can't proceed (insufficient cash flow, missing operator numbers, …), the operator
+// PAUSES it. This is the story's whole point: the pause carries a STRUCTURED, non-empty `reason` (+ an
+// optional human `note`) that flows to the consumer's Income "why paused" state — a distribution is NEVER
+// silently withheld. Flow, first-failing-wall wins:
+//   1. distribution.execute (platform_admin denied here — the 1-1 wall).
+//   2. a valid reason is STRUCTURAL: the union arg validator rejects an empty/unknown reason before the
+//      handler runs, so a reasonless pause is impossible on the wire.
+//   3. refuse if the period is already `paid` — a settled distribution cannot be paused (chain truth).
+//   4. flip every `scheduled` row → `missed` + pauseReason/pauseNote; audit `distribution.paused` naming
+//      the human + reason. The paused period cannot be pushed (4-2's guard) until `resumeDistribution`.
+export const pauseDistribution = mutation({
+  args: {
+    propertyId: v.id("properties"),
+    period: v.string(),
+    reason: v.string(), // validated against PAUSE_REASONS in-handler — an empty/unknown reason is refused
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, { propertyId, period, reason, note }) => {
+    const staff = await requirePermission(ctx, "distribution.execute");
+    const actor = staff.email || staff.name || staff.workosId;
+
+    // NEVER SILENT — a pause without a valid, structured reason is refused before anything is written.
+    if (!isPauseReason(reason)) {
+      throw new Error("pauseDistribution requires a valid reason");
+    }
+
+    const property = await ctx.db.get(propertyId);
+    if (!property) throw new Error("Property not found");
+
+    const rows = await ctx.db
+      .query("incomeLedger")
+      .withIndex("by_property_period", (q) => q.eq("propertyId", propertyId).eq("period", period))
+      .collect();
+    if (rows.length === 0) {
+      throw new Error("No distribution draft to pause — build the draft first");
+    }
+    // A distribution the chain already settled cannot be paused — reconcile owns `paid`, and a paid
+    // holder was really paid. Refuse rather than silently no-op.
+    if (rows.some((r) => r.status === "paid")) {
+      throw new Error("Cannot pause: distribution already paid");
+    }
+
+    const scheduled = rows.filter((r) => r.status === "scheduled");
+    if (scheduled.length === 0) {
+      throw new Error("No scheduled distribution to pause — it may already be paused");
+    }
+
+    for (const row of scheduled) {
+      await ctx.db.patch(row._id, { status: "missed", pauseReason: reason, pauseNote: note });
+    }
+
+    await writeAudit(ctx, {
+      actor, // the named human who paused — never a system; the reason is on the record
+      action: "distribution.paused",
+      target: propertyId,
+      meta: { period, reason, note, rows: scheduled.length },
+    });
+
+    return { paused: scheduled.length, reason };
+  },
+});
+
+// ── resumeDistribution — the reason is resolved; flip `missed`→`scheduled` (mutation, distribution.execute)
+// The inverse of pauseDistribution: once the blocker clears, the operator RESUMES the period — every
+// `missed` row flips back to `scheduled` and its pauseReason/pauseNote are CLEARED (the row is no longer
+// paused). Audited `distribution.resumed`. After a resume the period is a normal built draft again and can
+// be funded + pushed (4-2). distribution.execute-gated (platform_admin denied).
+export const resumeDistribution = mutation({
+  args: { propertyId: v.id("properties"), period: v.string() },
+  handler: async (ctx, { propertyId, period }) => {
+    const staff = await requirePermission(ctx, "distribution.execute");
+    const actor = staff.email || staff.name || staff.workosId;
+
+    const property = await ctx.db.get(propertyId);
+    if (!property) throw new Error("Property not found");
+
+    const rows = await ctx.db
+      .query("incomeLedger")
+      .withIndex("by_property_period", (q) => q.eq("propertyId", propertyId).eq("period", period))
+      .collect();
+    const missed = rows.filter((r) => r.status === "missed");
+    if (missed.length === 0) {
+      throw new Error("No paused distribution to resume");
+    }
+
+    for (const row of missed) {
+      // Clearing the optional fields (patch with undefined) removes them — the row is no longer paused.
+      await ctx.db.patch(row._id, { status: "scheduled", pauseReason: undefined, pauseNote: undefined });
+    }
+
+    await writeAudit(ctx, {
+      actor,
+      action: "distribution.resumed",
+      target: propertyId,
+      meta: { period, rows: missed.length },
+    });
+
+    return { resumed: missed.length };
+  },
+});
+
 // ── distributionPayStatus — the console's fund/push/paid read (query, distribution.execute) ───────────
 // Per-(property, period) settlement state for the console: whether the escrow is funded (+ amount/ref),
 // how many rows carry a push signature (pushed), and how many have been reconciled `paid`. Read-only;
@@ -300,9 +424,13 @@ export const distributionPayStatus = query({
 
     const scheduled = rows.filter((r) => r.status === "scheduled");
     const paid = rows.filter((r) => r.status === "paid");
+    const missed = rows.filter((r) => r.status === "missed");
     // "Pushed" = a scheduled row that already carries its on-chain push signature (recorded by the push,
     // awaiting reconcile). A paid row has moved past pushed (reconcile owns it).
     const pushed = scheduled.filter((r) => !!r.txSig);
+    // 4-3: the paused state for the console's "missed-with-reason" status view. A paused period's rows
+    // are `missed` carrying a structured pauseReason — surface it (never a silent missed).
+    const pausedRow = missed.find((r) => r.pauseReason !== undefined);
 
     return {
       period,
@@ -311,6 +439,9 @@ export const distributionPayStatus = query({
       scheduledCount: scheduled.length,
       pushedCount: pushed.length,
       paidCount: paid.length,
+      missedCount: missed.length,
+      pauseReason: pausedRow?.pauseReason ?? null,
+      pauseNote: pausedRow?.pauseNote ?? null,
       netTotal: roundCents(rows.reduce((s, r) => s + (r.status === "missed" ? 0 : r.netPaid), 0)),
       escrow: escrow
         ? {

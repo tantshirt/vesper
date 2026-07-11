@@ -277,6 +277,20 @@ export default defineSchema({
     txSig: v.optional(v.string()),
     paidAt: v.optional(v.number()), // E5.1: epoch ms a distribution row was observed paid — gives "fresh" a recency signal. Optional → no migration; pre-existing rows degrade to not-fresh.
     status: v.union(v.literal("scheduled"), v.literal("paid"), v.literal("missed")),
+    // Admin Story 4.3 — PAUSED-WITH-REASON (never silent). When a distribution can't proceed, the
+    // period's `scheduled` rows are flipped to `missed` carrying a STRUCTURED, non-empty `pauseReason`
+    // (+ an optional human `pauseNote`). The consumer Income view surfaces this on the latest `missed`
+    // row so its existing "why paused" state becomes real. Both OPTIONAL — every pre-existing `missed`
+    // row (e.g. a seeded missed distribution with no admin pause) stays valid with no migration; a
+    // resume clears them back to undefined as the row flips `missed`→`scheduled`.
+    pauseReason: v.optional(
+      v.union(
+        v.literal("insufficient_cash_flow"),
+        v.literal("missing_operator_numbers"),
+        v.literal("other"),
+      ),
+    ),
+    pauseNote: v.optional(v.string()), // optional free-text human note accompanying the structured reason
   }).index("by_user", ["userId"]).index("by_property_period", ["propertyId", "period"]),
 
   // --- Admin Story 4.2: distribution ESCROW funding (B1 custody STUB seam) ---

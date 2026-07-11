@@ -38,6 +38,8 @@ type Draft = {
   reason: string | null;
 };
 
+type PauseReason = "insufficient_cash_flow" | "missing_operator_numbers" | "other";
+
 type PayStatus = {
   period: string;
   mint: string | null;
@@ -45,11 +47,37 @@ type PayStatus = {
   scheduledCount: number;
   pushedCount: number;
   paidCount: number;
+  missedCount: number;
+  pauseReason: PauseReason | null;
+  pauseNote: string | null;
   netTotal: number;
   escrow:
     | { funded: true; fundedAmount: number; custodyRef: string; fundedBy: string; fundedAt: number }
     | { funded: false };
 };
+
+// The structured pause reasons (mirrors the incomeLedger.pauseReason union) with human labels for the
+// reason picker + the status view. A pause is NEVER silent — the operator must pick one.
+const PAUSE_REASONS: { value: PauseReason; label: string }[] = [
+  { value: "insufficient_cash_flow", label: "Insufficient cash flow" },
+  { value: "missing_operator_numbers", label: "Missing operator numbers" },
+  { value: "other", label: "Other" },
+];
+
+function pauseReasonLabel(r: PauseReason | null): string {
+  return PAUSE_REASONS.find((x) => x.value === r)?.label ?? "Paused";
+}
+
+// The at-a-glance lifecycle status for the period, driven off the pay-status counts: paid → pushed →
+// paused (missed-with-reason) → scheduled → none.
+function lifecycle(s: PayStatus | null | undefined): { status: StatusKind; label: string } {
+  if (!s || s.rowCount === 0) return { status: "draft", label: "No draft" };
+  if (s.paidCount > 0 && s.paidCount === s.rowCount) return { status: "complete", label: "Paid · reconciled" };
+  if (s.missedCount > 0) return { status: "blocked", label: `Paused · ${pauseReasonLabel(s.pauseReason)}` };
+  if (s.pushedCount > 0) return { status: "onchain", label: "Pushed · awaiting reconcile" };
+  if (s.scheduledCount > 0) return { status: "pending", label: "Scheduled" };
+  return { status: "draft", label: "Draft" };
+}
 
 const inputStyle: React.CSSProperties = {
   font: "500 13px var(--sans)",
@@ -119,14 +147,20 @@ export default function DistributionPage() {
   const fundEscrow = useMutation(api.distributionPay.fundDistributionEscrow);
   const pushDist = useAction(api.distributionPay.pushDistribution);
   const confirmDist = useMutation(api.distributionPay.confirmDistributionStub);
+  const pauseDist = useMutation(api.distributionPay.pauseDistribution);
+  const resumeDist = useMutation(api.distributionPay.resumeDistribution);
 
-  // The pay-lane action state (fund / push / confirm) is separate from the build state so a push error
-  // never clears a build error and vice-versa.
-  const [payBusy, setPayBusy] = useState<null | "fund" | "push" | "confirm">(null);
+  // The pay-lane action state (fund / push / confirm / pause / resume) is separate from the build state so
+  // a push error never clears a build error and vice-versa.
+  const [payBusy, setPayBusy] = useState<null | "fund" | "push" | "confirm" | "pause" | "resume">(null);
   const [payError, setPayError] = useState<string | null>(null);
   // The push is IRREVERSIBLE — it must state consequence + cost + finality and demand an explicit
   // confirm before firing (the server independently re-enforces step-up).
   const [pushArming, setPushArming] = useState(false);
+  // The pause reason picker (4-3) — a pause is NEVER silent; the operator must pick a structured reason.
+  const [pauseArming, setPauseArming] = useState(false);
+  const [pauseReason, setPauseReason] = useState<PauseReason>("insufficient_cash_flow");
+  const [pauseNote, setPauseNote] = useState("");
 
   const selectedProp = useMemo(
     () => (properties ?? []).find((p) => p.id === selected) ?? null,
@@ -197,6 +231,39 @@ export default function DistributionPage() {
       setPayBusy(null);
     }
   }, [confirmDist, selected, period]);
+
+  const onPause = useCallback(async () => {
+    if (!selected) return;
+    setPayBusy("pause");
+    setPayError(null);
+    try {
+      await pauseDist({
+        propertyId: selected as Id<"properties">,
+        period,
+        reason: pauseReason,
+        note: pauseNote.trim() === "" ? undefined : pauseNote.trim(),
+      });
+      setPauseArming(false);
+      setPauseNote("");
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : "Pause blocked.");
+    } finally {
+      setPayBusy(null);
+    }
+  }, [pauseDist, selected, period, pauseReason, pauseNote]);
+
+  const onResume = useCallback(async () => {
+    if (!selected) return;
+    setPayBusy("resume");
+    setPayError(null);
+    try {
+      await resumeDist({ propertyId: selected as Id<"properties">, period });
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : "Resume blocked.");
+    } finally {
+      setPayBusy(null);
+    }
+  }, [resumeDist, selected, period]);
 
   if (authLoading || me === undefined) {
     return (
@@ -438,6 +505,81 @@ export default function DistributionPage() {
             </p>
           )}
 
+          {/* STATUS VIEW (4-3) — the period's lifecycle at a glance (scheduled / pushed / paid /
+              paused-with-reason). Reconciliation status is read from the same pay-status counts. */}
+          {draft && draft.rowCount > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap", margin: "var(--space-5) 0 0" }}>
+              <p style={{ color: "var(--muted)", font: "600 11px var(--sans)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                Status · {period}
+              </p>
+              <StatusChip {...lifecycle(payStatus)} />
+            </div>
+          )}
+
+          {/* PAUSED-WITH-REASON (4-3) — a paused period's rows are `missed` carrying a structured reason
+              that feeds the consumer's "why paused" income state. It CANNOT be pushed until resumed. */}
+          {selected && (payStatus?.missedCount ?? 0) > 0 && (
+            <div
+              style={{
+                margin: "var(--space-5) 0 0",
+                padding: "var(--space-5)",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--warning)",
+                background: "color-mix(in srgb, var(--warning) 8%, var(--surface))",
+              }}
+            >
+              <p style={{ color: "var(--muted)", font: "600 11px var(--sans)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "var(--space-2)" }}>
+                Paused · {period}
+              </p>
+              <p style={{ color: "var(--ink)", fontSize: "14px", lineHeight: 1.5, fontWeight: 600 }}>
+                {pauseReasonLabel(payStatus?.pauseReason ?? null)}
+              </p>
+              {payStatus?.pauseNote && (
+                <p style={{ color: "var(--sub)", fontSize: "13px", lineHeight: 1.5, marginTop: "var(--space-1)" }}>
+                  {payStatus.pauseNote}
+                </p>
+              )}
+              <p style={{ color: "var(--sub)", fontSize: "12px", lineHeight: 1.5, margin: "var(--space-2) 0 var(--space-3)", maxWidth: "76ch" }}>
+                Owners see this reason on their Income view — the distribution is never silently withheld.
+                Resume once the blocker clears to make the period pushable again.
+              </p>
+              <button
+                type="button"
+                disabled={payBusy !== null}
+                onClick={onResume}
+                style={{
+                  cursor: payBusy !== null ? "not-allowed" : "pointer",
+                  opacity: payBusy !== null ? 0.5 : 1,
+                  font: "600 13px var(--sans)",
+                  color: "var(--surface)",
+                  background: "var(--accent)",
+                  border: "0",
+                  borderRadius: "var(--radius-pill)",
+                  padding: "10px 22px",
+                }}
+              >
+                {payBusy === "resume" ? "Resuming…" : "Resume distribution"}
+              </button>
+              {payError && (
+                <p
+                  role="alert"
+                  style={{
+                    margin: "var(--space-3) 0 0",
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--loss)",
+                    color: "var(--loss)",
+                    background: "color-mix(in srgb, var(--loss) 8%, transparent)",
+                    fontSize: "13px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Blocked: {payError}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* FUND + PUSH LANE (4-2) — fund the escrow (B1 custody stub), then push on-chain behind a
               step-up re-auth stating the irreversible consequence + cost. The paid flip is owned by
               reconcile — the push only records signatures; Convex never self-settles. */}
@@ -598,6 +740,108 @@ export default function DistributionPage() {
                   >
                     {payBusy === "confirm" ? "Confirming…" : "Confirm on-chain (reconcile)"}
                   </button>
+                )}
+
+                {/* PAUSE (4-3) — pause the period WITH a structured reason (never silent). Only a
+                    not-yet-pushed, not-yet-paid draft can be paused; the reason feeds the consumer. */}
+                {(payStatus?.pushedCount ?? 0) === 0 && (payStatus?.paidCount ?? 0) === 0 && (
+                  !pauseArming ? (
+                    <button
+                      type="button"
+                      disabled={payBusy !== null}
+                      onClick={() => {
+                        setPayError(null);
+                        setPauseArming(true);
+                      }}
+                      style={{
+                        cursor: payBusy !== null ? "not-allowed" : "pointer",
+                        opacity: payBusy !== null ? 0.5 : 1,
+                        font: "600 13px var(--sans)",
+                        color: "var(--warning)",
+                        background: "var(--surface)",
+                        border: "1px solid var(--warning)",
+                        borderRadius: "var(--radius-pill)",
+                        padding: "10px 20px",
+                      }}
+                    >
+                      Pause distribution
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "var(--space-2)",
+                        padding: "var(--space-3) var(--space-4)",
+                        borderRadius: "var(--radius-md)",
+                        border: "1px solid var(--warning)",
+                        background: "color-mix(in srgb, var(--warning) 8%, transparent)",
+                        maxWidth: "62ch",
+                      }}
+                    >
+                      <p style={{ color: "var(--ink)", fontSize: "13px", lineHeight: 1.5, fontWeight: 600 }}>
+                        Pause requires a reason — owners will see it on their Income view.
+                      </p>
+                      <label style={labelStyle}>
+                        Reason
+                        <select
+                          style={{ ...inputStyle, width: "28ch" }}
+                          value={pauseReason}
+                          onChange={(e) => setPauseReason(e.target.value as PauseReason)}
+                        >
+                          {PAUSE_REASONS.map((r) => (
+                            <option key={r.value} value={r.value}>
+                              {r.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={labelStyle}>
+                        Note (optional)
+                        <input
+                          style={{ ...inputStyle, width: "40ch" }}
+                          value={pauseNote}
+                          onChange={(e) => setPauseNote(e.target.value)}
+                          placeholder="Context for owners (optional)"
+                        />
+                      </label>
+                      <div style={{ display: "flex", gap: "var(--space-3)", marginTop: "var(--space-1)" }}>
+                        <button
+                          type="button"
+                          disabled={payBusy !== null}
+                          onClick={onPause}
+                          style={{
+                            cursor: payBusy !== null ? "not-allowed" : "pointer",
+                            opacity: payBusy !== null ? 0.5 : 1,
+                            font: "600 13px var(--sans)",
+                            color: "var(--surface)",
+                            background: "var(--warning)",
+                            border: "0",
+                            borderRadius: "var(--radius-pill)",
+                            padding: "9px 20px",
+                          }}
+                        >
+                          {payBusy === "pause" ? "Pausing…" : "Confirm pause"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={payBusy !== null}
+                          onClick={() => setPauseArming(false)}
+                          style={{
+                            cursor: payBusy !== null ? "not-allowed" : "pointer",
+                            font: "600 13px var(--sans)",
+                            color: "var(--sub)",
+                            background: "transparent",
+                            border: "1px solid var(--hairline-2)",
+                            borderRadius: "var(--radius-pill)",
+                            padding: "9px 20px",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
 

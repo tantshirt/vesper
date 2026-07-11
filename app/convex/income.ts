@@ -175,6 +175,13 @@ export const summary = query({
           mgmtFee: latestRow.mgmtFee,
           reserve: latestRow.reserve,
           netPaid: latestRow.netPaid,
+          // Admin Story 4.3 (ADDITIVE) — surface the "why paused" reason on the latest row. When the
+          // latest distribution is a `missed` row that an operator PAUSED, it carries a structured
+          // pauseReason (+ optional note); the consumer's existing missed banner now explains WHY, never
+          // silent. Undefined for any non-paused row (paid/scheduled, or a legacy missed with no reason)
+          // → omitted from the wire, so nothing about the existing shape changes.
+          pauseReason: latestRow.pauseReason,
+          pauseNote: latestRow.pauseNote,
           target: evaluateTarget(
             latestRow.netPaid,
             costBasisByProperty.get(latestRow.propertyId) ?? 0,
