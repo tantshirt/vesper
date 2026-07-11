@@ -18,6 +18,26 @@ export const STAFF_ROLES = [
 
 export type StaffRole = (typeof STAFF_ROLES)[number];
 
+// The sponsor role partition WITHIN the staff table (Admin Story 6.1). Sponsors are `staff` rows —
+// never consumer `users` — carrying exactly one of these roles; `requireSponsor` (sponsor.ts) admits
+// only these and resolves the caller to a single `sponsorOrgId`. Named here so the tenant-isolation
+// primitive, the schema, and the provisioning path all read the SAME definition of "is a sponsor".
+export const SPONSOR_ROLES = ["sponsor_principal", "sponsor_ops"] as const;
+export type SponsorRole = (typeof SPONSOR_ROLES)[number];
+
+// Validator for a single sponsor role — reused by the schema (`sponsorMembers.role`) and the
+// internal `provisionSponsor` grant path so a non-sponsor role can never be written into a membership.
+export const sponsorRoleValidator = v.union(
+  v.literal("sponsor_principal"),
+  v.literal("sponsor_ops"),
+);
+
+// The single "is this role a sponsor role?" predicate. One definition, read by every guard, so the
+// role-partition wall cannot drift between the enforcement primitive and the read surface.
+export function isSponsorRole(role: string): boolean {
+  return role === "sponsor_principal" || role === "sponsor_ops";
+}
+
 // Convex validator for a single staff role. Reused by the schema (`staff.roles`) and the grant path
 // so an unknown role literal can never be written into the store.
 export const roleValidator = v.union(

@@ -1,6 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { roleValidator } from "./roles";
+import { roleValidator, sponsorRoleValidator } from "./roles";
 
 // Core entities (E1.1 users + auditLog; E1.4 the rest). Shape is seed — owned by code from here.
 // Data-ownership per architecture spine: on-chain owns token truth; Convex owns intent,
@@ -79,6 +79,48 @@ export default defineSchema({
     expiresAt: v.number(), // bounded (≤ 60 min from creation); permissions lapse the instant now ≥ this
     status: v.union(v.literal("active"), v.literal("expired"), v.literal("revoked")),
   }).index("by_workosId", ["workosId"]),
+
+  // --- Admin Story 6.1: walled sponsor onboarding + KYB/Gate 0 (tenant isolation) ---
+  // A sponsor ORG is the tenant boundary: every sponsor query/mutation resolves the caller to exactly
+  // one `sponsorOrgId` (via `sponsorMembers`) and filters by it server-side. `kybStatus` is Gate 0 —
+  // a deal cannot be `submitted` until it is "passed" (recorded via the stubbed Middesk seam). `kybRef`
+  // is the (stubbed) Middesk reference, optional so a fresh org with no KYB yet stays valid.
+  sponsorOrgs: defineTable({
+    name: v.string(),
+    kybStatus: v.union(
+      v.literal("none"),
+      v.literal("pending"),
+      v.literal("passed"),
+      v.literal("failed"),
+    ),
+    kybRef: v.optional(v.string()), // ref to the (stubbed) Middesk KYB inquiry that produced kybStatus
+    createdAt: v.number(),
+  }),
+
+  // Links a WorkOS-invited sponsor human (a `staff` row) to their ONE org + sponsor role. `by_workosId`
+  // is the tenant-resolution hot path: `requireSponsor` turns the caller's `staff.workosId` into their
+  // `sponsorOrgId` in one indexed lookup. Grant-only — rows are created ONLY by the internal
+  // `provisionSponsor` mutation (absent from the public api), mirroring the staff grant posture.
+  sponsorMembers: defineTable({
+    workosId: v.string(), // the sponsor human's WorkOS `sub` (matches their `staff` row)
+    sponsorOrgId: v.id("sponsorOrgs"),
+    role: sponsorRoleValidator,
+    createdAt: v.number(),
+  }).index("by_workosId", ["workosId"]),
+
+  // A sponsor deal, keyed to its org. `by_org` is the ONLY read path sponsors have — a sponsor can
+  // never enumerate deals outside their `sponsorOrgId`. `status` advances draft → kyb_pending →
+  // submitted; the `submitted` transition is GATED on the org's `kybStatus === "passed"` (Gate 0).
+  sponsorDeals: defineTable({
+    sponsorOrgId: v.id("sponsorOrgs"),
+    propertyName: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("kyb_pending"),
+      v.literal("submitted"),
+    ),
+    createdAt: v.number(),
+  }).index("by_org", ["sponsorOrgId"]),
 
   // --- E1.4: the rest of the core (seed shape; refined by their owning stories) ---
   properties: defineTable({
