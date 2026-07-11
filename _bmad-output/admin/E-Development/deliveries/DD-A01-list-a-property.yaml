@@ -1,0 +1,114 @@
+# WDS Design Delivery — the contract between design and development. (Admin track)
+delivery:
+  id: "DD-A01"
+  name: "List a Property (Scenario A1) — gate → mint → list"
+  type: "operator_flow"
+  status: "ready"
+  priority: "high"
+  created_by: "freya (WDS — admin)"
+  created_at: "2026-07-11T00:00:00Z"
+  updated_at: "2026-07-11T00:00:00Z"
+  version: "1.0"
+
+description: |
+  The internal supply spine: an operator (Priya) takes a submitted property from "intake cleared"
+  to a live, investable offering — reviewing AI-assembled evidence, signing Gates 0–7 as a named
+  human (with a distinct second signer where required), minting the Token-2022 offering
+  (ACL frozen-by-default) behind a consequence/cost/finality confirm + step-up auth, and listing it.
+  This is the back-office act that makes the consumer Trust Stack and on-chain proof real. It is the
+  admin analog of DD-001, and the structural guarantee behind consumer O1 (zero unsigned gates).
+
+user_value:
+  problem: "The consumer promise 'a scam property cannot reach you' is only as strong as the diligence machine behind it — and off-the-shelf tooling can't enforce human-signed gates or keep the AI out of the approval path."
+  solution: "An evidence-first gate signature ceremony (AI accelerates, a named human signs), segregation of duties enforced structurally, and an on-chain mint/listing behind an explicit, step-up-authed, finality-stated confirm."
+  success_criteria:
+    - "100% of listed offerings have all Gates 0–7 human-signed — zero exceptions (AO1 / O1)"
+    - "Zero AI-authored approvals or gate signatures in the audit log (AO5 / I4)"
+    - "Zero segregation-of-duties violations (a fee/listing-adjacent user signing a gate; single-human self-approval) (AO2 / I5)"
+
+design_artifacts:
+  scenarios:
+    - id: "A1-list-a-property"
+      path: "admin/C-UX-Scenarios/A1-list-a-property/"
+      screens: ["A1.1-work-queue","A1.2-submission-review","A1.3-diligence-workspace","A1.4-gate-ceremony","A1.5-mint-console","A1.6-listing","A1.7-reconcile"]
+  design_system:
+    path: "admin/D-Design-System/00-admin-design-system.md"
+    inherits: "D-Design-System/00-design-system.md (canonical tokens — verbatim)"
+    components:
+      - "Data table / review queue (work queue)"
+      - "Gate signature ceremony card (evidence + source links + named signer + consequence-stated confirm)"
+      - "SoD block state (hard, un-dismissable, states rule + required second signer)"
+      - "Document viewer + flag/diff overlay (AI flags, never approvals)"
+      - "On-chain action panel (mint — exact values, cost, finality, step-up auth)"
+      - "Status chips (Passed/Signed · Pending · On-chain-confirmed · Complete★)"
+      - "Reconciliation banner (chain wins)"
+      - "Audit row (append-only, attributed)"
+
+technical_requirements:
+  platform:
+    frontend: "Next.js (App Router) on Vercel — desktop-first admin app (separate from consumer)"
+    backend: "Convex (shared) — RBAC authority + segregation-of-duties enforcement, per-request"
+    auth: "WorkOS (SSO + directory + RBAC roles → Convex)"
+    onchain: "Anchor (Rust) · Token-2022 (DefaultAccountState frozen) · Token ACL"
+  integrations:
+    - {name: "WorkOS", purpose: "Admin SSO + roles → Convex RBAC/SoD", required: true}
+    - {name: "Middesk", purpose: "KYB/UBO evidence for Gate 0", required: true}
+    - {name: "Qualia", purpose: "Title evidence (Gate 1/3)", required: true}
+    - {name: "HouseCanary / ATTOM / CoreLogic", purpose: "Valuation/property data (Gate 2)", required: true}
+    - {name: "Vercel AI Gateway (ZDR on)", purpose: "Diligence extraction/flags — isolated from approval path (feeds DD-A05)", required: true}
+    - {name: "DocuSign / Dropbox Sign", purpose: "Legal/gate-package e-signature", required: true}
+    - {name: "Anchor mint program", purpose: "Create Token-2022 mint + ACL config on-chain (admin-triggered, authoritative)", required: true}
+    - {name: "Helius", purpose: "Confirm mint on-chain → reconcile Convex mirror", required: true}
+    - {name: "Step-up auth (WebAuthn hardware key)", purpose: "Gate irreversible on-chain actions", required: true}  # OPEN: MFA posture
+  data_models:
+    - {name: "Property", fields: ["id","name","location","spvName","offeringSize","targetNetYield","status(submitted|gating|minted|listed)","sponsorId"]}
+    - {name: "DiligenceGate", fields: ["propertyId","gateNo(0-7)","status","evidenceRefs[]","signedBy(human)","secondSignedBy(human?)","signedAt","docHash"]}
+    - {name: "EvidencePackage", fields: ["propertyId","gateNo","items[](value,sourceRef,confidence,verifiedBy)","assembledBy(Dana)","approved:false"]}  # never AI-approved
+    - {name: "Mint", fields: ["propertyId","mintAddress","supply","aclState(frozen-by-default)","metadataUri","mintedBy(human)","txSig"]}
+    - {name: "Role/Grant", fields: ["userId","role","permissions[]","sodConflicts[]"]}  # fee-vs-gate mutual exclusion
+    - {name: "AuditLog", fields: ["actor(human)","action","target","onchainRef?","timestamp"]}
+
+acceptance_criteria:
+  functional:
+    - "A property cannot reach 'listed' unless ALL Gates 0–7 are status=signed by a named human (hard gate; enforced server-side, not UI)."
+    - "Each gate signature attributes to a named human; multi-party gates require a DISTINCT second signer."
+    - "A user with a fee/listing stake in a property is BLOCKED from signing any of its gates (SoD, server-enforced) with the rule + required signer stated."
+    - "AI output renders only as flags/extractions with source citations — there is NO affordance anywhere to let the AI (or any non-human) sign or approve."
+    - "Mint is created with Token-2022 ACL frozen-by-default; the confirm states exact supply + cost + finality ('irreversible') and requires step-up auth."
+    - "Listing publishes the offering to the consumer Explore surface only after mint is on-chain-confirmed."
+    - "Every gate sign, mint, and listing writes an immutable AuditLog entry (actor, action, target, on-chain ref, timestamp)."
+  non_functional:
+    - "Desktop-first, data-dense; review queue virtualized (10k+ rows) with <100ms interaction."
+    - "WCAG 2.2 AA: visible focus, 44px interactive rows, tabular figures, status = color + icon + label (never color alone)."
+    - "On-chain values (mint address, tx sig, doc hash) shown in mono-data, truncate-middle + copy, full on hover."
+    - "AI isolation: untrusted sponsor docs reach only the read/extract agent; never a recommend/approve surface (prompt-injection boundary)."
+    - "All tokens inherited verbatim from the canonical design system; no admin component invents color/font/radius."
+  edge_cases:
+    - "A gate's evidence is incomplete → gate cannot be signed; shows exactly what's missing; routes back to DD-A05 / sponsor."
+    - "Second signer unavailable for a multi-party gate → property stays in 'gating'; never auto-advances."
+    - "Mint tx fails on-chain → property stays pre-mint, nothing listed, failure audited, clear retry."
+    - "Chain↔Convex drift after mint → reconciliation banner; chain wins; mirror corrected; logged."
+    - "Attempted SoD-violating signature → hard block, logged as an attempt (AO2 measures attempts blocked)."
+
+testing_guidance:
+  operator_testing:
+    - "Ask the signer to point to the evidence behind each gate before signing (evidence-first check)."
+    - "Confirm the operator cannot proceed to list with any gate unsigned, and cannot self-sign a multi-party gate."
+  qa_testing:
+    - "Attempt an AI-authored approval via every path — confirm none exists (AO5 assertion)."
+    - "Attempt a fee-adjacent signer on a gate — confirm server-side block + audit-as-attempt."
+    - "Force a mint tx failure — confirm nothing lists and state is clean."
+    - "Verify Helius reconciliation after mint (chain wins)."
+
+estimated_complexity:
+  size: "large"
+  effort: "6-8 weeks (ops spine; excludes consumer app)"
+  risk: "medium-high (on-chain mint authority + SoD correctness)"
+  dependencies: ["DD-A05 (AI-diligence evidence feeds gate ceremony)", "DD-A03 (sponsor intake produces the property)"]
+
+notes: |
+  OPEN DECISIONS: (1) MFA/step-up posture for signature + on-chain actions (recommend WebAuthn hardware key);
+  (2) internal Gate 0–7 evidence definitions + which are multi-party. Custody vendor (B1) does NOT block A1
+  (no money moves in listing) — it blocks DD-A02. Design source of truth is the canonical design system +
+  the admin data-layer extension; use tokens verbatim. Pairs with DD-A02 (Push a Distribution) to complete
+  the ops spine (gate → mint → distribute).
