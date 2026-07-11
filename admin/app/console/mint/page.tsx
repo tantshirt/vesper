@@ -30,6 +30,24 @@ type MintRow = {
   allGatesSigned: boolean;
 };
 
+type ReconRow = {
+  id: string;
+  signature: string;
+  eventType: string;
+  mint: string | null;
+  status: "applied" | "unresolved";
+  discrepancy: unknown;
+  processedAt: number;
+};
+
+type ReconStatus = {
+  recent: ReconRow[];
+  unresolvedCount: number;
+  discrepancyCount: number;
+  hasUnresolved: boolean;
+  hasDiscrepancy: boolean;
+};
+
 // A nominal network-cost estimate stated before the irreversible mint. The real figure comes from the
 // server-wallet fee simulation when the STUB-MINT seam is replaced (rent for the Token-2022 mint +
 // initialize_offering + priority fee); shown here so the operator sees a cost before committing.
@@ -57,6 +75,7 @@ export default function MintPage() {
   const [error, setError] = useState<Record<string, string>>({});
 
   const console_ = useQuery(api.mint.mintConsole, canMint ? {} : "skip");
+  const recon = useQuery(api.mint.reconciliationStatus, canMint ? {} : "skip");
   const mintOffering = useAction(api.mint.mintOffering);
   const confirmMint = useMutation(api.mint.confirmMintStub);
   const listOffering = useMutation(api.mint.listOffering);
@@ -127,6 +146,16 @@ export default function MintPage() {
   }
 
   const rows = (console_ ?? []) as MintRow[];
+  const recon_ = recon as ReconStatus | undefined;
+  // The reconciliation banner surfaces the on-chain confirm side of the spine: recent confirmations,
+  // plus any unresolved event or chain↔Convex discrepancy the operator/compliance should see. The
+  // reconcile path is chain-authoritative (chain wins) — this is a read-only monitor, never a control.
+  const reconConfirms = (recon_?.recent ?? []).filter(
+    (r) => r.eventType === "mint_confirmed" && r.status === "applied",
+  );
+  const reconAttention = (recon_?.recent ?? []).filter(
+    (r) => r.status === "unresolved" || r.discrepancy != null,
+  );
 
   return (
     <section style={{ padding: "var(--space-6)" }}>
@@ -145,6 +174,58 @@ export default function MintPage() {
           is attributed to you in the audit log.
         </p>
       </header>
+
+      {/* RECONCILIATION MONITOR (3-3) — the on-chain confirm side of the spine. Chain wins; this is a
+          read-only surface. Attention rows (unresolved / discrepancy) lead; recent confirms follow. */}
+      {recon_ !== undefined && (recon_.recent.length > 0 || recon_.hasUnresolved || recon_.hasDiscrepancy) && (
+        <div
+          style={{
+            margin: "0 0 var(--space-5)",
+            padding: "var(--space-4) var(--space-5)",
+            borderRadius: "var(--radius-md)",
+            border: `1px solid ${recon_.hasDiscrepancy || recon_.hasUnresolved ? "var(--warning)" : "var(--hairline-2)"}`,
+            background: "var(--surface)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", flexWrap: "wrap" }}>
+            <p style={{ color: "var(--muted)", font: "600 11px var(--sans)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              On-chain reconciliation
+            </p>
+            <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+              {recon_.hasDiscrepancy && (
+                <StatusChip status="blocked" label={`${recon_.discrepancyCount} discrepancy${recon_.discrepancyCount === 1 ? "" : "…"} (chain won)`} />
+              )}
+              {recon_.hasUnresolved && (
+                <StatusChip status="pending" label={`${recon_.unresolvedCount} unresolved`} />
+              )}
+              {!recon_.hasDiscrepancy && !recon_.hasUnresolved && reconConfirms.length > 0 && (
+                <StatusChip status="onchain" label={`${reconConfirms.length} confirmed on-chain`} />
+              )}
+            </div>
+          </div>
+
+          <p style={{ color: "var(--sub)", fontSize: "12px", lineHeight: 1.5, margin: "var(--space-2) 0 0", maxWidth: "80ch" }}>
+            Chain is authoritative — a confirmation reconciles Convex to on-chain truth (chain wins on any
+            divergence). Listing unlocks the instant a property&apos;s mint is confirmed here.
+          </p>
+
+          {(reconAttention.length > 0 ? reconAttention : reconConfirms).slice(0, 6).length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", margin: "var(--space-3) 0 0" }}>
+              {(reconAttention.length > 0 ? reconAttention : reconConfirms).slice(0, 6).map((r) => (
+                <div key={r.id} style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap", fontSize: "12px", color: "var(--sub)" }}>
+                  <StatusChip
+                    status={r.discrepancy != null ? "blocked" : r.status === "unresolved" ? "pending" : "onchain"}
+                    label={r.discrepancy != null ? "Discrepancy" : r.status === "unresolved" ? "Unresolved" : "Confirmed"}
+                  />
+                  <span style={{ color: "var(--muted)" }}>{r.eventType}</span>
+                  {r.mint && <MonoData value={r.mint} label="on-chain mint address" />}
+                  <MonoData value={r.signature} label="on-chain signature" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {console_ === undefined && <p style={{ color: "var(--sub)" }}>Loading properties…</p>}
       {console_ !== undefined && rows.length === 0 && (

@@ -30,10 +30,10 @@ development_status:
   epic-2-retrospective: notify
 
   # ---- Epic 3 (AE3): Gate → Mint → List ★ (Sprint 2–3) ----
-  epic-3: in-progress
+  epic-3: done                                 # ✅ EPIC AE3 COMPLETE — THE SPINE: gate ceremony (3-1) → mint (3-2) → confirm/reconcile (3-3) → list. gate→mint→confirm→list end-to-end on the devnet-stub path. 726 tests pass.
   3-1-gate-signature-ceremony: done            # ✅ THE SPINE. gates.ts: signGate (ACTION → 1-2 requireGateSigner, no forked SoD); multi-party (gate 6, DATA/GATE_DEFINITIONS placeholder pending B3) needs 2 distinct signers (self-approval blocked+durably audited); fee-conflict blocked; platform_admin denied; allGatesSigned advancement gate; evidence(2-2) shown as flags never approvals; no AI/non-human sign path. beginGating + workspace. 11 tests, 708 total pass. (B3 = data edit to GATE_DEFINITIONS.multiParty, not a rebuild.)
   3-2-mint-listing-console: done               # ✅ mint.ts: mintOffering (action, mint.execute) — permission→idempotency(no double-mint)→allGatesSigned wall(3-1)→requireStepUp(B2 stub)→STUB-MINT seam→recordMint. listOffering refuses until mintStatus confirmed then gating→open. platform_admin denied. requireStepUp added to security.ts (B2 placeholder). 10 tests, 718 total pass. (B2 = wire real WebAuthn into requireStepUp; mint seam = real devnet-acl recipe + server wallet.)
-  3-3-mint-reconciliation: backlog             # Sprint 3. Reuses reconcile.ts/Helius. Needs 3-2.
+  3-3-mint-reconciliation: done                # ✅ reconcile.ts extended (mint_confirmed event + applyMintConfirmation; extracted shared applyChainEventInner core — real Helius webhook path + demo confirm share ONE path, existing holding/distribution reconcile unchanged). confirmMintStub routes through it (chain-wins/idempotent/audited). mintStatus→confirmed unblocks listOffering. reconciliationStatus banner. 8 tests, 726 total pass.
   epic-3-retrospective: notify
 
   # ---- Epic 4 (AE4): Distributions (Sprint 4–5) ----

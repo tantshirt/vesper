@@ -9,7 +9,11 @@ import { writeAudit } from "./audit";
 // discrepancy tracking. Reconciliation NEVER makes Convex authoritative over chain.
 
 // The internal event contract — the tolerant Helius shape is normalized down to exactly this.
-export type ChainEventType = "mint" | "transfer" | "distribution";
+// `mint_confirmed` (Admin Story 3.3) is a PROPERTY-mint confirmation: it names a property's `mint`
+// (no user holding) and flips that property's `mintStatus`→"confirmed" (unblocking 3-2 listOffering).
+// It is a DISTINCT type from `mint`/`transfer` (which reconcile a USER's token holding) so the two can
+// never be confused — a holding mint with no known owner still stays `unresolved` for redrive.
+export type ChainEventType = "mint" | "transfer" | "distribution" | "mint_confirmed";
 export interface ChainEvent {
   type: ChainEventType;
   signature: string;
@@ -25,7 +29,12 @@ export interface ChainEvent {
 
 // Convex mutation args validator mirroring ChainEvent.
 const eventArgs = {
-  type: v.union(v.literal("mint"), v.literal("transfer"), v.literal("distribution")),
+  type: v.union(
+    v.literal("mint"),
+    v.literal("transfer"),
+    v.literal("distribution"),
+    v.literal("mint_confirmed"),
+  ),
   signature: v.string(),
   mint: v.optional(v.string()),
   owner: v.optional(v.string()),
@@ -37,27 +46,102 @@ const eventArgs = {
   raw: v.optional(v.any()),
 };
 
+// The idempotent apply CORE, as a plain async fn on MutationCtx. Both the Helius httpAction (via the
+// `applyChainEvent` internalMutation) and the 3-3 demo `confirmMintStub` (a public mutation, which
+// cannot ctx.runMutation) call THIS — so the demo confirm exercises the exact same chain-wins code the
+// real webhook does, never a parallel flip. Idempotency-by-signature lives here so every caller gets it.
+export async function applyChainEventInner(ctx: MutationCtx, event: ChainEvent) {
+  // Idempotency: a signature that already *applied* is a no-op (never re-apply, never double-audit).
+  // An earlier `unresolved` row (event arrived before its property/user existed) is NOT terminal —
+  // delete it so a later redelivery re-drives to a real apply. `.first()` (not `.unique()`) so a
+  // stray duplicate row can never make every future event with that signature throw.
+  const prior = await ctx.db
+    .query("reconciliations")
+    .withIndex("by_signature", (q) => q.eq("signature", event.signature))
+    .first();
+  if (prior?.status === "applied") return { status: "duplicate" as const };
+  if (prior) await ctx.db.delete(prior._id); // unresolved → re-drive
+
+  if (event.type === "distribution") {
+    return await applyDistribution(ctx, event);
+  }
+  if (event.type === "mint_confirmed") {
+    return await applyMintConfirmation(ctx, event);
+  }
+  return await applyOwnership(ctx, event);
+}
+
 // Idempotent apply of a single chain event to the Convex mirror. Called from the Helius httpAction.
 export const applyChainEvent = internalMutation({
   args: eventArgs,
-  handler: async (ctx, event) => {
-    // Idempotency: a signature that already *applied* is a no-op (never re-apply, never double-audit).
-    // An earlier `unresolved` row (event arrived before its property/user existed) is NOT terminal —
-    // delete it so a later redelivery re-drives to a real apply. `.first()` (not `.unique()`) so a
-    // stray duplicate row can never make every future event with that signature throw.
-    const prior = await ctx.db
-      .query("reconciliations")
-      .withIndex("by_signature", (q) => q.eq("signature", event.signature))
-      .first();
-    if (prior?.status === "applied") return { status: "duplicate" as const };
-    if (prior) await ctx.db.delete(prior._id); // unresolved → re-drive
-
-    if (event.type === "distribution") {
-      return await applyDistribution(ctx, event);
-    }
-    return await applyOwnership(ctx, event);
-  },
+  handler: async (ctx, event) => applyChainEventInner(ctx, event),
 });
+
+// mint_confirmed → confirm a PROPERTY's mint (no user holding). Chain reports the mint is on-chain-
+// confirmed; Convex's `mintStatus` is flipped to "confirmed" (which unblocks 3-2's listOffering).
+// CHAIN WINS: if Convex diverged from the chain-reported state — its prior `mintStatus` was neither the
+// expected "minting" nor already "confirmed" (e.g. still "none" because Convex never saw the mint, or it
+// was rolled back) — the value is overwritten and the drift stamped on the reconciliations row + logged
+// as `chain.discrepancy`. Always audits `mint.confirmed` naming the on-chain signature. Idempotency is
+// by signature (in applyChainEventInner) — a duplicate confirmation signature never re-applies.
+async function applyMintConfirmation(ctx: MutationCtx, event: ChainEvent) {
+  const property = event.mint
+    ? await ctx.db.query("properties").withIndex("by_mint", (q) => q.eq("mint", event.mint)).first()
+    : null;
+
+  // A confirmation whose mint names no known property can't resolve — unresolved (redrivable if the
+  // property appears later), never a bogus "applied".
+  if (!property) {
+    await ctx.db.insert("reconciliations", {
+      signature: event.signature,
+      eventType: event.type,
+      mint: event.mint,
+      slot: event.slot,
+      status: "unresolved",
+      raw: event.raw ?? event,
+      processedAt: Date.now(),
+    });
+    return { status: "unresolved" as const };
+  }
+
+  const before = property.mintStatus ?? "none";
+  const after = "confirmed" as const;
+  const diverged = before !== "minting" && before !== "confirmed";
+  const discrepancy = diverged ? { before, after } : undefined;
+
+  await ctx.db.patch(property._id, { mintStatus: after });
+
+  // Always audit the confirmation, naming the on-chain signature. On drift, additionally log the
+  // discrepancy (chain overwrote a divergent Convex value) — mirroring applyOwnership's chain.discrepancy.
+  await writeAudit(ctx, {
+    actor: "helius",
+    action: "mint.confirmed",
+    target: property._id,
+    onchainRef: event.signature,
+    meta: { mint: event.mint, before, after },
+  });
+  if (diverged) {
+    await writeAudit(ctx, {
+      actor: "helius",
+      action: "chain.discrepancy",
+      target: property._id,
+      onchainRef: event.signature,
+      meta: { mint: event.mint, discrepancy },
+    });
+  }
+
+  await ctx.db.insert("reconciliations", {
+    signature: event.signature,
+    eventType: event.type,
+    mint: event.mint,
+    slot: event.slot,
+    status: "applied",
+    discrepancy,
+    raw: event.raw ?? event,
+    processedAt: Date.now(),
+  });
+  return { status: "applied" as const, discrepancy };
+}
 
 // mint / transfer → reconcile a user's holding to the chain-authoritative token balance.
 async function applyOwnership(ctx: MutationCtx, event: ChainEvent) {

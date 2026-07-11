@@ -10,9 +10,10 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
-import { requirePermission } from "./rbac";
+import { requirePermission, requireStaff, effectivePermissions } from "./rbac";
 import { requireStepUp, requireUnsafeStubs } from "./security";
 import { allGatesSigned } from "./gates";
+import { applyChainEventInner } from "./reconcile";
 
 // Admin Story 3.2 — the MINT & LISTING console. The irreversible on-chain act that turns a fully-gated
 // (3-1) property into an investable offering. THREE walls make it impossible to fat-finger:
@@ -169,31 +170,72 @@ export const recordMint = internalMutation({
   },
 });
 
-// confirmMintStub — the 3-3 stand-in that flips mintStatus "minting" → "confirmed". The REAL confirm is
-// the Helius reconcile path (Story 3-3) applying chain truth; this stub is exposed (mint.execute-gated)
-// so the demo/tests can reach the LIST step. Deliberately DISTINCT from the mint call — a mint is never
-// confirmed in the same breath it is executed. Idempotent: a property already confirmed is a no-op.
+// confirmMintStub — the 3-3 demo confirm that flips mintStatus "minting" → "confirmed". The REAL confirm
+// is the Helius webhook → reconcile path (http.ts → applyChainEvent) applying chain truth; this stub is
+// exposed (mint.execute-gated, `requireUnsafeStubs`) so the demo/tests can reach the LIST step. It does
+// NOT flip the status itself — it SYNTHESIZES the Helius mint-confirmation event and drives it through
+// the SAME chain-wins apply path (reconcile.applyChainEventInner), so the demo exercises the real
+// reconcile code (idempotency-by-signature, discrepancy stamping, the mint.confirmed audit) rather than
+// a parallel flip. Deliberately DISTINCT from the mint call — a mint is never confirmed in the same
+// breath it is executed. Idempotent: a property already confirmed is a no-op.
 export const confirmMintStub = mutation({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, { propertyId }) => {
-    const staff = await requirePermission(ctx, "mint.execute");
+    await requirePermission(ctx, "mint.execute");
+    requireUnsafeStubs("Mint confirmation");
     const property = await ctx.db.get(propertyId);
     if (!property) throw new Error("Property not found");
     if (property.mintStatus === "confirmed") {
-      return { mintStatus: "confirmed" as const }; // idempotent
+      return { mintStatus: "confirmed" as const, alreadyConfirmed: true }; // idempotent
     }
     if (!property.mint || property.mintStatus !== "minting") {
       throw new Error("Cannot confirm a mint that has not been executed");
     }
-    await ctx.db.patch(propertyId, { mintStatus: "confirmed" });
-    await writeAudit(ctx, {
-      actor: staff.email || staff.name || staff.workosId,
-      action: "mint.confirmed",
-      target: propertyId,
-      onchainRef: property.mint,
-      meta: { mint: property.mint },
+    // Synthesize the on-chain mint-confirmation and route it through the reconcile apply path. The
+    // signature is deterministic per property so a re-run is an idempotent no-op at the reconcile layer
+    // too (belt-and-braces with the `confirmed` early-return above). The apply audits `mint.confirmed`
+    // (actor "helius") naming this signature — the chain event, not the operator, owns the confirmation.
+    await applyChainEventInner(ctx, {
+      type: "mint_confirmed",
+      signature: `STUB-CONFIRM-${propertyId}`,
+      mint: property.mint,
     });
-    return { mintStatus: "confirmed" as const };
+    return { mintStatus: "confirmed" as const, alreadyConfirmed: false };
+  },
+});
+
+// reconciliationStatus — the console's reconciliation monitor read. Gated on mint.execute OR
+// compliance.review (ops watches the mint spine; compliance oversees chain drift). Returns the most
+// recent reconciliations plus rollup flags so the console banner can surface any unresolved event or
+// chain↔Convex discrepancy at a glance. Read-only — never mutates the mirror.
+export const reconciliationStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const staff = await requireStaff(ctx);
+    const perms = await effectivePermissions(ctx, staff);
+    if (!perms.includes("mint.execute") && !perms.includes("compliance.review")) {
+      throw new Error("Not permitted: mint.execute or compliance.review");
+    }
+
+    const recent = await ctx.db.query("reconciliations").order("desc").take(50);
+    const rows = recent.map((r) => ({
+      id: r._id,
+      signature: r.signature,
+      eventType: r.eventType,
+      mint: r.mint ?? null,
+      status: r.status as "applied" | "unresolved",
+      discrepancy: r.discrepancy ?? null,
+      processedAt: r.processedAt,
+    }));
+    const unresolved = rows.filter((r) => r.status === "unresolved");
+    const discrepancies = rows.filter((r) => r.discrepancy != null);
+    return {
+      recent: rows,
+      unresolvedCount: unresolved.length,
+      discrepancyCount: discrepancies.length,
+      hasUnresolved: unresolved.length > 0,
+      hasDiscrepancy: discrepancies.length > 0,
+    };
   },
 });
 
