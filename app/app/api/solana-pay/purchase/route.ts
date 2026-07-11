@@ -17,9 +17,8 @@
 
 import { NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { buildSettlePurchaseTransaction } from "@/lib/solana/dvp";
+import { buildSettlePurchaseTransaction, DEVNET_RPC_URL } from "@/lib/solana/dvp";
 
-const DEFAULT_RPC_URL = "https://api.devnet.solana.com";
 const MAX_TOKEN_AMOUNT = 1_000_000;
 
 function solanaPayEnabled(): boolean {
@@ -28,7 +27,7 @@ function solanaPayEnabled(): boolean {
 
 function getConnection(): Connection {
   return new Connection(
-    process.env.SOLANA_RPC_URL ?? DEFAULT_RPC_URL,
+    process.env.SOLANA_RPC_URL ?? DEVNET_RPC_URL,
     "confirmed",
   );
 }

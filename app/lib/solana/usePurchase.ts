@@ -26,9 +26,8 @@ import { useCallback, useState } from "react";
 import { useWallets as useSolanaWallets, useSignTransaction } from "@privy-io/react-auth/solana";
 import { useAction } from "convex/react";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
+import { DEVNET_RPC_URL } from "@/lib/solana/dvp";
 import { api } from "@/convex/_generated/api";
-
-const DEFAULT_RPC_URL = "https://api.devnet.solana.com";
 
 export type PurchaseStatus =
   | "idle"
@@ -50,7 +49,7 @@ export interface UsePurchaseResult {
 
 function rpcUrl(): string {
   // NEXT_PUBLIC_ so the browser bundle can read it; falls back to devnet.
-  return process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? DEFAULT_RPC_URL;
+  return process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? DEVNET_RPC_URL;
 }
 
 function base64ToBytes(value: string): Uint8Array {

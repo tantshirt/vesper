@@ -35,6 +35,9 @@ import idl from "./vesper_dvp.idl.json";
 // Program + token-program ids
 // ---------------------------------------------------------------------------
 
+/** Public devnet RPC endpoint — the shared default when no RPC url is configured. */
+export const DEVNET_RPC_URL = "https://api.devnet.solana.com";
+
 /** Deployed `vesper_dvp` program id (devnet). */
 export const PROGRAM_ID = new PublicKey(
   "CfVrHrQoHq5tmAKPBQAtG5Eh5qrYuKQf1XrXWconD5M2",

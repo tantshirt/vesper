@@ -309,7 +309,7 @@ export const confirmPurchase = mutation({
     // Business gates FIRST — eligibility/consent (distinct acks), Reg A+ cap, spendable balance. The
     // DvP seam is invoked ONLY once these pass, so a real on-chain DvP program never settles for a
     // blocked caller (the settle-authorization structure holds when the stub is swapped out).
-    const gate = businessGateDecision({
+    const gateInput = {
       propertyStatus: property.status,
       offeringSize: property.offeringSize,
       offeringSettledAmount: settledPropertyAmount(propertyOrders),
@@ -322,16 +322,19 @@ export const confirmPurchase = mutation({
       amount,
       total,
       spendable,
-    });
+    };
+    const gate = businessGateDecision(gateInput);
 
     // Route the DvP seam only after the business gates pass; its confirmation is the sole authority
-    // for a `settled` write. A non-confirm is a committed `dvp-failed` failure (nothing charged).
+    // for a `settled` write. A non-confirm is a committed `dvp-failed` failure (nothing charged). The
+    // authoritative reason comes from settlementDecision — the single documented source of truth for
+    // the full settle I/O matrix (gates + DvP) — so the mutation has ONE decision path, not a second
+    // one that could drift from the pure decision the tests assert against.
     const dvp = gate.ok ? dvpSettle(orderId) : null;
-    const reason: SettlementReason | null = !gate.ok
-      ? gate.reason
-      : dvp!.confirmed
-        ? null
-        : "dvp-failed";
+    const decision: SettlementResult = gate.ok
+      ? settlementDecision({ ...gateInput, dvpConfirmed: dvp!.confirmed })
+      : gate;
+    const reason: SettlementReason | null = decision.ok ? null : decision.reason;
 
     // Committed failure: patch `failed`, audit, return the reason. Nothing charged — no holding, no
     // Reg A+ increment. NEVER a throw (a throw would roll back the mandated audit).
@@ -351,12 +354,12 @@ export const confirmPurchase = mutation({
 
     // Upsert the intent holding (chain-corrected later by reconcile). tokenAmount = amount as a
     // documented 1:1 stub; costBasis accumulates on a repeat buy; ownershipPct = cost / offeringSize.
-    const existingHolding = (
-      await ctx.db
-        .query("holdings")
-        .withIndex("by_user", (q) => q.eq("userId", user._id))
-        .collect()
-    ).find((h) => h.propertyId === propertyId);
+    const existingHolding = await ctx.db
+      .query("holdings")
+      .withIndex("by_user_property", (q) =>
+        q.eq("userId", user._id).eq("propertyId", propertyId),
+      )
+      .unique();
 
     const newCostBasis = (existingHolding?.costBasis ?? 0) + amount;
     const ownershipPct = ownershipBasis(newCostBasis, property.offeringSize);
