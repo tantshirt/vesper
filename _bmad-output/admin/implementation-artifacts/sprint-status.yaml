@@ -24,8 +24,8 @@ development_status:
   epic-1-retrospective: notify
 
   # ---- Epic 2 (AE2): Diligence & AI Evidence (Sprint 1–2; GO) ----
-  epic-2: backlog
-  2-1-ai-extraction-review: backlog            # Sprint 1. Injection-isolated extraction + cite-or-refuse via AI Gateway (ZDR).
+  epic-2: in-progress
+  2-1-ai-extraction-review: done               # ✅ diligenceExtract module (STRUCTURALLY isolated: no gate/mint/sign imports; public surface = startExtraction+rejectExtractedField data writes only; model seam internalAction requireUnsafeStubs-stubbed). Cite-or-refuse (uncited fields never presented as fact); injection strings stay inert data (proven: gate stays unsigned, roles unchanged). ai.review-gated. 8 tests, 653 total pass.
   2-2-evidence-assembly: backlog               # Sprint 2. "assembled, not approved"; no sign capability. Needs 2-1.
   epic-2-retrospective: notify
 

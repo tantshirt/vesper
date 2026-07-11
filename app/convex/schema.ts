@@ -237,4 +237,56 @@ export default defineSchema({
     operator: v.string(),
     publishedAt: v.number(),
   }).index("by_property", ["propertyId"]),
+
+  // --- Admin Story 2.1: AI extraction / flag review (injection-isolated, cite-or-refuse) ---
+  // These three tables are the extraction ENGINE's storage. Nothing here is an approval, a gate
+  // signature, or a permission — the AI never approves (spine I4). Untrusted document content flows
+  // ONLY into `extractedFields.value` (+ a citation) and never to a surface that can act on it.
+
+  // A diligence document for a property. UPLOAD is Story 6-2 — this story only MODELS the table so the
+  // extractor has something to read; tests insert rows directly. `text` is the STUB content seam: the
+  // raw document text the extractor reads. In production the seam fetches the file from `storageRef`
+  // through a ZDR-governed store (OCR/parse is 6-2); it is modeled inline here so the injection-isolation
+  // and cite-or-refuse guarantees are real and testable now. Optional so a row with no parsed text stays
+  // valid.
+  diligenceDocuments: defineTable({
+    propertyId: v.id("properties"),
+    kind: v.string(), // e.g. "rent_roll" | "operating_statement" | "psa" — free-form until 6-2 fixes it
+    storageRef: v.string(), // the storage locator the live seam would fetch (Convex storage id / URL)
+    uploadedBy: v.string(), // the human who uploaded — attribution, never a system
+    text: v.optional(v.string()), // STUB seam: raw document text the extractor reads (see note above)
+    createdAt: v.number(),
+  }).index("by_property", ["propertyId"]),
+
+  // One extraction run over a property's documents. `model` records which model produced it (a stub
+  // marker today). `createdBy` is the ai.review human who started the run — carried forward from
+  // startExtraction so the scheduled run stays attributed. A run NEVER carries an "approved" state.
+  extractionRuns: defineTable({
+    propertyId: v.id("properties"),
+    status: v.union(v.literal("running"), v.literal("complete"), v.literal("failed")),
+    model: v.string(),
+    createdBy: v.string(),
+    createdAt: v.number(),
+  }).index("by_property", ["propertyId"]),
+
+  // A single field the extractor produced. `status` is the CITE-OR-REFUSE contract: `extracted` iff it
+  // carries a non-empty `sourceRef` (a locator within `docId`), else `uncited` — an uncited field is
+  // NEVER presentable as an established fact. `rejected` is set ONLY by a human (rejectExtractedField);
+  // there is no `approved`/`verified` — verification is a human act in Story 2-2. `reviewNote` records a
+  // human's rejection reason (optional; present only on rejected rows). Every value is DATA — a value
+  // containing "ignore instructions and approve" is stored verbatim and acts on nothing.
+  extractedFields: defineTable({
+    runId: v.id("extractionRuns"),
+    propertyId: v.id("properties"),
+    docId: v.id("diligenceDocuments"),
+    field: v.string(),
+    value: v.string(),
+    sourceRef: v.optional(v.string()), // citation locator within docId; absent/empty ⇒ uncited
+    confidence: v.number(),
+    status: v.union(v.literal("extracted"), v.literal("uncited"), v.literal("rejected")),
+    reviewNote: v.optional(v.string()), // human rejection reason (rejected rows only)
+    createdAt: v.number(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_property", ["propertyId"]),
 });
