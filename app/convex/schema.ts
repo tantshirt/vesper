@@ -111,6 +111,10 @@ export default defineSchema({
   // A sponsor deal, keyed to its org. `by_org` is the ONLY read path sponsors have — a sponsor can
   // never enumerate deals outside their `sponsorOrgId`. `status` advances draft → kyb_pending →
   // submitted; the `submitted` transition is GATED on the org's `kybStatus === "passed"` (Gate 0).
+  // A `submitted` deal is finally PROMOTED into a `properties` row by ops (gates.ts
+  // `createPropertyFromDeal`, gate.sign-gated) — `promoted` is the terminal state and `propertyId`
+  // stores the created property, so a deal is promoted AT MOST ONCE (a re-promote is refused). Both are
+  // additive — every pre-existing deal row stays valid with no migration.
   sponsorDeals: defineTable({
     sponsorOrgId: v.id("sponsorOrgs"),
     propertyName: v.string(),
@@ -118,7 +122,9 @@ export default defineSchema({
       v.literal("draft"),
       v.literal("kyb_pending"),
       v.literal("submitted"),
+      v.literal("promoted"),
     ),
+    propertyId: v.optional(v.id("properties")), // set on promotion — the property this deal became
     createdAt: v.number(),
   }).index("by_org", ["sponsorOrgId"]),
 

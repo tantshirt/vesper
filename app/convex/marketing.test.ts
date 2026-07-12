@@ -113,6 +113,37 @@ describe("marketing sign-off gate — nothing ships unsigned", () => {
   });
 });
 
+describe("submitMarketingContent — internal staff only (sponsors excluded)", () => {
+  test("a sponsor role is DENIED — platform marketing is not a sponsor's to draft", async () => {
+    const t = convexTest(schema, modules);
+    await seedStaff(t, { workosId: "user_sponsor", roles: ["sponsor_ops"] });
+    await expect(
+      t.withIdentity(workos("user_sponsor")).mutation(api.marketing.submitMarketingContent, {
+        kind: "property_headline",
+        body: "Beacon Capital — invest now.",
+      }),
+    ).rejects.toThrow("Not authorized to submit marketing");
+  });
+
+  test("internal ops and compliance staff CAN submit a draft", async () => {
+    const t = convexTest(schema, modules);
+    await seedStaff(t, { workosId: "user_ops", roles: ["ops_diligence"] });
+    await seedStaff(t, { workosId: "user_compliance", roles: ["compliance"] });
+
+    const opsRes = await asOps(t).mutation(api.marketing.submitMarketingContent, {
+      kind: "explore_blurb",
+      body: "Diligence-gated real estate offerings.",
+    });
+    expect(opsRes.status).toBe("draft");
+
+    const compRes = await asCompliance(t).mutation(api.marketing.submitMarketingContent, {
+      kind: "email_blast",
+      body: "This month's new offerings.",
+    });
+    expect(compRes.status).toBe("draft");
+  });
+});
+
 describe("blockMarketing — refusal requires a note, audited to the human", () => {
   test("block with a note → blocked + reviewNote recorded + audited; stays unshippable", async () => {
     const t = convexTest(schema, modules);

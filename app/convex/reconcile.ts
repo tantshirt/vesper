@@ -327,6 +327,15 @@ export function normalizeHeliusEvent(payload: unknown): ChainEvent[] {
   return events;
 }
 
+// TODO(real-Helius / B-series): this normalizer NEVER emits `"mint_confirmed"` — so today only the 3-3
+// demo `confirmMintStub` can confirm a PROPERTY mint; the real Helius webhook path cannot. When the live
+// Helius integration lands, `normalizeType` must recognize the property-mint-creation / mint-authority
+// event (a new Token-2022 mint being created for a property, NOT a user token transfer) and emit
+// `"mint_confirmed"` (with `mint` set, and NO `owner`/`tokenAmount`) so `applyMintConfirmation` fires on
+// the real path and flips the property's `mintStatus`→"confirmed" (unblocking 3-2 listOffering). The
+// current `s.includes("mint")` rule maps ANY mint-ish type to `"mint"` (a user-holding reconcile), which
+// would leave a real property-mint event `unresolved`. Do NOT invent the real Helius event shape here
+// until that integration is specced — this note is the seam, not an implementation.
 function normalizeType(t: unknown): ChainEventType | undefined {
   if (typeof t !== "string") return undefined;
   const s = t.toLowerCase();

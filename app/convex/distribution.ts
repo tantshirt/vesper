@@ -33,6 +33,17 @@ export function roundCents(n: number): number {
   return Math.round(finite(n) * 100) / 100;
 }
 
+// holderWeight — THE single holder pro-rata weight rule, shared by every place that aggregates holdings
+// into a distribution. Weight is `ownershipPct` (the unit-safe ownership basis both purchase paths
+// maintain — NOT `tokenAmount`, whose units differ across the stub-settle and reconciled-chain paths),
+// coerced to a finite number (a non-finite ownershipPct contributes 0, never NaN). Exported and reused
+// by runDistribution, distributionTargets (distribution.ts), and holdersByUser (distributionBuild.ts)
+// so the scheduled ledger, the push targets, and the built draft can NEVER drift on how a holder is
+// weighted — removing the mis-pay risk of three hand-copied `Number.isFinite(...) ? ... : 0` sites.
+export function holderWeight(h: { ownershipPct: number }): number {
+  return Number.isFinite(h.ownershipPct) ? h.ownershipPct : 0;
+}
+
 // A holder's pro-rata weight input (the property ownership/token amount). `id` is an opaque key (a user
 // or holding id) so the math stays db-free and testable.
 export interface ShareInput {
@@ -133,8 +144,7 @@ export const runDistribution = internalMutation({
     // would mis-pay dividends. ownershipPct is the single unit-safe ownership basis both paths maintain.
     const weightByUser = new Map<Id<"users">, number>();
     for (const h of holdings) {
-      const w = Number.isFinite(h.ownershipPct) ? h.ownershipPct : 0;
-      weightByUser.set(h.userId, (weightByUser.get(h.userId) ?? 0) + w);
+      weightByUser.set(h.userId, (weightByUser.get(h.userId) ?? 0) + holderWeight(h));
     }
     const users = [...weightByUser.entries()];
     const shares = computeShares(
@@ -229,8 +239,7 @@ export const distributionTargets = internalQuery({
     // stay in lockstep so the pushed amount matches the scheduled ledger amount.
     const weightByUser = new Map<Id<"users">, number>();
     for (const h of holdings) {
-      const w = Number.isFinite(h.ownershipPct) ? h.ownershipPct : 0;
-      weightByUser.set(h.userId, (weightByUser.get(h.userId) ?? 0) + w);
+      weightByUser.set(h.userId, (weightByUser.get(h.userId) ?? 0) + holderWeight(h));
     }
 
     const holders: { userId: Id<"users">; walletAddress: string | undefined; weight: number }[] = [];

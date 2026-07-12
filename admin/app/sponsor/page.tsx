@@ -13,8 +13,12 @@ import { kybChip } from "./layout";
 // and is org-scoped — this page can only ever see and touch the caller's own org.
 
 // A sponsor deal's status → StatusChip. Never color alone.
-function dealChip(status: "draft" | "kyb_pending" | "submitted"): { status: StatusKind; label: string } {
+function dealChip(
+  status: "draft" | "kyb_pending" | "submitted" | "promoted",
+): { status: StatusKind; label: string } {
   switch (status) {
+    case "promoted":
+      return { status: "passed", label: "Promoted to offering" };
     case "submitted":
       return { status: "passed", label: "Submitted for review" };
     case "kyb_pending":
@@ -226,7 +230,7 @@ export default function SponsorPage() {
                       >
                         {isOpen ? "Hide intake" : "Intake"}
                       </button>
-                      {canManage && d.status !== "submitted" && (
+                      {canManage && d.status !== "submitted" && d.status !== "promoted" && (
                         <button
                           style={{ ...buttonStyle, opacity: busy ? 0.6 : 1 }}
                           disabled={busy}

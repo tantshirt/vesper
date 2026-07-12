@@ -2,7 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
 import { requirePermission } from "./rbac";
-import { PERMISSIONS } from "./roles";
+import { PERMISSIONS, OPERATIONAL_PERMISSIONS } from "./roles";
 
 // Admin Story 1.4 — audited, time-boxed break-glass. Break-glass is the sanctioned, logged, EXPIRING
 // escape hatch: a `breakglass.use` holder confers a specific `scope` of permissions on a staff member
@@ -52,6 +52,36 @@ export const invokeBreakGlass = mutation({
       throw new Error(
         `invokeBreakGlass duration must be > 0 and ≤ ${MAX_BREAK_GLASS_MINUTES} minutes`,
       );
+    }
+
+    // SoD guard (a) — NO SELF break-glass. Break-glass is the escape hatch for granting a DISTINCT
+    // emergency human access; a caller elevating THEMSELVES is self-escalation (mirrors
+    // rbacAdmin.detectGrantConflicts' self_grant rule). platform_admin holds breakglass.use, so without
+    // this a platform_admin could mint THEMSELVES gate.sign/mint.execute/etc. — exactly the operational
+    // power their role is designed to lack. Ordered AFTER input validation so a plain malformed request
+    // (empty reason, unknown scope, over-long window) still surfaces its own precise error.
+    if (workosId === caller.workosId) {
+      throw new Error(
+        "Self break-glass is not permitted — break-glass grants emergency access to a DISTINCT human",
+      );
+    }
+
+    // SoD guard (b) — a `platform_admin` target must stay operationally powerless. Refuse to confer any
+    // OPERATIONAL permission (gate.sign / mint.execute / freeze.execute / distribution.execute) on a
+    // staff member who holds platform_admin (mirrors detectGrantConflicts' platform_admin_operational
+    // rule). The time-boxed hatch stays open for granting a DISTINCT operational human emergency access.
+    const operational = new Set<string>(OPERATIONAL_PERMISSIONS);
+    const requestedOperational = args.scope.filter((p) => operational.has(p));
+    if (requestedOperational.length > 0) {
+      const target = await ctx.db
+        .query("staff")
+        .withIndex("by_workosId", (q) => q.eq("workosId", workosId))
+        .unique();
+      if (target && target.roles.includes("platform_admin")) {
+        throw new Error(
+          `platform_admin may hold no operational permission — refusing to break-glass operational scope (${requestedOperational.join(", ")}) to a platform_admin target`,
+        );
+      }
     }
 
     const now = Date.now();

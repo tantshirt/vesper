@@ -61,6 +61,33 @@ export async function allGatesSigned(
   return GATE_DEFINITIONS.every((d) => passed.has(d.gateNo));
 }
 
+// seedGates — the SINGLE gate-creation helper, shared by `beginGating` and `createPropertyFromDeal` so
+// the two paths can never drift on what "gateable" means. Creates the 8 `diligenceGates` rows
+// `status:"pending"` from GATE_DEFINITIONS. IDEMPOTENT: only missing gate numbers are inserted, so a
+// re-run never duplicates a row and never regresses a gate already signed. Returns the count created.
+async function seedGates(ctx: MutationCtx, propertyId: Id<"properties">): Promise<number> {
+  const existing = await ctx.db
+    .query("diligenceGates")
+    .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+    .collect();
+  const haveGateNos = new Set(existing.map((g) => g.gateNo));
+
+  let created = 0;
+  for (const def of GATE_DEFINITIONS) {
+    if (haveGateNos.has(def.gateNo)) continue; // idempotent — never duplicate or regress
+    await ctx.db.insert("diligenceGates", {
+      propertyId,
+      gateNo: def.gateNo,
+      label: def.label,
+      status: "pending",
+      multiParty: def.multiParty,
+      signerWorkosIds: [],
+    });
+    created++;
+  }
+  return created;
+}
+
 // ── beginGating — start the ceremony for a property (gate.sign-gated, ops) ───────────────────────────
 // Moves the property to status `"gating"` (pre-open, not investor-browsable) and creates the 8
 // `diligenceGates` rows `status:"pending"` from GATE_DEFINITIONS. IDEMPOTENT: re-running never
@@ -85,25 +112,7 @@ export const beginGating = mutation({
       await ctx.db.patch(args.propertyId, { status: "gating" });
     }
 
-    const existing = await ctx.db
-      .query("diligenceGates")
-      .withIndex("by_property", (q) => q.eq("propertyId", args.propertyId))
-      .collect();
-    const haveGateNos = new Set(existing.map((g) => g.gateNo));
-
-    let created = 0;
-    for (const def of GATE_DEFINITIONS) {
-      if (haveGateNos.has(def.gateNo)) continue; // idempotent — never duplicate or regress
-      await ctx.db.insert("diligenceGates", {
-        propertyId: args.propertyId,
-        gateNo: def.gateNo,
-        label: def.label,
-        status: "pending",
-        multiParty: def.multiParty,
-        signerWorkosIds: [],
-      });
-      created++;
-    }
+    const created = await seedGates(ctx, args.propertyId);
 
     await writeAudit(ctx, {
       actor,
@@ -113,6 +122,81 @@ export const beginGating = mutation({
     });
 
     return { created, status: "gating" };
+  },
+});
+
+// ── createPropertyFromDeal — PROMOTE a submitted sponsor deal into a gateable property (gate.sign) ────
+// THE MISSING LINK between the sponsor intake epic (6.x) and the gate/mint/distribution epics (2-5).
+// A submitted, KYB-cleared `sponsorDeals` row is finalized by ops into a real `properties` row: it
+// populates `operatorSponsorOrgId = deal.sponsorOrgId` (the tenant-isolation basis 6-3/6-4 scope on),
+// stamps the offering terms ops finalizes at gating time, sets `status:"gating"` + `fundedPct:0`, and
+// immediately seeds the 8 pending diligence gates (reusing `seedGates`) so the property is gateable at
+// once. The deal is patched to the terminal `promoted` status with `propertyId` stored, so a deal is
+// promoted AT MOST ONCE (a re-promote — non-submitted OR already-promoted — is refused). gate.sign-
+// gated (ops_diligence; platform_admin denied at 1-1's wall). Audited `property.created_from_deal`.
+export const createPropertyFromDeal = mutation({
+  args: {
+    dealId: v.id("sponsorDeals"),
+    // The offering terms ops finalizes at gating time. `units` is a REQUIRED `properties` field (schema)
+    // and a genuine offering term, so it is collected here — leaving a required field unset is not allowed.
+    location: v.string(),
+    propertyType: v.string(),
+    units: v.number(),
+    spvName: v.string(),
+    offeringSize: v.number(),
+    targetNetYield: v.number(),
+    minInvestment: v.number(),
+  },
+  handler: async (ctx, args): Promise<{ propertyId: Id<"properties">; created: number }> => {
+    const staff: Doc<"staff"> = await requirePermission(ctx, "gate.sign");
+    const actor = staff.email || staff.name || staff.workosId;
+
+    const deal = await ctx.db.get(args.dealId);
+    if (!deal) throw new Error("Deal not found");
+    // Only a submitted (intake/KYB-cleared) deal may be promoted. A draft/kyb_pending deal has not
+    // cleared Gate 0 + the intake checklist; an already-`promoted` deal has its property — refuse both
+    // so promotion is idempotent-guarded (a deal becomes at most one property).
+    if (deal.status !== "submitted") {
+      throw new Error(
+        `Cannot promote a ${deal.status} deal — only a submitted deal that has cleared intake/KYB`,
+      );
+    }
+    if (deal.propertyId) {
+      throw new Error("Deal has already been promoted to a property");
+    }
+
+    const propertyId = await ctx.db.insert("properties", {
+      name: deal.propertyName,
+      location: args.location,
+      propertyType: args.propertyType,
+      units: args.units,
+      targetNetYield: args.targetNetYield,
+      offeringSize: args.offeringSize,
+      fundedPct: 0,
+      status: "gating", // pre-open, not investor-browsable until every gate is signed + it is listed
+      spvName: args.spvName,
+      minInvestment: args.minInvestment,
+      operatorSponsorOrgId: deal.sponsorOrgId, // THE tenant link 6-3/6-4 scope every sponsor read on
+    });
+
+    const created = await seedGates(ctx, propertyId);
+
+    // Link back + burn the deal to its terminal state so it can never be promoted twice.
+    await ctx.db.patch(args.dealId, { status: "promoted", propertyId });
+
+    await writeAudit(ctx, {
+      actor, // the named ops human who finalized the offering — never a system
+      action: "property.created_from_deal",
+      target: propertyId,
+      meta: {
+        dealId: args.dealId,
+        propertyId,
+        sponsorOrgId: deal.sponsorOrgId,
+        created,
+      },
+    });
+
+    return { propertyId, created };
   },
 });
 

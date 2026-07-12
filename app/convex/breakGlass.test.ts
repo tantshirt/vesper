@@ -114,6 +114,56 @@ describe("invokeBreakGlass — gate, validation, and bounded expiry", () => {
   });
 });
 
+describe("invokeBreakGlass — SoD guards (no self-elevation, no operational scope to a platform_admin)", () => {
+  test("SELF break-glass is refused (a platform_admin cannot elevate themselves)", async () => {
+    const t = convexTest(schema, modules);
+    await seedStaff(t, { workosId: "user_pa", roles: ["platform_admin"] });
+    await expect(
+      t.withIdentity(workos("user_pa")).mutation(api.breakGlass.invokeBreakGlass, {
+        workosId: "user_pa", // same as caller → self-escalation
+        scope: ["gate.sign"],
+        reason: "trying to grant myself gate signing",
+      }),
+    ).rejects.toThrow(/Self break-glass/);
+  });
+
+  test("granting an OPERATIONAL permission to a platform_admin target is refused", async () => {
+    const t = convexTest(schema, modules);
+    await seedStaff(t, { workosId: "user_pa", roles: ["platform_admin"] });
+    // A DISTINCT staff member who is themselves a platform_admin.
+    await seedStaff(t, { workosId: "user_pa2", roles: ["platform_admin"], name: "Sam Two" });
+    await expect(
+      t.withIdentity(workos("user_pa")).mutation(api.breakGlass.invokeBreakGlass, {
+        workosId: "user_pa2",
+        scope: ["gate.sign"], // operational → would give a platform_admin operational power
+        reason: "should be refused",
+      }),
+    ).rejects.toThrow(/platform_admin may hold no operational permission/);
+  });
+
+  test("the escape hatch STILL works: operational scope to a DISTINCT ops human is allowed", async () => {
+    const t = convexTest(schema, modules);
+    await seedStaff(t, { workosId: "user_pa", roles: ["platform_admin"], name: "Sam Admin" });
+    // The emergency grantee is a distinct ops human (not a platform_admin).
+    await seedStaff(t, { workosId: "user_ops", roles: ["ops_diligence"], name: "Rae Ops" });
+
+    const res = await t.withIdentity(workos("user_pa")).mutation(api.breakGlass.invokeBreakGlass, {
+      workosId: "user_ops",
+      scope: ["gate.sign"],
+      reason: "on-call authorized emergency gate signing for a distinct human",
+    });
+    expect(res.expiresAt).toBeGreaterThan(Date.now());
+
+    // The grant is real and compliance-visible — the escape hatch is intact for a distinct human.
+    const active = await t
+      .withIdentity(workos("user_pa"))
+      .query(api.breakGlass.listActiveBreakGlass, {});
+    expect(active).toHaveLength(1);
+    expect(active[0].workosId).toBe("user_ops");
+    expect(active[0].scope).toEqual(["gate.sign"]);
+  });
+});
+
 describe("break-glass confers scope ONLY inside its time box", () => {
   test("an ACTIVE grant confers its scope through me / effectivePermissions", async () => {
     const t = convexTest(schema, modules);

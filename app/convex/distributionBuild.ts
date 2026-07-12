@@ -3,7 +3,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
 import { requirePermission } from "./rbac";
-import { computeShares, roundCents } from "./distribution";
+import { computeShares, roundCents, holderWeight } from "./distribution";
 import { splitDistribution } from "./home";
 import type { Id } from "./_generated/dataModel";
 
@@ -81,8 +81,7 @@ async function holdersByUser(
   const weightByUser = new Map<Id<"users">, number>();
   let basis = 0;
   for (const h of holdings) {
-    const w = Number.isFinite(h.ownershipPct) ? h.ownershipPct : 0;
-    weightByUser.set(h.userId, (weightByUser.get(h.userId) ?? 0) + w);
+    weightByUser.set(h.userId, (weightByUser.get(h.userId) ?? 0) + holderWeight(h));
     basis += Number.isFinite(h.costBasis) ? h.costBasis : 0;
   }
   return { weightByUser, basis: roundCents(basis) };

@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
 import { requireStaff, requirePermission } from "./rbac";
+import { isSponsorRole } from "./roles";
 
 // Admin Story 5.3 — the MARKETING SIGN-OFF gate. Public/marketing copy cannot ship without a
 // counsel-gated (`compliance.review`) sign-off, or is blocked with a mandatory note. This is the
@@ -52,6 +53,13 @@ export const submitMarketingContent = mutation({
   },
   handler: async (ctx, { kind, body, propertyId }) => {
     const staff = await requireStaff(ctx);
+    // INTERNAL staff only may draft platform marketing. `requireStaff` admits sponsor rows too (they are
+    // `staff` rows), but platform marketing copy is not a sponsor's to draft — and a sponsor has no
+    // platform-wide propertyId scope. A caller holding ANY sponsor role is refused here (the role-
+    // partition wall, mirroring `requireSponsor`'s reverse direction).
+    if (staff.roles.some(isSponsorRole)) {
+      throw new Error("Not authorized to submit marketing: internal staff only");
+    }
     const actor = staffActor(staff);
 
     const trimmedKind = kind.trim();
