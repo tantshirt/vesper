@@ -1,15 +1,37 @@
 import { getSignInUrl } from "@workos-inc/authkit-nextjs";
+import { redirect } from "next/navigation";
+import { authConfigurationIssues, devAdminAuthConfigured, workosAuthConfigured } from "@/lib/authConfig";
 
-// Dynamic: getSignInUrl reads request/session state and calls WorkOS, so this must not be
-// prerendered at build time (a missing tenant would then fail the build instead of surfacing at
-// request time, which is the honest place for a misconfiguration to show up).
+// Dynamic: configured WorkOS SSO reads request/session state. Local preview auth bypasses WorkOS.
 export const dynamic = "force-dynamic";
 
-// Signed-out SSO front door. Do NOT swallow a getSignInUrl() failure into a silent fallback — a
-// misconfigured WorkOS tenant must surface loudly here, not masquerade as a working sign-in until a
-// human clicks a dead button. If getSignInUrl throws, the error page is the correct, visible outcome.
+function ConfigurationState({ detail }: { detail?: string }) {
+  return (
+    <main className="admin-centered-state">
+      <div>
+        <h1>Admin sign-in is not configured</h1>
+        <p>{detail ?? "Add the WorkOS credentials listed in admin/.env.local.example, or enable the development preview login."}</p>
+        <p>Missing or invalid: <code>{authConfigurationIssues().join(", ") || "WorkOS rejected the configured credentials"}</code></p>
+      </div>
+    </main>
+  );
+}
+
 export default async function AdminLanding() {
-  const signInUrl = await getSignInUrl();
+  const workosConfigured = workosAuthConfigured();
+  const devAdminConfigured = devAdminAuthConfigured();
+
+  if (!workosConfigured && devAdminConfigured) redirect("/console");
+
+  if (!workosConfigured) return <ConfigurationState />;
+
+  let signInUrl: string;
+  try {
+    signInUrl = await getSignInUrl();
+  } catch (error) {
+    console.error("WorkOS sign-in initialization failed", error);
+    return <ConfigurationState detail="WorkOS could not start single sign-on. Check the configured tenant and redirect URI." />;
+  }
 
   return (
     <main className="admin-landing" style={{ maxWidth: "480px", margin: "0 auto", padding: "var(--space-10) var(--space-6)" }}>

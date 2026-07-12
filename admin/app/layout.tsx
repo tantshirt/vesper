@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "./providers";
+import { devAdminAuthConfigured, workosAuthConfigured } from "@/lib/authConfig";
 
 // The fonts are BYTE COPIES of app/public/fonts/*.woff2 (next/font/local needs the file physically
 // present in this app's tree to hash + self-host it; it cannot resolve a font through a package
@@ -36,10 +37,14 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const workosConfigured = workosAuthConfigured();
+  const devAdminConfigured = devAdminAuthConfigured();
   return (
     <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
       <body>
-        <Providers>{children}</Providers>
+        <Providers workosConfigured={workosConfigured} devAdminConfigured={devAdminConfigured}>
+          {children}
+        </Providers>
       </body>
     </html>
   );
