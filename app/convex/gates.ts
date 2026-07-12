@@ -4,7 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
-import { requirePermission } from "./rbac";
+import { requirePermission, logOperationalDenial } from "./rbac";
 import { requireGateSigner } from "./sod";
 
 // Admin Story 3.1 — the diligence GATE SIGNATURE CEREMONY. THE SPINE: "no property reaches an investor
@@ -24,11 +24,13 @@ import { requireGateSigner } from "./sod";
 // Multi-party is DATA: `diligenceGates.multiParty` (seeded from GATE_DEFINITIONS) decides whether a gate
 // passes at 1 signer or needs 2 DISTINCT signers. Doc-hash-on-chain is a STUBBED seam (see recordSignature).
 
-// ── GATE_DEFINITIONS — the 8 diligence gates (PLACEHOLDER pending B3) ────────────────────────────────
-// The labels mirror the seeded Monroe gates (properties.ts seedTheMonroe). `multiParty` is the B3
-// DATA placeholder: gate 6 "Multi-party approval" needs two distinct signers; the rest need one. B3
-// (which gates are multi-party + their evidence defs) becomes a DATA edit to this table + the schema
-// field — NOT a rebuild. Keeping it here (one source) means beginGating and allGatesSigned agree.
+// ── GATE_DEFINITIONS — the 8 diligence gates (the DEFAULT, RATIFIED gate matrix — B3) ────────────────
+// The labels mirror the seeded Monroe gates (properties.ts seedTheMonroe). This IS the ratified default
+// gate matrix (B3 is settled, not pending): the 8 gates below, with gate 6 "Multi-party approval"
+// requiring two distinct signers and the rest one. `multiParty` is a DATA value — compliance can revise
+// which gates require two signers by EDITING this table (and the `diligenceGates.multiParty` schema
+// field it seeds), which is a DATA change, NOT a code rebuild and NOT a blocker. Keeping the matrix in
+// one place means beginGating, seedGates, and allGatesSigned can never disagree on what "gateable" means.
 export const GATE_DEFINITIONS: ReadonlyArray<{ gateNo: number; label: string; multiParty: boolean }> = [
   { gateNo: 0, label: "Sponsor vetting (KYB & UBO)", multiParty: false },
   { gateNo: 1, label: "Property existence & ownership", multiParty: false },
@@ -36,7 +38,7 @@ export const GATE_DEFINITIONS: ReadonlyArray<{ gateNo: number; label: string; mu
   { gateNo: 3, label: "Legal, tax & regulatory", multiParty: false },
   { gateNo: 4, label: "Financial integrity", multiParty: false },
   { gateNo: 5, label: "On-chain binding", multiParty: false },
-  { gateNo: 6, label: "Multi-party approval", multiParty: true }, // B3 placeholder: the one multi-party gate
+  { gateNo: 6, label: "Multi-party approval", multiParty: true }, // the ratified two-signer gate (compliance-editable data)
   { gateNo: 7, label: "Continuous monitoring", multiParty: false },
 ];
 
@@ -333,7 +335,15 @@ export const signGate = action({
     // 1-2's SINGLE SoD entry point — permission (platform_admin denied), fee conflict, distinct signer.
     // Passing the gate's EXISTING signers is what makes the same human signing a multi-party gate twice a
     // blocked self-approval. Returns the caller's staff doc on success; throws (durably audited) otherwise.
-    const staff: Doc<"staff"> = await requireGateSigner(ctx, args.propertyId, gate.signerWorkosIds);
+    // INV2: a gate.sign PERMISSION denial (platform_admin) is durably logged here (survives the re-throw);
+    // SoD violations ("SoD:") are already durably logged by sod.ts, so logOperationalDenial ignores them.
+    let staff: Doc<"staff">;
+    try {
+      staff = await requireGateSigner(ctx, args.propertyId, gate.signerWorkosIds);
+    } catch (err) {
+      await logOperationalDenial(ctx, err, "gate.sign", args.propertyId);
+      throw err;
+    }
 
     return await ctx.runMutation(internal.gates.recordSignature, {
       gateId: gate.gateId,

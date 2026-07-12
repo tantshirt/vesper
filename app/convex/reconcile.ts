@@ -306,18 +306,33 @@ export function normalizeHeliusEvent(payload: unknown): ChainEvent[] {
     if (item == null || typeof item !== "object") continue;
     const raw = item as Record<string, unknown>;
 
-    const type = normalizeType(raw.type ?? raw.eventType);
+    const baseType = normalizeType(raw.type ?? raw.eventType);
     const signature = firstString(raw.signature, raw.txSignature, raw.txSig, raw.sig);
-    if (!type || !signature) continue;
+    if (!baseType || !signature) continue;
 
     const transfer = firstTokenTransfer(raw.tokenTransfers);
+    const mint = firstString(raw.mint, transfer?.mint);
+    const owner = firstString(raw.owner, raw.ownerAddress, transfer?.toUserAccount, transfer?.owner);
+    const tokenAmount = firstNumber(raw.tokenAmount, transfer?.tokenAmount, transfer?.amount);
+
+    // PROPERTY-mint confirmation vs. holding reconcile (Admin Story 3.3). A mint-ish event that names a
+    // property `mint` but carries NO holder — no `owner` AND no `tokenAmount` — is a property-mint
+    // CREATION / mint-authority event (a new Token-2022 mint being initialized for a property), not a
+    // user token transfer. It normalizes to `mint_confirmed` so applyMintConfirmation flips the
+    // property's `mintStatus`→"confirmed" on the REAL webhook path (http.ts → applyChainEvent), no longer
+    // only through the confirmMintStub. This is DEFENSIVE: only a clearly ownerless mint event promotes;
+    // a mint event WITH an `owner` or a `tokenAmount` stays `"mint"` (a user-holding reconcile) as before.
+    const type: ChainEventType =
+      baseType === "mint" && mint !== undefined && owner === undefined && tokenAmount === undefined
+        ? "mint_confirmed"
+        : baseType;
 
     events.push({
       type,
       signature,
-      mint: firstString(raw.mint, transfer?.mint),
-      owner: firstString(raw.owner, raw.ownerAddress, transfer?.toUserAccount, transfer?.owner),
-      tokenAmount: firstNumber(raw.tokenAmount, transfer?.tokenAmount, transfer?.amount),
+      mint,
+      owner,
+      tokenAmount,
       period: firstString(raw.period),
       txSig: firstString(raw.txSig, raw.signature, raw.txSignature),
       slot: firstNumber(raw.slot),
@@ -327,15 +342,13 @@ export function normalizeHeliusEvent(payload: unknown): ChainEvent[] {
   return events;
 }
 
-// TODO(real-Helius / B-series): this normalizer NEVER emits `"mint_confirmed"` — so today only the 3-3
-// demo `confirmMintStub` can confirm a PROPERTY mint; the real Helius webhook path cannot. When the live
-// Helius integration lands, `normalizeType` must recognize the property-mint-creation / mint-authority
-// event (a new Token-2022 mint being created for a property, NOT a user token transfer) and emit
-// `"mint_confirmed"` (with `mint` set, and NO `owner`/`tokenAmount`) so `applyMintConfirmation` fires on
-// the real path and flips the property's `mintStatus`→"confirmed" (unblocking 3-2 listOffering). The
-// current `s.includes("mint")` rule maps ANY mint-ish type to `"mint"` (a user-holding reconcile), which
-// would leave a real property-mint event `unresolved`. Do NOT invent the real Helius event shape here
-// until that integration is specced — this note is the seam, not an implementation.
+// normalizeType maps a Helius `type`/`eventType` string to the coarse internal family (`mint` /
+// `distribution` / `transfer`). The `mint` vs `mint_confirmed` DISTINCTION is NOT made here — it depends
+// on the event's SHAPE (does it carry a holder?), not just its type string — so it is decided in
+// normalizeHeliusEvent above: a mint-ish event with a property `mint` but no `owner`/`tokenAmount` is a
+// property-mint confirmation (`mint_confirmed`, → applyMintConfirmation), while one carrying a holder is
+// a user-holding reconcile (`mint`, → applyOwnership). Keeping this function shape-agnostic means both
+// the `s.includes("mint")` catch-all and the ownerless-mint promotion stay in exactly one place each.
 function normalizeType(t: unknown): ChainEventType | undefined {
   if (typeof t !== "string") return undefined;
   const s = t.toLowerCase();

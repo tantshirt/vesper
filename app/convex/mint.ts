@@ -10,7 +10,7 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
-import { requirePermission, requireStaff, effectivePermissions } from "./rbac";
+import { requirePermission, requireStaff, effectivePermissions, logOperationalDenial } from "./rbac";
 import { requireStepUp, requireUnsafeStubs } from "./security";
 import { allGatesSigned } from "./gates";
 import { applyChainEventInner } from "./reconcile";
@@ -107,7 +107,15 @@ export const mintOffering = action({
     ctx,
     { propertyId },
   ): Promise<{ minted: true; mint: string; mintStatus: "minting"; signature: string }> => {
-    const staff = await ctx.runQuery(internal.mint.resolveMinter, {});
+    // INV2: a mint.execute denial on this ACTION is durably logged (survives the re-throw) — see
+    // logOperationalDenial. A denied caller (e.g. platform_admin) leaves an `rbac.denied.durable` trace.
+    let staff: Doc<"staff">;
+    try {
+      staff = await ctx.runQuery(internal.mint.resolveMinter, {});
+    } catch (err) {
+      await logOperationalDenial(ctx, err, "mint.execute", propertyId);
+      throw err;
+    }
     const actor = staff.email || staff.name || staff.workosId;
 
     const target = await ctx.runQuery(internal.mint.loadMintTarget, { propertyId });

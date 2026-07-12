@@ -223,3 +223,122 @@ describe("only compliance.review may sign off / block", () => {
     ).rejects.toThrow("Not permitted: compliance.review");
   });
 });
+
+describe("publicSignedOffMarketing — the PUBLIC render gate exposes ONLY counsel-approved copy", () => {
+  // Seed one item of each lifecycle state directly, each carrying reviewer identity fields, so we can
+  // prove (a) only signed_off is returned and (b) no reviewer PII leaks into the public payload.
+  async function seedItems(t: ReturnType<typeof convexTest>, propertyId?: Id<"properties">) {
+    await t.run(async (ctx) => {
+      await ctx.db.insert("marketingContent", {
+        propertyId,
+        kind: "property_headline",
+        body: "SIGNED — The Monroe, 6.2% target net yield.",
+        status: "signed_off",
+        submittedBy: "priya@vesper.co",
+        reviewedBy: "marcus@vesper.co",
+        reviewNote: "Approved under B4 limits.",
+        createdAt: 1,
+        reviewedAt: 2,
+      });
+      await ctx.db.insert("marketingContent", {
+        propertyId,
+        kind: "property_headline",
+        body: "DRAFT — do not ship.",
+        status: "draft",
+        submittedBy: "priya@vesper.co",
+        createdAt: 3,
+      });
+      await ctx.db.insert("marketingContent", {
+        propertyId,
+        kind: "property_headline",
+        body: "BLOCKED — non-compliant claim.",
+        status: "blocked",
+        submittedBy: "priya@vesper.co",
+        reviewedBy: "marcus@vesper.co",
+        reviewNote: "Yield claim exceeds B4 limits.",
+        createdAt: 4,
+        reviewedAt: 5,
+      });
+    });
+  }
+
+  test("returns ONLY signed_off items; draft and blocked are excluded", async () => {
+    const t = convexTest(schema, modules);
+    await seedItems(t);
+
+    // PUBLIC — no identity supplied (open, like the consumer offering reads).
+    const items = await t.query(api.marketing.publicSignedOffMarketing, {});
+    expect(items).toHaveLength(1);
+    expect(items[0].body).toBe("SIGNED — The Monroe, 6.2% target net yield.");
+  });
+
+  test("the public payload carries NO reviewer/submitter PII or reviewNote", async () => {
+    const t = convexTest(schema, modules);
+    await seedItems(t);
+
+    const items = await t.query(api.marketing.publicSignedOffMarketing, {});
+    expect(items).toHaveLength(1);
+    const keys = Object.keys(items[0]).sort();
+    expect(keys).toEqual(["body", "id", "kind", "propertyId"]);
+    // Belt-and-braces: none of the internal identity/note fields are present.
+    const row = items[0] as Record<string, unknown>;
+    expect(row.reviewedBy).toBeUndefined();
+    expect(row.submittedBy).toBeUndefined();
+    expect(row.reviewNote).toBeUndefined();
+    expect(row.status).toBeUndefined();
+  });
+
+  test("filters by propertyId when supplied", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await t.run(async (ctx) =>
+      ctx.db.insert("properties", {
+        name: "The Monroe",
+        location: "Tampa, FL",
+        propertyType: "Multifamily",
+        units: 8,
+        targetNetYield: 0.062,
+        offeringSize: 1_240_000,
+        fundedPct: 0,
+        status: "open",
+        spvName: "The Monroe LLC",
+        minInvestment: 50,
+      }),
+    );
+    const otherPropertyId = await t.run(async (ctx) =>
+      ctx.db.insert("properties", {
+        name: "The Beacon",
+        location: "Austin, TX",
+        propertyType: "Multifamily",
+        units: 12,
+        targetNetYield: 0.058,
+        offeringSize: 2_000_000,
+        fundedPct: 0,
+        status: "open",
+        spvName: "The Beacon LLC",
+        minInvestment: 50,
+      }),
+    );
+    await seedItems(t, propertyId); // one signed_off for THIS property
+    await t.run(async (ctx) =>
+      ctx.db.insert("marketingContent", {
+        propertyId: otherPropertyId,
+        kind: "property_headline",
+        body: "SIGNED — The Beacon.",
+        status: "signed_off",
+        submittedBy: "priya@vesper.co",
+        reviewedBy: "marcus@vesper.co",
+        createdAt: 6,
+        reviewedAt: 7,
+      }),
+    );
+
+    const scoped = await t.query(api.marketing.publicSignedOffMarketing, { propertyId });
+    expect(scoped).toHaveLength(1);
+    expect(scoped[0].propertyId).toBe(propertyId);
+    expect(scoped[0].body).toBe("SIGNED — The Monroe, 6.2% target net yield.");
+
+    // Unscoped returns both signed_off items across properties.
+    const all = await t.query(api.marketing.publicSignedOffMarketing, {});
+    expect(all).toHaveLength(2);
+  });
+});

@@ -232,3 +232,46 @@ export const getMarketingItem = query({
     return row ? toItem(row) : null;
   },
 });
+
+// A PUBLIC-safe marketing item — the ONLY shape the open/consumer render path sees. It deliberately
+// carries NO reviewer/submitter identity, NO reviewNote, and NO status/lifecycle metadata: only the
+// outward-facing public copy itself (`kind`/`body`) and the `propertyId` it is about. Everything here is
+// already public by construction (the `body` is outward-facing marketing text, never PII).
+type PublicMarketingItem = {
+  id: Id<"marketingContent">;
+  propertyId: Id<"properties"> | null;
+  kind: string;
+  body: string;
+};
+
+// publicSignedOffMarketing — the PUBLIC render gate's data source (NO auth — open, like the consumer
+// public offering reads properties.listOpen/getWithGates). Returns ONLY `signed_off` marketing items
+// (optionally scoped to one `propertyId`), each RE-VALIDATED through `isMarketingSignedOff` so a `draft`
+// or `blocked` item can NEVER reach the public path — nothing ships without counsel's recorded sign-off.
+// The payload is mapped to `PublicMarketingItem`, so no reviewer PII (reviewedBy/submittedBy/reviewNote)
+// is ever exposed. Newest first.
+//
+// CONSUMER-WIRING NOTE (consumer-scope — deliberately NOT built here): the consumer Explore/Property
+// public copy path calls this and renders ONLY what it returns (falling back to a safe generic string
+// when a property has no signed-off item). This story/closure delivers the GATED DATA SOURCE; the UI
+// hookup is downstream consumer scope.
+export const publicSignedOffMarketing = query({
+  args: { propertyId: v.optional(v.id("properties")) },
+  handler: async (ctx, { propertyId }): Promise<PublicMarketingItem[]> => {
+    const rows = await ctx.db
+      .query("marketingContent")
+      .withIndex("by_status", (q) => q.eq("status", "signed_off"))
+      .collect();
+
+    return rows
+      .filter((row) => isMarketingSignedOff(row)) // belt-and-braces: only a signed_off item ever ships
+      .filter((row) => (propertyId ? row.propertyId === propertyId : true))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((row) => ({
+        id: row._id,
+        propertyId: row.propertyId ?? null,
+        kind: row.kind,
+        body: row.body,
+      }));
+  },
+});

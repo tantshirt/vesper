@@ -1,7 +1,8 @@
-import { query, internalMutation } from "./_generated/server";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { query, internalMutation, internalQuery } from "./_generated/server";
+import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
 import { isWorkosIdentity } from "./security";
 import {
@@ -71,10 +72,20 @@ export async function effectivePermissions(
 // break-glass). On a MUTATION a denial first writes an `rbac.denied` audit entry naming the actor, the
 // permission, and the roles held.
 //
-// HONEST LIMITATION: that write is inside the failing mutation's transaction, so it rolls back with
-// the throw — it is NOT a durable blocked-attempt record today. Durable blocked-attempt logging is
-// Story 1.3's job (immutable AuditLog), which is exactly why Story 1.2 depends on 1.3. A denial on a
-// QueryCtx has no db.insert at all and so cannot audit. Neither is a bug; both are named future work.
+// DURABILITY (RESOLVED — INV2): denials on the OPERATIONAL ACTION entry points (gates.signGate,
+// mint.mintOffering, distributionPay.pushDistribution — every exported `action` that gates on an
+// operational permission) ARE now durably logged out-of-band: the action catches a "Not permitted:"
+// throw and calls `ctx.runMutation(internal.audit.logDenial, ...)` — from an ACTION each runMutation is
+// its own committed transaction, so the immutable `rbac.denied.durable` row COMMITS and survives the
+// re-throw (see logOperationalDenial below and audit.ts:logDenial). This uses runMutation rather than
+// scheduler.runAfter deliberately: both are durable-across-throw from an action, but runMutation leaves
+// no dangling `_scheduled_functions` job for callers that don't drain it. (sod.ts uses the sibling
+// scheduler mechanism for SoD blocks; same durability guarantee, different call shape.)
+// Denials on plain queries/mutations remain non-durable: the `rbac.denied` write here is inside the
+// failing mutation's transaction and rolls back with the throw (a QueryCtx has no db.insert at all).
+// That is a PRINCIPLED platform constraint of Convex's transaction model — enforcement STILL happens
+// (access is blocked either way; only the audit rolls back), and the security-relevant, money/ownership/
+// diligence-touching entry points are ACTIONS, which ARE durably logged — not a Vesper bug.
 export async function requirePermission(
   ctx: StaffReadCtx,
   permission: Permission,
@@ -92,6 +103,52 @@ export async function requirePermission(
     });
   }
   throw new Error(`Not permitted: ${permission}`);
+}
+
+// resolveStaffActor — the actor string for the caller (email/name/workosId), or "unknown" if they
+// resolve to no active staff. An internalQuery so an ACTION can resolve the denied caller's identity via
+// ctx.runQuery (which preserves the caller's auth) BEFORE scheduling the durable denial log — a
+// scheduled mutation runs as system with no identity, so the actor must be captured here. Never throws.
+export const resolveStaffActor = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<string> => {
+    try {
+      const staff = await requireStaff(ctx);
+      return staff.email || staff.name || staff.workosId;
+    } catch {
+      return "unknown";
+    }
+  },
+});
+
+// logOperationalDenial — the durable-denial seam for OPERATIONAL ACTION entry points (INV2). Called from
+// an action's catch block: if `err` is a permission denial ("Not permitted:"), resolve the caller's actor
+// and `ctx.runMutation(internal.audit.logDenial, ...)` writes the immutable `rbac.denied.durable` row.
+//
+// WHY runMutation, not scheduler.runAfter: an ACTION is NOT transactional — a mutation it runs COMMITS
+// immediately and is NOT rolled back by the action's LATER re-throw (unlike a mutation's own scheduled
+// jobs, which roll back with it — the constraint sod.ts's SCHEDULED logBlockedAttempt works around
+// because ITS caller can itself be a mutation). Here the caller is always an action, so a direct
+// runMutation is durable across the throw with no dangling scheduled job to drain. Same guarantee as
+// sod.ts (durable-across-throw), reached more simply for the action-only case.
+//
+// Non-permission throws (e.g. SoD "SoD:" violations, which sod.ts already durably logs) are IGNORED here
+// — no double log. Never throws itself: a logging failure must never mask the original denial the caller
+// re-throws (enforcement already happened — access is blocked either way).
+export async function logOperationalDenial(
+  ctx: ActionCtx,
+  err: unknown,
+  permission: Permission,
+  target: string,
+): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  if (!message.startsWith("Not permitted:")) return;
+  try {
+    const actor = await ctx.runQuery(internal.rbac.resolveStaffActor, {});
+    await ctx.runMutation(internal.audit.logDenial, { actor, permission, target });
+  } catch {
+    // Enforcement already happened (access is blocked); never let a logging failure mask the denial.
+  }
 }
 
 // `me` — the console's own identity read: the named human, their roles, and their DERIVED permissions

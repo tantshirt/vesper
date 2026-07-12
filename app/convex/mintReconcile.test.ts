@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { normalizeHeliusEvent } from "./reconcile";
 
 // Admin Story 3.3 — mint reconciliation (Helius; CHAIN WINS) — completes the gate→mint→confirm→list
 // spine. These prove:
@@ -253,6 +254,54 @@ describe("reconciliationStatus — surfaces unresolved/discrepancy; gated read",
     await expect(
       t.withIdentity(workos("user_pa")).query(api.mint.reconciliationStatus, {}),
     ).rejects.toThrow("Not permitted: mint.execute or compliance.review");
+  });
+});
+
+describe("real Helius path (INV3) — an ownerless property-mint event normalizes to mint_confirmed", () => {
+  test("normalizeHeliusEvent promotes an ownerless mint event, and applyChainEvent confirms the mint", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await seedProperty(t, { mint: "MintMonroe111", mintStatus: "minting" });
+
+    // A property-mint CREATION event as Helius would deliver it: a mint-ish type naming the property mint,
+    // but with NO holder (no owner, no tokenAmount) — i.e. NOT a user token transfer.
+    const events = normalizeHeliusEvent([
+      { type: "TOKEN_MINT", signature: "HELIUS-MINT-CREATE-1", mint: "MintMonroe111" },
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("mint_confirmed"); // promoted by the ownerless-mint rule
+    expect(events[0].owner).toBeUndefined();
+    expect(events[0].tokenAmount).toBeUndefined();
+
+    // Feed the normalized event through the REAL entry (applyChainEvent), not the stub.
+    const res = await t.mutation(internal.reconcile.applyChainEvent, events[0]);
+    expect(res.status).toBe("applied");
+    expect((await property(t, propertyId))?.mintStatus).toBe("confirmed");
+
+    const confirmed = (await auditRows(t)).filter((a) => a.action === "mint.confirmed");
+    expect(confirmed).toHaveLength(1);
+    expect(confirmed[0].onchainRef).toBe("HELIUS-MINT-CREATE-1");
+
+    // Idempotent by signature — re-delivering the same normalized event is a no-op (no second flip/row).
+    const again = await t.mutation(internal.reconcile.applyChainEvent, events[0]);
+    expect(again.status).toBe("duplicate");
+    expect((await auditRows(t)).filter((a) => a.action === "mint.confirmed")).toHaveLength(1);
+    expect(await reconciliations(t)).toHaveLength(1);
+  });
+
+  test("a mint event WITH a holder stays 'mint' (a user-holding reconcile), never mint_confirmed", async () => {
+    // A mint event carrying an owner + tokenAmount is a holding transfer — it must NOT be promoted.
+    const events = normalizeHeliusEvent([
+      {
+        type: "mint",
+        signature: "HELIUS-HOLDING-1",
+        mint: "MintMonroe111",
+        owner: "Wa11etOwner1111111111111111111111111111111",
+        tokenAmount: 42,
+      },
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("mint");
+    expect(events[0].tokenAmount).toBe(42);
   });
 });
 
