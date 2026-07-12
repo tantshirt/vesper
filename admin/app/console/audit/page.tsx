@@ -182,14 +182,14 @@ export default function AuditPage() {
     <section style={{ padding: "var(--space-6)" }}>
       <header style={{ marginBottom: "var(--space-5)" }}>
         <p style={{ color: "var(--sub)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-          Oversight
+          Account history
         </p>
         <h1 style={{ fontFamily: "var(--serif)", color: "var(--ink)", fontSize: "28px", margin: "var(--space-2) 0 var(--space-1)" }}>
-          Audit trail
+          View activity history
         </h1>
         <p style={{ color: "var(--sub)", maxWidth: "68ch", lineHeight: 1.6 }}>
-          The append-only record of every attributed action — newest first. Filter by actor, action, or
-          date.
+          See who did what and when. This permanent record cannot be edited; the newest activity appears
+          first. Filter by person, action, target, or date.
         </p>
       </header>
 

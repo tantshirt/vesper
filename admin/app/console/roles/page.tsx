@@ -160,14 +160,15 @@ export default function RolesPage() {
     <section style={{ padding: "var(--space-6)", maxWidth: "80ch" }}>
       <header style={{ marginBottom: "var(--space-5)" }}>
         <p style={{ color: "var(--sub)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-          Access control
+          Team administration
         </p>
         <h1 style={{ fontFamily: "var(--serif)", color: "var(--ink)", fontSize: "28px", margin: "var(--space-2) 0 var(--space-1)" }}>
-          Staff roles
+          Manage team access
         </h1>
         <p style={{ color: "var(--sub)", maxWidth: "68ch", lineHeight: 1.6 }}>
-          Grant or revise a staff member&rsquo;s roles. Grants are checked server-side for
-          self-escalation, segregation-of-duties conflicts, and the platform-admin operational wall.
+          Add or change what a staff member can do. Every change is checked for self-promotion,
+          conflicting responsibilities, and the rule that platform administrators cannot perform
+          operational work.
         </p>
       </header>
 

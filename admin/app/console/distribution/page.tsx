@@ -1,11 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useConvexAuth, useQuery, useMutation, useAction } from "convex/react";
 import { api } from "vesper-app/convex/_generated/api";
 import type { Id } from "vesper-app/convex/_generated/dataModel";
 import { StatusChip, type StatusKind } from "@/app/components/ui/StatusChip";
 import { Money } from "@/app/components/ui/Money";
+import { MonoData } from "@/app/components/ui/MonoData";
+import { ActionSummary } from "@/app/components/ui/ActionSummary";
+import { InlineAlert } from "@/app/components/ui/InlineAlert";
+import { OnChainActionPanel, type OnChainPhase } from "@/app/components/ui/OnChainActionPanel";
+import { StageRail, type StageItem } from "@/app/components/ui/StageRail";
 
 // Admin Story 4.1 — the DISTRIBUTION BUILDER + matches-target. A `distribution.execute`-gated operator
 // (ops_diligence; NOT platform_admin) turns a closed month's operator numbers into a DRAFT distribution:
@@ -56,6 +61,13 @@ type PayStatus = {
     | { funded: false };
 };
 
+type EscrowResult = {
+  funded: boolean;
+  status?: "reserved" | "leased" | "submitted" | "failed" | "unknown" | "reconciled";
+};
+
+type PushResult = { pushed: number; alreadyHandled: number; unresolved: number };
+
 // The structured pause reasons (mirrors the incomeLedger.pauseReason union) with human labels for the
 // reason picker + the status view. A pause is NEVER silent — the operator must pick one.
 const PAUSE_REASONS: { value: PauseReason; label: string }[] = [
@@ -77,6 +89,28 @@ function lifecycle(s: PayStatus | null | undefined): { status: StatusKind; label
   if (s.pushedCount > 0) return { status: "onchain", label: "Pushed · awaiting reconcile" };
   if (s.scheduledCount > 0) return { status: "pending", label: "Scheduled" };
   return { status: "draft", label: "Draft" };
+}
+
+function age(from: number | undefined): string {
+  if (!from) return "Unavailable";
+  const minutes = Math.max(0, Math.floor((Date.now() - from) / 60_000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 48 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
+}
+
+function distributionStages(draft: Draft, status: PayStatus | null | undefined, phase: OnChainPhase): StageItem[] {
+  const built = draft.rowCount > 0;
+  const funded = status?.escrow.funded ?? false;
+  const submitted = (status?.pushedCount ?? 0) > 0 || (status?.paidCount ?? 0) > 0 || phase === "unknown" || phase === "partial";
+  const complete = !!status && status.rowCount > 0 && status.paidCount === status.rowCount;
+  return [
+    { id: "build", label: "Build draft", state: built ? "completed" : "current" },
+    { id: "fund", label: "Fund escrow", state: funded ? "completed" : built ? "current" : "upcoming" },
+    { id: "push", label: "Submit payouts", state: submitted ? "completed" : funded ? "current" : "upcoming" },
+    { id: "confirm", label: "Verify recipient payments", state: phase === "unknown" ? "blocked" : complete ? "completed" : submitted ? "current" : "upcoming", detail: phase === "unknown" ? "Reconciliation required" : undefined },
+    { id: "complete", label: "Close period", state: complete ? "completed" : "upcoming" },
+  ];
 }
 
 const inputStyle: React.CSSProperties = {
@@ -144,16 +178,16 @@ export default function DistributionPage() {
   ) as PayStatus | null | undefined;
 
   const build = useMutation(api.distributionBuild.buildDistribution);
-  const fundEscrow = useMutation(api.distributionPay.fundDistributionEscrow);
+  const fundEscrow = useAction(api.distributionPay.fundDistributionEscrow);
   const pushDist = useAction(api.distributionPay.pushDistribution);
-  const confirmDist = useMutation(api.distributionPay.confirmDistributionStub);
   const pauseDist = useMutation(api.distributionPay.pauseDistribution);
   const resumeDist = useMutation(api.distributionPay.resumeDistribution);
 
   // The pay-lane action state (fund / push / confirm / pause / resume) is separate from the build state so
   // a push error never clears a build error and vice-versa.
-  const [payBusy, setPayBusy] = useState<null | "fund" | "push" | "confirm" | "pause" | "resume">(null);
+  const [payBusy, setPayBusy] = useState<null | "fund" | "push" | "pause" | "resume">(null);
   const [payError, setPayError] = useState<string | null>(null);
+  const [payPhase, setPayPhase] = useState<OnChainPhase>("idle");
   // The push is IRREVERSIBLE — it must state consequence + cost + finality and demand an explicit
   // confirm before firing (the server independently re-enforces step-up).
   const [pushArming, setPushArming] = useState(false);
@@ -161,6 +195,12 @@ export default function DistributionPage() {
   const [pauseArming, setPauseArming] = useState(false);
   const [pauseReason, setPauseReason] = useState<PauseReason>("insufficient_cash_flow");
   const [pauseNote, setPauseNote] = useState("");
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("propertyId");
+    const frame = requested ? requestAnimationFrame(() => setSelected(requested)) : null;
+    return () => { if (frame !== null) cancelAnimationFrame(frame); };
+  }, []);
 
   const selectedProp = useMemo(
     () => (properties ?? []).find((p) => p.id === selected) ?? null,
@@ -196,10 +236,15 @@ export default function DistributionPage() {
     if (!selected) return;
     setPayBusy("fund");
     setPayError(null);
+    setPayPhase("submitting");
     try {
-      await fundEscrow({ propertyId: selected as Id<"properties">, period });
+      const result = await fundEscrow({ propertyId: selected as Id<"properties">, period }) as EscrowResult;
+      setPayPhase(result.status === "unknown" ? "unknown" : result.funded ? "reconciled" : "failed_safe");
     } catch (err) {
-      setPayError(err instanceof Error ? err.message : "Funding blocked.");
+      const message = err instanceof Error ? err.message : "Funding outcome could not be verified.";
+      const preflight = /disabled|permission|draft|exact cent|not found/i.test(message);
+      setPayPhase(preflight ? "failed_safe" : "unknown");
+      setPayError(message);
     } finally {
       setPayBusy(null);
     }
@@ -209,28 +254,20 @@ export default function DistributionPage() {
     if (!selected) return;
     setPayBusy("push");
     setPayError(null);
+    setPayPhase("submitting");
     try {
-      await pushDist({ propertyId: selected as Id<"properties">, period });
+      const result = await pushDist({ propertyId: selected as Id<"properties">, period }) as PushResult;
+      setPayPhase(result.unresolved > 0 ? "partial" : "awaiting_confirmation");
       setPushArming(false);
     } catch (err) {
-      setPayError(err instanceof Error ? err.message : "Push blocked.");
+      const message = err instanceof Error ? err.message : "Payout outcome could not be verified.";
+      const preflight = /disabled|permission|paused|fund the distribution|no scheduled|step-up|not found/i.test(message);
+      setPayPhase(preflight ? "failed_safe" : "unknown");
+      setPayError(message);
     } finally {
       setPayBusy(null);
     }
   }, [pushDist, selected, period]);
-
-  const onConfirm = useCallback(async () => {
-    if (!selected) return;
-    setPayBusy("confirm");
-    setPayError(null);
-    try {
-      await confirmDist({ propertyId: selected as Id<"properties">, period });
-    } catch (err) {
-      setPayError(err instanceof Error ? err.message : "Confirm blocked.");
-    } finally {
-      setPayBusy(null);
-    }
-  }, [confirmDist, selected, period]);
 
   const onPause = useCallback(async () => {
     if (!selected) return;
@@ -289,22 +326,30 @@ export default function DistributionPage() {
   }
 
   const rows = (properties ?? []) as PropertyRow[];
+  const observedPayPhase: OnChainPhase = payPhase === "unknown"
+    ? "unknown"
+    : payStatus && payStatus.rowCount > 0 && payStatus.paidCount === payStatus.rowCount
+      ? "reconciled"
+      : payStatus && payStatus.paidCount > 0
+        ? "partial"
+        : (payStatus?.pushedCount ?? 0) > 0
+          ? "awaiting_confirmation"
+          : payPhase;
 
   return (
-    <section style={{ padding: "var(--space-6)" }}>
+    <section className="a-workflow-page">
       <header style={{ marginBottom: "var(--space-5)" }}>
         <p style={{ color: "var(--sub)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-          Distribution
+          Investor payments
         </p>
         <h1 style={{ fontFamily: "var(--serif)", color: "var(--ink)", fontSize: "28px", margin: "var(--space-2) 0 var(--space-1)" }}>
-          Distribution builder
+          Prepare investor payments
         </h1>
         <p style={{ color: "var(--sub)", maxWidth: "76ch", lineHeight: 1.6 }}>
-          Turn a closed month&apos;s operator numbers into a <strong>draft</strong> distribution — the
-          gross→net waterfall (gross rent → operating costs → <strong>management fee, already inside net</strong>{" "}
-          → reserve → net-per-unit) — and confirm the net matches the offering&apos;s target yield before
-          any money moves. This builds only a scheduled draft; funding and the on-chain push happen
-          separately. Every build is attributed to you in the audit log.
+          Use a closed month&apos;s property numbers to prepare a <strong>draft</strong> payment. Review how
+          gross rent becomes the amount paid after operating costs, management fee, and reserves, then
+          compare the result with the property&apos;s target yield. No money moves here: funding and the
+          on-chain payment are separate steps, and every build is recorded under your name.
         </p>
       </header>
 
@@ -327,6 +372,9 @@ export default function DistributionPage() {
                 onClick={() => {
                   setSelected(p.id);
                   setError(null);
+                  setPayError(null);
+                  setPayPhase("idle");
+                  setPushArming(false);
                 }}
                 style={{
                   cursor: "pointer",
@@ -366,7 +414,12 @@ export default function DistributionPage() {
               <input
                 style={{ ...inputStyle, width: "12ch" }}
                 value={period}
-                onChange={(e) => setPeriod(e.target.value.trim())}
+                onChange={(e) => {
+                  setPeriod(e.target.value.trim());
+                  setPayPhase("idle");
+                  setPayError(null);
+                  setPushArming(false);
+                }}
                 placeholder="2026-07"
               />
             </label>
@@ -443,6 +496,37 @@ export default function DistributionPage() {
 
           {/* DRAFT WATERFALL — the reused gross→net split over the scheduled rows + matches-target. */}
           {draft && draft.rowCount > 0 && (
+            <>
+              <StageRail label={`${selectedProp?.name ?? "Property"} ${period} distribution stages`} stages={distributionStages(draft, payStatus, observedPayPhase)} />
+              <ActionSummary
+                title="Distribution operation"
+                items={[
+                  { label: "Subject", value: selectedProp?.name ?? "Selected property" },
+                  { label: "Period", value: period },
+                  { label: "Recipients", value: `${draft.rowCount} total · ${(payStatus?.pushedCount ?? 0) + (payStatus?.paidCount ?? 0)} submitted · ${payStatus?.pushedCount ?? 0} submitted and unresolved · ${payStatus?.paidCount ?? 0} paid` },
+                  { label: "Amount", value: <Money value={draft.totals.netPaid} /> },
+                  { label: "Consequence", value: "Fund escrow, then submit one independently tracked payout per recipient" },
+                  { label: "Finality", value: "Recipient payments become final only from verified external evidence" },
+                  { label: "Age", value: payStatus?.escrow.funded ? `Escrow funded ${age(payStatus.escrow.fundedAt)} ago` : "Submission age unavailable until funding evidence exists" },
+                  { label: "Blocker", value: observedPayPhase === "unknown" ? "External outcome unknown" : observedPayPhase === "partial" ? `${payStatus?.pushedCount ?? 0} submitted recipient${(payStatus?.pushedCount ?? 0) === 1 ? "" : "s"} still unresolved` : (payStatus?.missedCount ?? 0) > 0 ? pauseReasonLabel(payStatus?.pauseReason ?? null) : !payStatus?.escrow.funded ? "Escrow not funded" : "None reported" },
+                  { label: "Accountable", value: `${me.name} · distribution operator` },
+                ]}
+                nextAction={observedPayPhase === "unknown"
+                  ? "Reconcile every operation against custody and network evidence. Do not retry."
+                  : observedPayPhase === "partial"
+                    ? "Investigate unresolved recipients individually; completed recipients must not be submitted again."
+                    : !payStatus?.escrow.funded
+                      ? "Fund the exact net amount into escrow."
+                      : (payStatus?.pushedCount ?? 0) === 0
+                        ? "Review recipients and submit payouts."
+                        : (payStatus?.paidCount ?? 0) < draft.rowCount
+                          ? "Wait for verification or reconcile stale recipient operations."
+                          : "No action required; the period is complete."}
+              />
+            </>
+          )}
+
+          {draft && draft.rowCount > 0 && (
             <div style={{ margin: "var(--space-5) 0 0" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", flexWrap: "wrap", marginBottom: "var(--space-3)" }}>
                 <p style={{ color: "var(--muted)", font: "600 11px var(--sans)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
@@ -514,6 +598,12 @@ export default function DistributionPage() {
               </p>
               <StatusChip {...lifecycle(payStatus)} />
             </div>
+          )}
+
+          {payStatus && payStatus.rowCount > 0 && payStatus.paidCount === payStatus.rowCount && (
+            <InlineAlert tone="success" title="Distribution complete">
+              Subject: {selectedProp?.name ?? "Selected property"} · {period}. {payStatus.paidCount}/{payStatus.rowCount} recipients verified paid. Accountable funding actor: {payStatus.escrow.funded ? payStatus.escrow.fundedBy : "unavailable"}. Completion timestamp and payout network references are unavailable in this query; custody evidence: {payStatus.escrow.funded ? <MonoData value={payStatus.escrow.custodyRef} label="custody reference" /> : "unavailable"}.
+            </InlineAlert>
           )}
 
           {/* PAUSED-WITH-REASON (4-3) — a paused period's rows are `missed` carrying a structured reason
@@ -617,11 +707,43 @@ export default function DistributionPage() {
                 </span>
               </div>
 
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)", alignItems: "center" }}>
+              {payPhase === "unknown" && (
+                <OnChainActionPanel
+                  eyebrow="Reconciliation required"
+                  title={`${selectedProp?.name ?? "Property"} · ${period}`}
+                  consequence="A custody or payout effect may have occurred. Resolve each stable operation against provider and network evidence before any further submission."
+                  phase="unknown"
+                  meta={[{ label: "Recipients", value: draft.rowCount }, { label: "Amount", value: <Money value={draft.totals.netPaid} /> }, { label: "Accountable", value: me.name }]}
+                  details={payStatus?.escrow.funded ? <MonoData value={payStatus.escrow.custodyRef} label="custody reference" /> : "Operation identifiers are unavailable in this query."}
+                />
+              )}
+
+              {observedPayPhase === "partial" && (
+                <OnChainActionPanel
+                  eyebrow="Partial completion"
+                  title={`${payStatus?.paidCount ?? 0} of ${draft.rowCount} recipients verified paid`}
+                  consequence={`${payStatus?.pushedCount ?? 0} submitted recipient operation${(payStatus?.pushedCount ?? 0) === 1 ? "" : "s"} remain unresolved. Completed recipients must not be submitted again.`}
+                  phase="partial"
+                  meta={[{ label: "Property", value: selectedProp?.name ?? "Unavailable" }, { label: "Period", value: period }, { label: "Amount", value: <Money value={draft.totals.netPaid} /> }]}
+                  details="Recipient payout references are unavailable in this aggregate query. Use reconciliation evidence for recipient-level review."
+                />
+              )}
+
+              {observedPayPhase === "awaiting_confirmation" && (
+                <OnChainActionPanel
+                  eyebrow="Verification pending"
+                  title={`${payStatus?.pushedCount ?? 0} recipient operation${(payStatus?.pushedCount ?? 0) === 1 ? "" : "s"} submitted`}
+                  consequence="Wait for verified payout evidence. Do not submit these recipients again while confirmation is pending."
+                  phase="awaiting_confirmation"
+                  meta={[{ label: "Property", value: selectedProp?.name ?? "Unavailable" }, { label: "Period", value: period }, { label: "Accountable", value: me.name }]}
+                />
+              )}
+
+              <div hidden={observedPayPhase === "unknown"} style={{ display: observedPayPhase === "unknown" ? "none" : "flex", flexWrap: "wrap", gap: "var(--space-3)", alignItems: "center" }}>
                 {/* FUND — the B1 custody stub. Idempotent (re-fund updates in place). */}
                 <button
                   type="button"
-                  disabled={payBusy !== null}
+                  disabled={payBusy !== null || observedPayPhase === "unknown" || !!payStatus?.escrow.funded}
                   onClick={onFund}
                   style={{
                     cursor: payBusy !== null ? "not-allowed" : "pointer",
@@ -634,19 +756,19 @@ export default function DistributionPage() {
                     padding: "10px 20px",
                   }}
                 >
-                  {payBusy === "fund" ? "Funding…" : payStatus?.escrow.funded ? "Re-fund escrow" : "Fund escrow"}
+                  {payBusy === "fund" ? "Funding…" : payStatus?.escrow.funded ? "Escrow funded" : "Fund escrow"}
                 </button>
 
                 {/* PUSH — irreversible. Arms a confirmation stating consequence + cost + finality. */}
                 {!pushArming ? (
                   <button
                     type="button"
-                    disabled={payBusy !== null || !payStatus?.escrow.funded}
+                    disabled={payBusy !== null || !payStatus?.escrow.funded || observedPayPhase === "unknown" || observedPayPhase === "partial" || (payStatus?.pushedCount ?? 0) > 0}
                     onClick={() => {
                       setPayError(null);
                       setPushArming(true);
                     }}
-                    title={payStatus?.escrow.funded ? undefined : "Fund the escrow before pushing"}
+                    title={!payStatus?.escrow.funded ? "Fund the escrow before submitting" : (payStatus?.pushedCount ?? 0) > 0 || payPhase === "partial" ? "Submitted recipients must be reconciled before any further action" : undefined}
                     style={{
                       cursor: payBusy !== null || !payStatus?.escrow.funded ? "not-allowed" : "pointer",
                       opacity: payBusy !== null || !payStatus?.escrow.funded ? 0.5 : 1,
@@ -718,28 +840,6 @@ export default function DistributionPage() {
                       </button>
                     </div>
                   </div>
-                )}
-
-                {/* CONFIRM — the reconcile stub (demo stand-in for the Helius confirm) flips pushed → paid. */}
-                {(payStatus?.pushedCount ?? 0) > 0 && (
-                  <button
-                    type="button"
-                    disabled={payBusy !== null}
-                    onClick={onConfirm}
-                    title="Stand-in for the Helius reconcile — chain owns the paid flip"
-                    style={{
-                      cursor: payBusy !== null ? "not-allowed" : "pointer",
-                      opacity: payBusy !== null ? 0.5 : 1,
-                      font: "600 13px var(--sans)",
-                      color: "var(--ink)",
-                      background: "var(--surface)",
-                      border: "1px solid var(--hairline-2)",
-                      borderRadius: "var(--radius-pill)",
-                      padding: "10px 20px",
-                    }}
-                  >
-                    {payBusy === "confirm" ? "Confirming…" : "Confirm on-chain (reconcile)"}
-                  </button>
                 )}
 
                 {/* PAUSE (4-3) — pause the period WITH a structured reason (never silent). Only a
@@ -846,27 +946,15 @@ export default function DistributionPage() {
               </div>
 
               {payError && (
-                <p
-                  role="alert"
-                  style={{
-                    margin: "var(--space-3) 0 0",
-                    padding: "10px 14px",
-                    borderRadius: "var(--radius-md)",
-                    border: "1px solid var(--loss)",
-                    color: "var(--loss)",
-                    background: "color-mix(in srgb, var(--loss) 8%, transparent)",
-                    fontSize: "13px",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Blocked: {payError}
-                </p>
+                <InlineAlert tone={payPhase === "unknown" ? "warning" : "danger"} title={payPhase === "unknown" ? "Outcome unknown" : "Action stopped"} focus>
+                  {payError} {payPhase === "unknown" ? "Money may have moved. Reconciliation is required and retry is suppressed." : "No confirmed external effect is shown; the draft and selected period are preserved."}
+                </InlineAlert>
               )}
 
               <p style={{ color: "var(--muted)", fontSize: "12px", lineHeight: 1.5, margin: "var(--space-3) 0 0", maxWidth: "80ch" }}>
-                Fund the escrow first, then push. The push records the on-chain signatures but never marks
-                anyone paid — the <strong>scheduled → paid</strong> flip is owned by the reconcile
-                (chain-authoritative). A failed push marks no one paid and can be retried without double-paying.
+                Fund escrow first, then submit recipient payouts. Submitted recipients become paid only from
+                verified evidence. Partial completion is retained per recipient; an unknown outcome requires
+                reconciliation and is never offered a blind retry.
               </p>
             </div>
           )}

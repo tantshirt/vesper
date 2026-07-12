@@ -197,14 +197,14 @@ export default function BreakGlassPage() {
     <section style={{ padding: "var(--space-6)", maxWidth: "82ch" }}>
       <header style={{ marginBottom: "var(--space-5)" }}>
         <p style={{ color: "var(--sub)", fontSize: "13px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-          Emergency access
+          Account safety
         </p>
         <h1 style={{ fontFamily: "var(--serif)", color: "var(--ink)", fontSize: "28px", margin: "var(--space-2) 0 var(--space-1)" }}>
-          Break-glass
+          Grant emergency access
         </h1>
         <p style={{ color: "var(--sub)", maxWidth: "68ch", lineHeight: 1.6 }}>
-          Grant a staff member a time-boxed set of permissions with a mandatory reason. Every
-          invocation is audited and expires automatically (max {MAX_MINUTES} minutes).
+          Give a staff member temporary permissions for an urgent situation. A reason is required,
+          every use is recorded, and access expires automatically after at most {MAX_MINUTES} minutes.
         </p>
       </header>
 
