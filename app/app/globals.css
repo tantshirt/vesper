@@ -1,19 +1,60 @@
 /* Vesper design tokens — from D-Design-System/00-design-system.md (Brand Direction Brief).
-   E1.2 will self-host Fraunces (variable, opsz) + Inter as @font-face; using stacks for now. */
+   Fraunces (variable, opsz) + Inter (variable) are self-hosted via next/font/local in
+   layout.tsx and bound below to --font-serif / --font-sans. Light-first; dark = midnight-field flip. */
 
 :root {
+  color-scheme: light;
+
+  /* Color — brand ground + text */
   --bg: #FBFBFD; --ink: #14142B; --sub: #5B5B6B; --muted: #6B7280;
-  --accent: #3F3D9E; --accent-press: #35338A; --midnight: #1E1B4B;
-  --chip: #F4F3FC; --champagne: #E8C88C; --hair: #ECEBF6; --hair2: #E5E4F0;
-  --surface: #FFFFFF; --gain: #2E9E6B; --loss: #C4553D; --warning: #C99A3F;
-  --serif: "Fraunces", "Hoefler Text", "Iowan Old Style", Georgia, serif;
-  --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Color — indigo family */
+  --accent: #3F3D9E; --accent-press: #35338A;
+  --block-mid: #4A47B5; --block-mid-press: #3E3C9C;
+  --midnight: #1E1B4B; --midnight-press: #15132F;
+
+  /* Color — surfaces, chips, hairlines */
+  --chip: #F4F3FC; --surface: #FFFFFF;
+  --hairline: #ECEBF6; --hairline-2: #E5E4F0;
+
+  /* Color — champagne accent (small accent only, never a fill) */
+  --champagne: #E8C88C; --champagne-soft: #EAD9A0;
+
+  /* Color — semantic (always paired with a sign) */
+  --gain: #2E9E6B; --loss: #C4553D; --warning: #C99A3F;
+
+  /* Dusk hero gradient (mode-independent) */
+  --dusk: linear-gradient(180deg, #26226B 0%, #1E1B4B 62%, #191637 100%);
+  --dusk-fg: #FBFBFD; --dusk-eyebrow: #C9C7E8; --dusk-sub: #B9B6DD;
+  --dusk-hairline: rgba(251,251,253,.16);
+
+  /* Elevation */
+  --shadow: 0 1px 2px rgba(30,27,75,.05), 0 10px 30px rgba(30,27,75,.06);
+
+  /* Spacing scale (4px base) */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-7: 32px; --space-8: 40px;
+  --space-9: 48px; --space-10: 64px;
+
+  /* Radius scale (buttons ~13px · cards ~20px · pills/chips 99px) */
+  --radius-sm: 11px; --radius-md: 13px; --radius-lg: 20px; --radius-pill: 99px;
+
+  /* Type — bound to the self-hosted variable fonts, brand stacks retained as fallback */
+  --serif: var(--font-serif, "Hoefler Text"), "Hoefler Text", "Iowan Old Style", Georgia, serif;
+  --sans: var(--font-sans, system-ui), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141033; --ink: #F3F2FB; --sub: #B7B4D6; --muted: #A9A6C8;
-    --accent: #9B98EA; --accent-press: #8683E0; --chip: #231F52;
-    --hair: rgba(244,243,252,.10); --hair2: rgba(244,243,252,.13); --surface: #201C4C;
+
+/* Vesper is light-first only — there is no dark mode. The palette above is the single
+   source of truth; the OS `prefers-color-scheme: dark` flip has been intentionally removed
+   so the app always renders on the white/cream ground, matching the landing page. */
+
+/* Respect reduced-motion (I/O matrix). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -21,7 +62,7 @@
 html, body { margin: 0; padding: 0; }
 body {
   background: var(--bg); color: var(--ink); font-family: var(--sans);
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: antialiased; font-optical-sizing: auto;
 }
 ::selection { background: var(--champagne); color: #14142B; }
 
@@ -37,7 +78,7 @@ h1 {
 }
 .muted { color: var(--muted); font-size: 15px; line-height: 1.6; }
 .card {
-  margin-top: 24px; background: var(--surface); border: 1px solid var(--hair2);
+  margin-top: 24px; background: var(--surface); border: 1px solid var(--hairline-2);
   border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 12px;
 }
 .ok { color: var(--gain); font-weight: 600; margin: 0; }
@@ -49,38 +90,118 @@ h1 {
 }
 .cta {
   align-self: flex-start; margin-top: 8px; border: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font: 600 15px var(--sans); color: #fff; background: var(--accent);
-  padding: 14px 26px; border-radius: 13px;
+  padding: 14px 26px; border-radius: 13px; text-decoration: none;
+  transition: background .18s ease, transform .18s ease;
 }
 .cta:hover { background: var(--accent-press); }
-.cta.ghost { background: transparent; color: var(--accent); border: 1px solid var(--hair2); }
+.cta:active { transform: translateY(1px); }
+/* An explicit action row: the trailing page CTAs sit as a proper button group (was inline flow →
+   a broken wrapping row overlapping content). Flex + wrap keeps them tidy at every width. */
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.actions .cta { margin-top: 0; }
+@media (prefers-reduced-motion: reduce) { .cta { transition: none; } .cta:active { transform: none; } }
+.cta.ghost { background: transparent; color: var(--accent); border: 1px solid var(--hairline-2); }
 .cta:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+/* Disabled CTA (Story 4.3 consent gate) — visibly inert: dimmed + not-allowed, hover neutralized. */
+.cta:disabled { opacity: .45; cursor: not-allowed; }
+/* Neutralize the hover-darken on a disabled CTA without clobbering the ghost variant's transparency. */
+.cta:not(.ghost):disabled:hover { background: var(--accent); }
+.cta.ghost:disabled:hover { background: transparent; }
+
+/* ---- E3.2 Invest eligibility — identity-check form + headroom (token-driven) ---- */
+.inv-form { gap: 16px; }
+.inv-field { display: flex; flex-direction: column; gap: 6px; }
+.inv-label { font: 600 12px var(--sans); color: var(--sub); letter-spacing: .01em; }
+.inv-input {
+  font: 500 15px var(--sans); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--hairline-2); border-radius: 13px; padding: 12px 14px; width: 100%;
+}
+.inv-input:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+.inv-headroom { font: 600 17px var(--sans); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ---- E4.1 Calculator & live projection (token-driven; tabular figures for stable money) ---- */
+/* Low-weight back affordance to the funded/balance screen (mono accent link idiom). */
+.calc-back { display: inline-block; margin-bottom: 8px; border: 0; background: transparent; cursor: pointer;
+  font: 500 12px ui-monospace, Menlo, monospace; letter-spacing: .04em; color: var(--accent); padding: 4px 0; }
+.calc-back:hover { text-decoration: underline; }
+.calc-back:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; border-radius: 4px; }
+/* Big editable amount figure — a leading $ plus a borderless serif-scale input. */
+.calc-amount { display: flex; align-items: baseline; gap: 4px; margin-top: 2px; }
+.calc-amount-sign { font: 500 34px var(--sans); color: var(--muted); line-height: 1; }
+.calc-amount-input {
+  flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink);
+  font: 600 40px var(--sans); letter-spacing: -.02em; line-height: 1;
+  font-variant-numeric: tabular-nums; padding: 0;
+}
+.calc-amount-input:focus-visible { outline: 2px solid var(--champagne); outline-offset: 4px; border-radius: 6px; }
+/* Slider — native control tinted with the brand accent (no custom hex thumb). */
+.calc-range { width: 100%; accent-color: var(--accent); margin: 4px 0 2px; }
+.calc-range:focus-visible { outline: 2px solid var(--champagne); outline-offset: 4px; border-radius: 99px; }
+.calc-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.calc-chips .chip { cursor: pointer; font-variant-numeric: tabular-nums; }
+.calc-hint { margin: 2px 0 0; font: 500 13px var(--sans); color: var(--loss); }
+/* Projection block — fixed row layout + tabular numerals so live recompute never shifts layout. */
+.calc-proj-head { margin: 0; font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent); }
+.calc-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 14px; }
+.calc-figure { font: 600 18px var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.calc-pos { color: var(--ink); }
+.calc-neg { color: var(--loss); }
+.calc-fy { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+/* Story 4.2 · order total — the sum row reads as the total: hairline rule above + heavier ink weight. */
+.order-total { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.order-total .calc-figure { font-weight: 700; color: var(--ink); }
+/* Base | Downside segmented toggle — both options always visible/one-tap. */
+.calc-seg { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px;
+  background: var(--chip); border: 1px solid var(--hairline-2); border-radius: 99px; }
+.calc-seg-btn { cursor: pointer; border: 0; background: transparent; color: var(--muted);
+  font: 600 12.5px var(--sans); padding: 6px 14px; border-radius: 99px; }
+.calc-seg-btn.on { color: #fff; background: var(--accent); }
+.calc-seg-btn:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
+.calc-item { margin: 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+/* ---- E4.3 Rights & risk acknowledgement — tappable checkbox rows (≥44px target, accent
+   checkbox, champagne focus ring); token-driven only. ---- */
+.ack-list { display: flex; flex-direction: column; gap: 4px; }
+.ack-item { display: flex; gap: 12px; align-items: flex-start; cursor: pointer;
+  padding: 12px 4px; font-size: 14px; line-height: 1.5; color: var(--ink); }
+.ack-item input { accent-color: var(--accent); width: 20px; height: 20px; margin-top: 1px; flex: none; cursor: pointer; }
+.ack-item input:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
 
 /* ---- E2.1 Explore ---- */
 .ex { max-width: 440px; margin: 0 auto; padding-bottom: 80px; min-height: 100vh; }
 .ex-head { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--hair); }
+  border-bottom: 1px solid var(--hairline); }
 .wm { font-family: var(--serif); font-weight: 560; font-size: 20px; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
-.wm i { width: 8px; height: 8px; transform: rotate(45deg); background: linear-gradient(135deg, var(--champagne), #EAD9A0); border-radius: 2px; }
-.avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #4A47B5);
+.wm i { width: 8px; height: 8px; transform: rotate(45deg); background: linear-gradient(135deg, var(--champagne), var(--champagne-soft)); border-radius: 2px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--block-mid));
   color: #fff; display: grid; place-items: center; font: 600 13px var(--sans); }
+.ex-signin { font: 600 12.5px var(--sans); color: var(--accent); text-decoration: none; }
+.ex-signin:focus-visible { outline: 2px solid var(--champagne); outline-offset: 3px; border-radius: 6px; }
 .ex-greet { padding: 20px 18px 2px; }
 .ex-greet .k { font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
 .ex-greet h1 { font-family: var(--serif); font-weight: 500; font-size: 27px; letter-spacing: -.02em; line-height: 1.08; margin: 8px 0 0; }
 .ex-chips { display: flex; gap: 8px; padding: 16px 18px 4px; overflow-x: auto; }
 .ex-chips::-webkit-scrollbar { height: 0; }
 .chip { white-space: nowrap; font: 500 12.5px var(--sans); color: var(--muted); background: var(--surface);
-  border: 1px solid var(--hair2); padding: 8px 14px; border-radius: 99px; }
+  border: 1px solid var(--hairline-2); padding: 8px 14px; border-radius: 99px; cursor: pointer; }
+button.chip { appearance: none; }
 .chip.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; }
 .ex-list { padding: 6px 18px; display: flex; flex-direction: column; gap: 14px; }
 .ex-empty { padding: 40px 18px; color: var(--muted); font-size: 15px; text-align: center; }
-.pcard { display: block; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--hair2);
+.pcard { display: block; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--hairline-2);
   border-radius: 20px; overflow: hidden; box-shadow: var(--shadow, 0 1px 2px rgba(30,27,75,.05)); }
 .pcard.skel { height: 250px; opacity: .5; background: linear-gradient(100deg, var(--chip) 30%, var(--surface) 50%, var(--chip) 70%); }
-.pcard-img { position: relative; height: 132px; background: linear-gradient(180deg, #26226B 0%, #1E1B4B 62%, #191637 100%); }
+.pcard { transition: transform .4s cubic-bezier(.22,.61,.36,1), box-shadow .4s cubic-bezier(.22,.61,.36,1); }
+.pcard:hover { transform: translateY(-4px); box-shadow: 0 22px 48px -30px rgba(30,27,75,.34); }
+@media (prefers-reduced-motion: reduce) { .pcard:hover { transform: none; } }
+.pcard-img { position: relative; height: 132px; background: var(--dusk); }
 .pcard-img .lit { position: absolute; left: 150px; bottom: 62px; width: 6px; height: 8px; border-radius: 1px;
-  background: linear-gradient(180deg, var(--champagne), #EAD9A0); box-shadow: 0 0 10px 2px rgba(232,200,140,.6); }
+  background: linear-gradient(180deg, var(--champagne), var(--champagne-soft)); box-shadow: 0 0 10px 2px rgba(232,200,140,.6); }
 .badge { position: absolute; left: 12px; top: 12px; font: 600 10px ui-monospace, Menlo, monospace; letter-spacing: .08em;
   color: #fff; background: rgba(20,20,43,.5); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.14); padding: 5px 9px; border-radius: 99px; }
 .yield { position: absolute; right: 12px; top: 12px; font: 600 15px var(--sans); font-variant-numeric: tabular-nums; color: #fff;
@@ -90,28 +211,28 @@ h1 {
 .ps { font: 400 12.5px var(--sans); color: var(--muted); margin: 3px 0 10px; }
 .ptags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .ptag { font: 500 10.5px var(--sans); color: var(--accent); background: var(--chip); padding: 4px 9px; border-radius: 99px; }
-.fundbar { height: 5px; border-radius: 99px; background: var(--hair2); overflow: hidden; }
+.fundbar { height: 5px; border-radius: 99px; background: var(--hairline-2); overflow: hidden; }
 .fundbar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
 .fundmeta { display: flex; justify-content: space-between; font: 500 11px var(--sans); color: var(--muted); margin-top: 7px; font-variant-numeric: tabular-nums; }
 .tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 440px;
   display: flex; justify-content: space-around; padding: 10px 8px calc(12px + env(safe-area-inset-bottom, 0));
-  border-top: 1px solid var(--hair); background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(14px); }
+  border-top: 1px solid var(--hairline); background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(14px); }
 .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font: 500 10px var(--sans); color: var(--muted); }
-.tab.on { color: var(--accent); } .tab b { font-size: 16px; line-height: 1; }
+.tab.on { color: var(--accent); } .tab svg { flex: none; }
 
 /* ---- E2.2 Property Detail ---- */
 .pd { max-width: 440px; margin: 0 auto; padding-bottom: 96px; min-height: 100vh; }
 .pd-loading { padding: 60px 20px; color: var(--muted); text-align: center; }
 .pd-head { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between;
-  padding: 13px 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--hair); }
-.ibtn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--hair2); background: var(--surface); color: var(--ink);
+  padding: 13px 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--hairline); }
+.ibtn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--hairline-2); background: var(--surface); color: var(--ink);
   display: grid; place-items: center; font-size: 16px; text-decoration: none; }
 .pd-hero { position: relative; height: 200px; overflow: hidden;
-  background: linear-gradient(180deg, #26226B 0%, #1E1B4B 62%, #191637 100%); }
+  background: var(--dusk); }
 .pd-glow { position: absolute; right: -30px; top: -40px; width: 190px; height: 190px; border-radius: 50%;
   background: radial-gradient(circle, rgba(232,200,140,.26), transparent 62%); }
 .pd-lit { position: absolute; left: 156px; bottom: 92px; width: 7px; height: 9px; border-radius: 1px;
-  background: linear-gradient(180deg, var(--champagne), #EAD9A0); box-shadow: 0 0 12px 2px rgba(232,200,140,.7); }
+  background: linear-gradient(180deg, var(--champagne), var(--champagne-soft)); box-shadow: 0 0 12px 2px rgba(232,200,140,.7); }
 .pd-hero-b { position: absolute; left: 16px; right: 16px; bottom: 13px; display: flex; justify-content: flex-end; }
 .fund-pill { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .08em; color: #fff;
   background: rgba(20,20,43,.55); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.14); padding: 6px 10px; border-radius: 99px; }
@@ -127,29 +248,569 @@ h1 {
 .metric { font: 600 40px var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1; color: var(--ink); }
 .metric small { font: 500 15px var(--sans); color: var(--muted); }
 .pd-note { font: 400 12.5px/1.5 var(--sans); color: var(--muted); margin: 8px 0 0; }
-.pd-blk { padding: 22px 16px; border-top: 1px solid var(--hair); }
+.pd-blk { padding: 22px 16px; border-top: 1px solid var(--hairline); }
 .pd-h { font-family: var(--serif); font-weight: 500; font-size: 19px; letter-spacing: -.018em; line-height: 1.12; margin: 0 0 14px; }
-.own-item { display: flex; gap: 13px; padding: 13px 0; border-top: 1px solid var(--hair); }
+.own-item { display: flex; gap: 13px; padding: 13px 0; border-top: 1px solid var(--hairline); }
 .own-item:first-child { border-top: 0; padding-top: 2px; }
 .own-num { font: 600 12px ui-monospace, Menlo, monospace; color: var(--accent); flex: none; padding-top: 2px; }
 .own-item h4 { font-family: var(--serif); font-weight: 500; font-size: 15px; margin: 0 0 3px; }
 .own-item p { font: 400 12.5px/1.55 var(--sans); color: var(--muted); margin: 0; }
-.liq { background: var(--surface); border: 1px solid var(--hair2); border-radius: 14px; padding: 2px 14px; }
-.lrow { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--hair); font: 400 13px var(--sans); }
+.liq { background: var(--surface); border: 1px solid var(--hairline-2); border-radius: 14px; padding: 2px 14px; }
+.lrow { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--hairline); font: 400 13px var(--sans); }
 .lrow:last-child { border-bottom: 0; } .lrow b { font-variant-numeric: tabular-nums; }
 .liq-foot { font: 400 11.5px/1.5 var(--sans); color: var(--muted); padding: 11px 2px 0; }
 .pd-thead { font: 400 12.5px/1.5 var(--sans); color: var(--muted); margin: -8px 0 13px; } .pd-thead b { color: var(--ink); font-weight: 600; }
-.gate { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hair); font: 400 13px var(--sans); }
+.gate-list { list-style: none; margin: 0; padding: 0; }
+.gate { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hairline); font: 400 13px var(--sans); }
 .gate:last-child { border-bottom: 0; }
-.gate-ck { width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 11px var(--sans); color: #fff; background: var(--gain); }
-.gate-name { font-weight: 500; } .gate-sign { color: var(--muted); font-size: 11.5px; margin-top: 1px; } .gate-sign b { color: var(--ink); font-weight: 600; }
-.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hair); border: 1px solid var(--hair); border-radius: 14px; overflow: hidden; }
+.gate-ck { width: 22px; height: 22px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 700 11px var(--sans); color: #fff; background: var(--gain); margin-top: 2px; }
+.gate-ck-pending { color: var(--muted); background: transparent; border: 1px solid var(--hairline-2); }
+.gate-body { min-width: 0; }
+.gate-no { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-variant-numeric: tabular-nums; }
+.gate-name { font-weight: 500; margin-top: 2px; }
+.gate-status { font: 600 11px var(--sans); color: var(--muted); margin-top: 2px; letter-spacing: .01em; }
+.gate-sign { color: var(--muted); font-size: 11.5px; margin-top: 1px; } .gate-sign b { color: var(--ink); font-weight: 600; }
+.gate-empty { font: 400 12.5px/1.5 var(--sans); color: var(--muted); margin: 0; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden; }
 .fact { background: var(--surface); padding: 13px 14px; }
 .fk { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .fv { font: 500 14px var(--sans); margin-top: 4px; font-variant-numeric: tabular-nums; }
 .pd-spacer { height: 20px; }
 .pd-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 440px;
   display: flex; align-items: center; gap: 12px; padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0));
-  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); border-top: 1px solid var(--hair); }
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); border-top: 1px solid var(--hairline); }
 .pd-bar-meta { font: 400 12px var(--sans); color: var(--muted); } .pd-bar-meta b { display: block; color: var(--ink); font: 600 15px var(--sans); font-variant-numeric: tabular-nums; margin-top: 1px; }
 .pd-bar .cta { margin-left: auto; }
+
+/* ---- E2.4 On-chain proof — low-weight affordance on Property Detail + the proof view ---- */
+/* Low-weight mono accent link (mirrors the ~line 114 mono-accent idiom); never gates Invest. */
+.proof-link { display: inline-block; margin: 4px 16px 0; font: 500 12px ui-monospace, Menlo, monospace;
+  letter-spacing: .04em; color: var(--accent); text-decoration: none; }
+.proof-link:hover { text-decoration: underline; }
+.proof-link:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; border-radius: 4px; }
+
+.proof { max-width: 440px; margin: 0 auto; padding-bottom: 40px; min-height: 100vh; }
+.proof-intro { padding: 18px 16px 4px; }
+.proof-intro .pd-name { margin-top: 6px; }
+.proof-intro .pd-sub { margin-top: 8px; line-height: 1.5; }
+.proof-fact { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.proof-addr { font: 500 12.5px ui-monospace, Menlo, monospace; color: var(--ink); background: var(--chip);
+  padding: 5px 10px; border-radius: 7px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.proof-ex { font: 500 12px ui-monospace, Menlo, monospace; letter-spacing: .03em; color: var(--accent); text-decoration: none; }
+.proof-ex:hover { text-decoration: underline; }
+.proof-ex:focus-visible { outline: 2px solid var(--champagne); outline-offset: 2px; border-radius: 4px; }
+.proof-empty { font: 400 12.5px/1.55 var(--sans); color: var(--muted); margin: 0; }
+.proof-count { font: 600 15px var(--sans); color: var(--ink); font-variant-numeric: tabular-nums; margin: 0; }
+.proof-policy { font: 400 12.5px/1.6 var(--sans); color: var(--muted); margin: 0; } .proof-policy b { color: var(--ink); font-weight: 600; }
+.proof-list { list-style: none; margin: 0; padding: 0; }
+.proof-receipt { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--hairline); }
+.proof-receipt:last-child { border-bottom: 0; }
+.proof-foot { padding: 20px 16px 0; }
+.proof-back { font: 500 12px ui-monospace, Menlo, monospace; letter-spacing: .04em; color: var(--accent); text-decoration: none; }
+.proof-back:hover { text-decoration: underline; }
+
+/* ---- E5.1 Home — the payout is the hero (dusk fresh-distribution card + balance card;
+   token-driven, tabular money figures, one champagne accent — the star). ---- */
+/* Dusk hero: the mode-independent --dusk gradient with its paired foreground tokens. */
+.home-hero { position: relative; margin-top: 20px; background: var(--dusk); color: var(--dusk-fg);
+  border: 1px solid var(--dusk-hairline); border-radius: 20px; padding: 22px 22px 20px; overflow: hidden; }
+/* The single champagne accent — a small lit star, mirroring the .wm/.pd-lit champagne-diamond idiom. */
+.home-star { position: absolute; right: 22px; top: 22px; width: 9px; height: 9px; transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--champagne), var(--champagne-soft)); border-radius: 2px;
+  box-shadow: 0 0 12px 2px rgba(232, 200, 140, .55); }
+.home-star-label { margin: 0; font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--dusk-eyebrow); }
+.home-lead { margin: 10px 0 0; font-family: var(--serif); font-weight: 500; font-size: clamp(24px, 6vw, 32px);
+  letter-spacing: -.02em; line-height: 1.08; font-variant-numeric: tabular-nums; color: var(--dusk-fg); }
+.home-hero-sub { margin: 8px 0 0; font: 400 13.5px/1.5 var(--sans); color: var(--dusk-sub); }
+/* Balance card — fixed rows + tabular figures so a reactive value update never shifts layout. */
+.balance-card { margin-top: 18px; gap: 14px; }
+.stat-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 14px; }
+.stat-figure { font: 600 18px var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.01em; color: var(--ink); }
+/* Sparkline — honest cumulative cost basis; the polyline stroke is the brand accent, the text
+   equivalent lives in the visually-hidden sibling (WCAG). Scales to the card width, fixed height. */
+.spark { margin-top: 4px; }
+.spark svg { display: block; width: 100%; height: 56px; }
+.home-empty { margin-top: 12px; }
+
+/* Overview — stacked zones (portfolio-value hero → supporting stats → your homes). Token-driven. */
+.home-grid { display: flex; flex-direction: column; gap: 18px; margin-top: 20px; }
+/* Shared calm stat label (mono, muted) across the overview cards. */
+.stat-eyebrow { margin: 0; font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--muted); }
+/* Hero value card — portfolio value at scale, a signed all-time return, and the balance sparkline. */
+.home-value-card { gap: 8px; padding: 26px 28px; }
+.home-value { margin: 2px 0 0; font: 600 clamp(40px, 7vw, 58px) var(--sans);
+  font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1; color: var(--ink); }
+.home-return { margin: 0; font: 500 14.5px var(--sans); font-variant-numeric: tabular-nums; color: var(--muted); }
+.home-return.pos { color: var(--gain); }
+.home-return.neg { color: var(--loss); }
+.home-spark { margin-top: 12px; }
+.home-spark svg { display: block; width: 100%; height: 76px; }
+/* Supporting stats — a responsive 3-up row of calm stat cards. */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+.stat-card { background: var(--surface); border: 1px solid var(--hairline-2); border-radius: 16px;
+  padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; }
+.stat-card-figure { margin: 0; font: 600 21px var(--sans); font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em; color: var(--ink); }
+/* Your homes preview — reuses the .port-holding row idiom; header links onward to Portfolio. */
+.home-homes { gap: 2px; }
+.home-homes-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
+.home-link { font: 500 12.5px var(--sans); color: var(--accent); text-decoration: none; white-space: nowrap; }
+.home-link:hover { text-decoration: underline; }
+
+/* ---- E5.2 Portfolio — per-holding rows, allocation-by-market bars, and the calm concentration
+   nudge. Token-driven only (tabular money figures, the .fundbar bar idiom, the .pd-verified
+   soft-tint idiom on --warning for the nudge). ---- */
+/* Per-holding row: a two-line block (name + value / market + this-month income), hairline-separated,
+   with stable tabular figures so a reactive value update never shifts layout. */
+.port-holding { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-top: 1px solid var(--hairline); }
+.port-holding:first-of-type { border-top: 0; padding-top: 2px; }
+.port-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.port-name { font: 500 15px var(--sans); color: var(--ink); }
+.port-sub { font-size: 13px; }
+/* Allocation row: a market label + its whole-percent share above the token bar track. */
+.alloc-row { display: flex; flex-direction: column; gap: 7px; padding: 10px 0; border-top: 1px solid var(--hairline); }
+.alloc-row:first-of-type { border-top: 0; padding-top: 2px; }
+.alloc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+/* Bar track + fill — extends the .fundbar 5px idiom (rounded track, accent fill), width set inline. */
+.alloc-bar { height: 5px; border-radius: 99px; background: var(--hairline-2); overflow: hidden; }
+.alloc-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+/* Concentration nudge — calm --warning soft-tint (mirrors the .pd-verified idiom): never alarming. */
+.port-nudge { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent); border-radius: 14px; padding: 16px 18px; }
+.port-nudge-title { margin: 0; font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.port-nudge-body { margin: 0; font: 400 13.5px/1.55 var(--sans); color: var(--ink); }
+.port-nudge .cta.ghost { margin-top: 4px; }
+/* Totals hero (reuses .home-value-card) — small top gap under the page title. */
+.port-totals { margin-top: 20px; }
+/* Richer per-holding row — property thumbnail + name/market + value/this-month. */
+.port-home { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--hairline); }
+.port-home:first-of-type { border-top: 0; padding-top: 2px; }
+.port-thumb { width: 52px; height: 52px; border-radius: 12px; object-fit: cover; flex: none; background: var(--dusk); }
+.port-home-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* Allocation donut — ring + legend (share ∝ arc). Ring left, legend right; stacks when narrow. */
+.alloc-donut { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; margin-top: 10px; }
+.alloc-ring { width: 132px; height: 132px; flex: none; }
+.alloc-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; flex: 1; min-width: 180px; }
+.alloc-legend-row { display: flex; align-items: center; gap: 11px; }
+.alloc-swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.alloc-legend-name { font: 500 14px var(--sans); color: var(--ink); }
+.alloc-legend-pct { margin-left: auto; font: 600 14px var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* ---- E5.3 Income — the itemized gross→net waterfall, matches-target chip, honest banner, and
+   history rows. Cents precision (the legibility surface, O3); token-driven only (no hex). One
+   champagne accent max — spent on the net-paid emphasis. ---- */
+/* Waterfall: hairline-separated .stat-row lines (gross → costs → mgmt → reserve), stable tabular
+   figures so a reactive value update never shifts layout. */
+.income-waterfall { margin-top: 6px; }
+.income-line { padding: 11px 0; border-top: 1px solid var(--hairline); }
+.income-line:first-child { border-top: 0; }
+/* Net-paid emphasis line — the SOLE champagne accent on this surface (the figure the owner reads). */
+.income-net { padding: 13px 0 2px; margin-top: 2px; border-top: 1px solid var(--hairline-2); }
+.income-net > span { font: 500 15px var(--sans); color: var(--ink); }
+.income-net-figure { font: 600 22px var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: var(--champagne); }
+/* Matches-target chip — calm gain soft-tint (mirrors the .pd-verified idiom): affirming, never loud. */
+.income-chip { margin: 16px 0 0; display: inline-block; font: 500 12.5px/1.45 var(--sans); color: var(--gain);
+  background: color-mix(in srgb, var(--gain) 12%, transparent); border: 1px solid color-mix(in srgb, var(--gain) 32%, transparent);
+  border-radius: 12px; padding: 9px 13px; }
+/* Below-target variance — a calm muted note (no soft-tint alarm), names realized vs target factually. */
+.income-variance { margin: 16px 0 0; font: 400 13px/1.55 var(--sans); color: var(--muted); }
+/* Honest banner — calm --warning soft-tint (mirrors the .port-nudge idiom): never silent, never alarming. */
+.income-banner { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent); border-radius: 14px; padding: 16px 18px; }
+.income-banner-title { margin: 0; font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.income-banner-body { margin: 0; font: 400 13.5px/1.55 var(--sans); color: var(--ink); }
+.income-banner .cta.ghost { margin-top: 4px; }
+/* History rows — the .port-holding two-line idiom (month + net / status), hairline-separated. */
+.income-row { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-top: 1px solid var(--hairline); }
+.income-row:first-of-type { border-top: 0; padding-top: 2px; }
+/* This-distribution header — heading + period caption. */
+.income-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.income-period { font: 500 12px var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; }
+.income-next { margin-top: 4px; }
+/* Visual gross→net waterfall — label · proportional bar · figure. The net line's champagne bar is the
+   SOLE champagne accent on this surface; its figure stays ink for legibility. */
+.wf { display: flex; flex-direction: column; gap: 13px; margin-top: 10px; }
+.wf-row { display: grid; grid-template-columns: minmax(92px, 32%) 1fr auto; align-items: center; gap: 14px; }
+.wf-label { font: 500 13px var(--sans); color: var(--muted); }
+.wf-track { height: 12px; border-radius: 99px; background: var(--chip); overflow: hidden; }
+.wf-fill { height: 100%; border-radius: 99px; min-width: 4px; }
+.wf-fill.gross { background: var(--block-mid); }
+.wf-fill.deduct { background: var(--hairline-2); }
+.wf-fill.net { background: linear-gradient(90deg, var(--champagne-soft), var(--champagne)); }
+.wf-amount { font: 600 14px var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); text-align: right; white-space: nowrap; }
+.wf-amount.deduct { color: var(--muted); font-weight: 500; }
+.wf-amount.net { font-size: 16px; font-weight: 700; }
+.wf-row.is-net { margin-top: 3px; padding-top: 13px; border-top: 1px solid var(--hairline-2); }
+/* Monthly net-income bar chart (history trend). Fixed height; bars scale to the tallest month. */
+.income-bars { display: flex; align-items: stretch; gap: 10px; height: 120px; margin: 8px 0 18px; }
+.ibar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.ibar-track { flex: 1; width: 100%; max-width: 28px; display: flex; align-items: flex-end; }
+.ibar-fill { width: 100%; border-radius: 6px 6px 2px 2px; background: linear-gradient(180deg, var(--block-mid), var(--accent)); }
+.ibar-fill.off { background: var(--hairline-2); }
+.ibar-tick { font: 500 10.5px var(--sans); color: var(--muted); }
+
+/* ---- E5.4 Property updates — one card per owned home: operator + occupancy/reserve/rent stat rows,
+   a plain note, and a calm overdue/awaiting note. Token-driven only (no hex); extends the .port-holding
+   / .stat-row idioms and the .income-banner --warning soft-tint for the calm note. ---- */
+.update-card { margin-top: 18px; gap: 0; padding: 22px 24px; }
+/* Property header — thumbnail + name (serif) + market. */
+.update-top { display: flex; align-items: center; gap: 14px; }
+.update-thumb { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; flex: none; background: var(--dusk); }
+.update-id { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.update-name { font-family: var(--serif); font-weight: 500; font-size: 20px; letter-spacing: -.01em; color: var(--ink); }
+.update-loc { font: 400 13px var(--sans); color: var(--muted); }
+/* Named operator — avatar initial + name + role. */
+.update-operator-row { display: flex; align-items: center; gap: 11px; margin-top: 16px; }
+.update-avatar { width: 30px; height: 30px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font: 600 12px var(--sans); color: #fff; background: linear-gradient(135deg, var(--accent), var(--block-mid)); }
+.update-op-name { display: block; font: 500 13.5px var(--sans); color: var(--ink); }
+.update-op-role { display: block; font: 400 12px var(--sans); color: var(--muted); }
+/* Occupancy / reserve / rent — a 3-up stat strip with subtle meters. */
+.update-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 18px; }
+.update-stat { display: flex; flex-direction: column; gap: 8px; }
+.update-stat-label { font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.update-stat-val { font: 600 16px var(--sans); font-variant-numeric: tabular-nums; color: var(--ink); }
+.update-meter { height: 4px; border-radius: 99px; background: var(--hairline-2); overflow: hidden; }
+.update-meter i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.update-pill { align-self: flex-start; font: 600 11px var(--sans); padding: 4px 10px; border-radius: 99px; }
+.update-pill.ok { color: var(--gain); background: color-mix(in srgb, var(--gain) 12%, transparent); }
+.update-pill.late { color: var(--loss); background: color-mix(in srgb, var(--loss) 12%, transparent); }
+/* The plain-language note — the heart of the update, easy to read (letter-like measure). */
+.update-note { margin: 18px 0 0; font: 400 14.5px/1.65 var(--sans); color: var(--ink); max-width: 64ch; }
+/* Calm overdue / awaiting note — --warning soft-tint (mirrors the .income-banner idiom): never silent,
+   never alarming. Reassures that the update is simply on the way. */
+.update-flag { margin: 14px 0 0; font: 400 13.5px/1.55 var(--sans); color: var(--ink);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent);
+  border-radius: 14px; padding: 14px 16px; }
+
+/* ============================================================================
+   App shell — responsive web dashboard. Mobile-first: the existing phone-width
+   screens + a functional bottom tab bar. Desktop (≥1024px): a persistent left
+   sidebar replaces the tab bar and screens widen out of the phone column.
+   Token-driven only. ============================================================ */
+
+/* The Vesper logo lockup (mark image + Fraunces wordmark) — shared by the sidebar,
+   the app headers, and the marketing site. */
+.logo { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; }
+.logo-mark { display: block; height: auto; }
+.logo-word { font-family: var(--serif); font-weight: 560; font-size: 20px;
+  letter-spacing: -.01em; color: var(--ink); line-height: 1; }
+
+/* The bottom tab bar is now built from real links (was inert <span>s). */
+.tab { text-decoration: none; }
+
+/* Sidebar is desktop-only; hidden by default (mobile uses the tab bar). */
+.sidebar { display: none; }
+.shell-content { width: 100%; }
+
+@media (min-width: 1024px) {
+  .shell { display: flex; align-items: flex-start; min-height: 100vh; }
+
+  .sidebar {
+    display: flex; flex-direction: column; gap: 2px; flex: none;
+    position: sticky; top: 0; height: 100vh; width: 248px;
+    padding: 24px 16px; border-right: 1px solid var(--hairline);
+    background: var(--surface);
+  }
+  .sidebar-brand { display: flex; align-items: center; padding: 6px 10px 20px; text-decoration: none; }
+  .sidebar-nav { display: flex; flex-direction: column; gap: 2px; }
+  .snav { display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+    border-radius: var(--radius-md); font: 500 14.5px var(--sans);
+    color: var(--muted); text-decoration: none; }
+  .snav svg { flex: none; }
+  .snav:hover { background: var(--chip); color: var(--ink); }
+  .snav.on { background: var(--chip); color: var(--accent); }
+  .sidebar-foot { margin-top: auto; display: flex; align-items: center; gap: 10px;
+    padding: 14px 10px 4px; border-top: 1px solid var(--hairline); }
+  .sidebar-foot-name { font: 500 13.5px var(--sans); color: var(--ink); }
+
+  .shell-main { flex: 1; min-width: 0; }
+  .shell-content { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
+
+  /* Desktop hides the mobile tab bar entirely. */
+  .tabbar { display: none !important; }
+
+  /* Lift the phone-width caps so screens use the content column instead of a
+     centered 440px phone strip. */
+  .ex, .pd, .proof { max-width: none; min-height: auto; margin: 0; padding-left: 0; padding-right: 0; }
+  /* Reading pages (Portfolio / Income / Updates + all empty/signed-out states): a comfortable,
+     centered measure — no longer a marooned 760px phone strip. */
+  .wrap { max-width: 840px; padding: 56px 0 88px; }
+  /* Home's overview grid earns the full content width. */
+  .wrap.home-page { max-width: 1120px; }
+
+  /* Explore: a real responsive card grid (genuine multi-column where it helps). */
+  .ex { padding-bottom: 48px; }
+  .ex-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+  .ex-greet { padding-left: 0; padding-right: 0; }
+  .ex-greet h1 { font-size: 34px; }
+  .ex-chips { padding-left: 0; padding-right: 0; }
+
+  /* The per-screen sticky app headers duplicate the sidebar brand on desktop — drop
+     the Explore one; slim the Property one down to just its back button. */
+  .ex-head { display: none; }
+  /* Reserve room for the fixed Invest action bar (~80px tall) so the last content — the
+     "See on-chain proof" link — clears it instead of hiding behind it. */
+  .pd { max-width: 760px; margin: 0 auto; padding-bottom: 120px; }
+  .pd-head { position: static; background: none; backdrop-filter: none;
+    border-bottom: 0; padding: 8px 0 4px; }
+  .pd-head .wm, .pd-head .ibtn[aria-hidden] { display: none; }
+  .pd-hero { border-radius: 20px; height: 260px; margin-top: 4px; }
+  .facts { grid-template-columns: repeat(4, 1fr); }
+
+  /* Proof view widens to the reading column too. */
+  .proof { max-width: 760px; margin: 0 auto; }
+  .proof-intro, .proof-foot, .proof-link { padding-left: 0; padding-right: 0; margin-left: 0; margin-right: 0; }
+
+  /* Fixed bottom action bars are anchored to the viewport centre by default; shift
+     them over the content column (right of the 248px sidebar) and cap their width. */
+  .pd-bar { left: calc(50% + 124px); max-width: 728px; border-radius: 0; }
+}
+
+/* Wide desktop: keep the fixed invest bar aligned to the content column, not sprawling. */
+@media (min-width: 1200px) {
+  .pd-bar { left: calc(50% + 124px); }
+}
+
+/* ============================================================================
+   Marketing landing page (/) — a faithful port of the Brand "Vesper Landing"
+   design canvas. Light-only, token-driven (no raw hex), self-hosted fonts.
+   ============================================================================ */
+/* overflow-x: clip (not hidden) prevents horizontal scroll WITHOUT creating a scroll
+   container — so position: sticky on the "What you own" card keeps working. */
+.lp { background: var(--bg); color: var(--ink); overflow-x: clip; }
+.lp a { color: var(--accent); text-decoration: none; }
+.lp a:hover { color: var(--midnight); }
+
+/* Button text must beat the generic `.lp a` colour (which is more specific than `.cta`),
+   otherwise solid CTAs render indigo-on-indigo (invisible). Scope the fixes to `.lp`. */
+.lp a.cta, .lp button.cta { color: var(--dusk-fg); }
+.lp a.cta:hover, .lp button.cta:hover { color: var(--dusk-fg); }
+.lp a.cta.ghost, .lp button.cta.ghost { color: var(--accent); background: transparent; }
+.lp a.cta.ghost:hover { color: var(--accent); }
+.lp a.lp-btn-light, .lp a.lp-btn-light:hover { color: var(--midnight); }
+.lp a.lp-signin { color: var(--ink); }
+.lp a.lp-signin:hover { color: var(--accent); }
+
+/* Section framing */
+.lp-band { border-top: 1px solid var(--hairline); }
+.lp-white { background: var(--surface); }
+.lp-cream { background: var(--bg); }
+.lp-sec { max-width: 1240px; margin: 0 auto; padding: clamp(64px,9vh,120px) clamp(20px,5vw,56px); }
+.lp-eyebrow { font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--accent); }
+.lp-h2 { font-family: var(--serif); font-size: clamp(2rem,4.6vw,3.5rem); line-height: 1.08;
+  font-weight: 500; letter-spacing: -.018em; margin: 0; text-wrap: balance; }
+.lp-h2.xl { font-size: clamp(2.1rem,5vw,3.9rem); line-height: 1.06; letter-spacing: -.02em; }
+
+/* Nav */
+.lp-nav { position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--hairline); }
+.lp-nav-in { max-width: 1240px; margin: 0 auto; padding: 14px clamp(20px,5vw,56px);
+  display: flex; align-items: center; gap: 20px; }
+.lp-nav .logo-word { font-size: 22px; }
+.lp-nav-links { display: none; gap: 28px; margin-left: 22px; font: 500 14px var(--sans); }
+.lp-nav-links a { color: var(--muted); }
+.lp-nav-links a:hover { color: var(--ink); }
+.lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.lp-signin { font: 500 14px var(--sans); color: var(--ink); white-space: nowrap; }
+.lp-nav .cta { padding: 10px 18px; font-size: 14px; }
+
+/* Hero */
+.lp-hero-in { max-width: 1240px; margin: 0 auto; padding: clamp(48px,8vh,104px) clamp(20px,5vw,56px);
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(320px,1fr)); gap: clamp(36px,5vw,72px); align-items: center; }
+.lp-hero-copy { display: flex; flex-direction: column; gap: 26px; max-width: 620px; }
+.lp-chip { display: inline-flex; align-items: center; gap: 9px; align-self: flex-start;
+  background: var(--chip); border: 1px solid var(--hairline-2); padding: 7px 13px; border-radius: 99px;
+  font: 600 12px var(--sans); letter-spacing: .02em; color: var(--accent); }
+.lp-chip i { width: 6px; height: 6px; border-radius: 99px; background: var(--champagne); flex: none; }
+.lp-h1 { font-family: var(--serif); font-size: clamp(2.9rem,6.3vw,5.4rem); line-height: 1.01;
+  font-weight: 500; letter-spacing: -.022em; margin: 0; text-wrap: balance; }
+.lp-h1 .acc { color: var(--accent); }
+.lp-lead { font: 400 clamp(1.05rem,1.5vw,1.3rem)/1.55 var(--sans); color: var(--sub); margin: 0; max-width: 52ch; }
+.lp-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 2px; }
+.lp-actions .cta { font-size: 16px; padding: 15px 26px; }
+.lp-actions .cta.ghost { padding: 15px 24px; background: transparent; }
+.lp-hero-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  font: 500 13.5px var(--sans); color: var(--muted); margin-top: 6px; }
+.lp-hero-facts em { opacity: .4; font-style: normal; }
+.lp-hero-media { position: relative; width: 100%; aspect-ratio: 4/5; min-height: 400px; }
+.lp-hero-frame { position: absolute; inset: 0; border-radius: 22px; overflow: hidden;
+  box-shadow: 0 30px 70px -30px rgba(30,27,75,.4); }
+.lp-hero-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lp-hero-tag { position: absolute; left: 18px; bottom: 18px; display: flex; align-items: center; gap: 13px;
+  background: color-mix(in srgb, var(--ink) 72%, transparent); backdrop-filter: blur(10px);
+  border: 1px solid color-mix(in srgb, var(--dusk-fg) 15%, transparent); padding: 13px 16px; border-radius: 15px; }
+.lp-hero-tag img { width: 26px; height: 26px; flex: none; }
+.lp-hero-tag .k { font: 400 11.5px var(--sans); color: var(--dusk-sub); }
+.lp-hero-tag .v { font: 600 16px var(--sans); color: var(--dusk-fg); font-variant-numeric: tabular-nums; }
+.lp-hero-tag .v small { color: var(--dusk-sub); font-weight: 400; font-size: 12px; }
+
+/* Problem */
+.lp-prob-head { max-width: 900px; margin: 0 auto; text-align: center; display: flex; flex-direction: column; gap: 18px; }
+.lp-prob-sub { font: 400 clamp(1rem,1.4vw,1.2rem)/1.6 var(--sans); color: var(--muted); margin: 6px auto 0; max-width: 60ch; }
+.lp-statcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 20px; margin-top: clamp(40px,6vh,72px); }
+.lp-statcard { border: 1px solid var(--hairline-2); border-radius: 20px; padding: 30px 28px;
+  display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.lp-statcard b { font: 600 clamp(2.6rem,4.5vw,3.4rem) var(--sans); color: var(--ink);
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+.lp-statcard span { font: 400 15px/1.5 var(--sans); color: var(--muted); }
+
+/* Pivot */
+.lp-pivot { max-width: 1000px; margin: 0 auto; padding: clamp(64px,9vh,120px) clamp(20px,5vw,56px); text-align: center; }
+.lp-pivot-in { display: flex; flex-direction: column; gap: 22px; align-items: center; }
+.lp-pivot-in img { width: 40px; height: 40px; }
+.lp-pivot-in p { font: 400 clamp(1.1rem,1.6vw,1.35rem)/1.6 var(--sans); color: var(--sub); margin: 0; max-width: 56ch; }
+
+/* How it works */
+.lp-how-head { display: flex; flex-direction: column; gap: 14px; margin-bottom: clamp(36px,5vh,60px); max-width: 640px; }
+.lp-cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap: 22px; }
+.lp-howcard { border: 1px solid var(--hairline-2); border-radius: 22px; padding: 32px 30px;
+  display: flex; flex-direction: column; gap: 14px;
+  transition: transform .5s cubic-bezier(.22,.61,.36,1), box-shadow .5s cubic-bezier(.22,.61,.36,1); }
+.lp-howcard:hover { transform: translateY(-6px); box-shadow: 0 24px 50px -28px rgba(30,27,75,.34); }
+.lp-num { font-family: var(--serif); font-size: 32px; font-weight: 500; color: var(--accent); line-height: 1; }
+.lp-howcard h3 { font-family: var(--serif); font-size: 22px; font-weight: 540; color: var(--ink); margin: 0; }
+.lp-howcard p { font: 400 15px/1.6 var(--sans); color: var(--muted); margin: 0; }
+
+/* What you own — sticky */
+.lp-own-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr));
+  gap: clamp(40px,6vw,80px); align-items: start; }
+.lp-own-sticky { position: sticky; top: 100px; }
+.lp-own-card { background: var(--surface); border: 1px solid var(--hairline-2); border-radius: 22px;
+  padding: 26px 28px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 24px 60px -40px rgba(30,27,75,.4); }
+.lp-own-cardhead { display: flex; align-items: center; gap: 12px; }
+.lp-own-thumb { width: 52px; height: 52px; border-radius: 13px; overflow: hidden; flex: none; }
+.lp-own-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lp-own-name { font-family: var(--serif); font-size: 19px; font-weight: 540; color: var(--ink); }
+.lp-own-loc { font: 400 12.5px var(--sans); color: var(--muted); }
+.lp-own-stats { border-top: 1px solid var(--hairline); padding-top: 16px; display: flex;
+  flex-direction: column; gap: 12px; font-variant-numeric: tabular-nums; }
+.lp-own-row { display: flex; justify-content: space-between; align-items: baseline; }
+.lp-own-row span { font: 400 13px var(--sans); color: var(--muted); }
+.lp-own-row b { font: 600 15px var(--sans); color: var(--ink); }
+.lp-own-row b.gain { color: var(--gain); }
+.lp-own-chip { display: flex; align-items: center; gap: 8px; background: var(--chip); border-radius: 11px; padding: 11px 13px; }
+.lp-own-chip img { width: 18px; height: 18px; }
+.lp-own-chip span { font: 500 12.5px var(--sans); color: var(--accent); }
+.lp-own-scroll { display: flex; flex-direction: column; }
+.lp-own-block { min-height: 44vh; display: flex; flex-direction: column; justify-content: center;
+  gap: 14px; padding: 24px 0; border-bottom: 1px solid var(--hairline); }
+.lp-own-block:last-child { border-bottom: 0; }
+.lp-own-kicker { font: 600 12px ui-monospace, Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.lp-own-block h3 { font-family: var(--serif); font-size: clamp(1.6rem,3vw,2.4rem); line-height: 1.12; font-weight: 520; color: var(--ink); margin: 0; }
+.lp-own-block p { font: 400 16px/1.65 var(--sans); color: var(--muted); margin: 0; max-width: 46ch; }
+
+/* Income moment — dusk full bleed */
+.lp-income { background: var(--dusk); color: var(--dusk-fg); }
+.lp-income-in { max-width: 900px; margin: 0 auto; padding: clamp(80px,12vh,150px) clamp(20px,5vw,56px);
+  text-align: center; display: flex; flex-direction: column; align-items: center; gap: 26px; }
+.lp-income-in img { width: 60px; height: 60px; }
+.lp-income-in h2 { font-family: var(--serif); font-size: clamp(2.3rem,5.4vw,4.2rem); line-height: 1.05;
+  font-weight: 480; letter-spacing: -.02em; margin: 0; color: var(--dusk-fg); text-wrap: balance; }
+.lp-income-in p { font: 400 clamp(1.1rem,1.6vw,1.35rem)/1.6 var(--sans); color: var(--dusk-sub); margin: 0; max-width: 50ch; }
+.lp-income-in p b { color: var(--champagne); font-weight: 500; }
+.lp-btn-light { font: 600 16px var(--sans); color: var(--midnight); background: var(--dusk-fg);
+  padding: 15px 28px; border-radius: 13px; margin-top: 6px; display: inline-block; }
+.lp-btn-light:hover { background: var(--champagne-soft); color: var(--midnight); }
+
+/* Properties */
+.lp-props-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+  gap: 18px; margin-bottom: clamp(32px,5vh,52px); }
+.lp-props-head-l { display: flex; flex-direction: column; gap: 14px; max-width: 620px; }
+.lp-props-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 22px; }
+.lp-pcard { border: 1px solid var(--hairline-2); border-radius: 20px; overflow: hidden; background: var(--surface);
+  transition: transform .5s cubic-bezier(.22,.61,.36,1), box-shadow .5s cubic-bezier(.22,.61,.36,1);
+  display: block; color: inherit; }
+.lp-pcard:hover { transform: translateY(-6px); box-shadow: 0 26px 54px -30px rgba(30,27,75,.36); }
+.lp-pcard-img { height: 196px; position: relative; }
+.lp-pcard-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lp-pcard-badge { position: absolute; top: 12px; left: 12px; color: var(--dusk-fg);
+  background: color-mix(in srgb, var(--ink) 78%, transparent); font: 600 11px var(--sans);
+  padding: 5px 10px; border-radius: 99px; }
+.lp-pcard-badge.is-new { background: color-mix(in srgb, var(--gain) 92%, transparent); }
+.lp-pcard-b { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.lp-pcard-title { display: flex; align-items: baseline; gap: 8px; }
+.lp-pcard-title .pn { font-family: var(--serif); font-size: 20px; font-weight: 540; color: var(--ink); }
+.lp-pcard-title .yld { font: 600 17px var(--sans); color: var(--ink); margin-left: auto; font-variant-numeric: tabular-nums; }
+.lp-pcard-loc { font: 400 13px var(--sans); color: var(--muted); }
+.lp-pcard-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.lp-tag { font: 500 11px var(--sans); color: var(--muted); background: var(--chip); padding: 4px 9px; border-radius: 99px; }
+.lp-tag.mod { color: var(--accent); }
+.lp-tag.low { color: var(--gain); background: color-mix(in srgb, var(--gain) 12%, transparent); }
+.lp-tag.high { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+
+/* Trust band */
+.lp-trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 28px; text-align: center; }
+.lp-trust > div { display: flex; flex-direction: column; gap: 6px; }
+.lp-trust b { font: 600 clamp(2.4rem,4vw,3.2rem) var(--sans); color: var(--ink);
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+.lp-trust span { font: 400 14px var(--sans); color: var(--muted); }
+
+/* FAQ */
+.lp-faq-wrap { max-width: 840px; margin: 0 auto; }
+.lp-faq-head { text-align: center; display: flex; flex-direction: column; gap: 12px; margin-bottom: clamp(32px,5vh,52px); }
+.lp-faq { border-top: 1px solid var(--hairline); }
+.lp-faq-item { border-bottom: 1px solid var(--hairline); }
+.lp-faq-item summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 18px;
+  padding: 22px 4px; font-family: var(--serif); font-size: clamp(1.05rem,2vw,1.3rem); font-weight: 540; color: var(--ink); }
+.lp-faq-item summary::-webkit-details-marker { display: none; }
+.lp-faq-item summary::after { content: "+"; margin-left: auto; color: var(--accent);
+  font: 300 26px var(--sans); line-height: 1; transition: transform .3s ease; }
+.lp-faq-item[open] summary::after { transform: rotate(45deg); }
+.lp-faq-item p { font: 400 15.5px/1.65 var(--sans); color: var(--muted); margin: 0; padding: 0 4px 24px; max-width: 64ch; }
+
+/* Final CTA */
+.lp-final { max-width: 820px; margin: 0 auto; padding: clamp(72px,11vh,140px) clamp(20px,5vw,56px);
+  text-align: center; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+.lp-final p { font: 400 clamp(1.05rem,1.5vw,1.25rem)/1.6 var(--sans); color: var(--muted); margin: 0; max-width: 48ch; }
+.lp-final-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 4px; }
+.lp-final-actions .cta { font-size: 16px; padding: 16px 30px; }
+.lp-final-actions .cta.ghost { background: var(--surface); padding: 16px 28px; }
+
+/* Footer — dark band */
+.lp-foot { background: var(--ink); color: var(--dusk-sub); }
+.lp-foot-in { max-width: 1240px; margin: 0 auto; padding: clamp(48px,7vh,80px) clamp(20px,5vw,56px) 40px;
+  display: flex; flex-direction: column; gap: 36px; }
+.lp-foot-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 32px; }
+.lp-foot-brand { display: flex; flex-direction: column; gap: 14px; max-width: 300px; }
+.lp-foot-brand .logo-word { color: var(--dusk-fg); }
+.lp-foot-brand p { font: 400 13.5px/1.6 var(--sans); color: var(--dusk-sub); opacity: .8; margin: 0; }
+.lp-foot-col { display: flex; flex-direction: column; gap: 11px; font: 400 14px var(--sans); }
+.lp-foot-col b { font: 600 12px var(--sans); color: var(--dusk-fg); letter-spacing: .04em; margin-bottom: 3px; }
+.lp-foot-col a { color: var(--dusk-sub); }
+.lp-foot-col a:hover { color: var(--dusk-fg); }
+.lp-foot-legal { border-top: 1px solid color-mix(in srgb, var(--dusk-fg) 10%, transparent);
+  padding-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+.lp-foot-legal p { font: 400 11.5px/1.6 var(--sans); color: var(--dusk-sub); opacity: .6; margin: 0; }
+.lp-foot-legal span { font: 400 12px var(--sans); color: var(--dusk-sub); opacity: .6; }
+
+.form-error { margin: 0; color: var(--loss); font: 600 13px/1.4 var(--sans); }
+.legal-page { max-width: 760px; margin: 0 auto; padding: clamp(48px, 8vh, 96px) 22px; }
+.legal-page h1 { font-family: var(--serif); font-weight: 520; font-size: clamp(2.2rem, 7vw, 4rem); line-height: 1; margin: 10px 0 18px; }
+.legal-back { display: inline-flex; color: var(--accent); font: 600 13px var(--sans); text-decoration: none; margin-bottom: 24px; }
+.legal-back:focus-visible { outline: 2px solid var(--champagne); outline-offset: 3px; border-radius: 6px; }
+
+/* Scroll reveal — only active once JS marks the root (no-JS shows everything). */
+.lp-anim [data-reveal] { opacity: 0; transform: translateY(26px); }
+.lp-anim [data-reveal].in { opacity: 1; transform: none;
+  transition: opacity .8s cubic-bezier(.22,.61,.36,1), transform .8s cubic-bezier(.22,.61,.36,1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-anim [data-reveal] { opacity: 1; transform: none; }
+  .lp-howcard:hover, .lp-pcard:hover { transform: none; }
+}
+
+@media (min-width: 720px) {
+  .lp-nav-links { display: flex; }
+}
+
+/* Property artwork — brand dusk illustrations fill the card image + detail hero. */
+.pcard-photo, .pd-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }

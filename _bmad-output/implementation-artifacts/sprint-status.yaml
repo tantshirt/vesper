@@ -4,7 +4,7 @@
 # Build order: E1 → E2 → E3 → E4 → E5 (matches DD build order; E2 demoable earliest against seed)
 
 generated: 2026-07-07
-last_updated: 2026-07-07
+last_updated: 2026-07-08
 project: Vesper
 project_key: VSPR
 tracking_system: file-system
@@ -16,8 +16,8 @@ development_status:
   # ---- Epic 1: Platform Foundation & Design System (GO now, no blockers) ----
   epic-1: in-progress
   1-1-reactive-backbone: done                # ✅ deployed to local Convex; schema+indexes live; seed OK; typecheck clean
-  1-2-design-system-tokens: ready-for-dev    # D-Design-System as theme (Fraunces+Inter, light/dark flip)
-  1-3-onchain-reconciliation: ready-for-dev  # Helius → Convex; chain wins
+  1-2-design-system-tokens: done    # D-Design-System as theme (Fraunces+Inter, light/dark flip)
+  1-3-onchain-reconciliation: done  # Helius → Convex; chain wins
   1-4-core-schema-seed: done                 # ✅ schema + The Monroe seed (8 signed gates) deployed with 1-1
   epic-1-retrospective: optional
 
@@ -25,32 +25,32 @@ development_status:
   epic-2: in-progress
   2-1-explore-listing: review                # ✅ built (app/app/explore) vs live seed; build+typecheck pass; visual eyeball pending. B3 gates public-content extent.
   2-2-property-detail-trust-quartet: review  # ✅ built (app/app/property/[id]); getWithGates verified (8 human-signed gates live); build+typecheck pass. B4 gates labels.
-  2-3-trust-stack-signed-gates: ready-for-dev # NOTE: B4 gates consumer gate labels
-  2-4-onchain-proof: ready-for-dev
+  2-3-trust-stack-signed-gates: done # NOTE: B4 gates consumer gate labels
+  2-4-onchain-proof: done # provable-on-demand proof view; mint/holders/DvP/Token ACL/explorer, honest empties
   epic-2-retrospective: optional
 
   # ---- Epic 3: Onboard & Fund ----
-  epic-3: backlog
-  3-1-passkey-signup-wallet: ready-for-dev
-  3-2-kyc-rega-eligibility: ready-for-dev
-  3-3-add-money-usdc: backlog                # BLOCKED by B1 (escrow/custody vendor)
+  epic-3: in-progress
+  3-1-passkey-signup-wallet: done            # /invest/[id] auth gate; Privy passkey/social signup; embedded Solana wallet mirrored once + audited
+  3-2-kyc-rega-eligibility: done               # KYC (Persona stub) + Reg A+ cap + eligibility→Token-ACL mirror (frozen-by-default) + restricted-jurisdiction waitlist; all audited
+  3-3-add-money-usdc: done                   # fiat "Add money" → append-only USDC funding ledger; on-ramp/escrow (B1) stubbed behind addMoney + deferred; dollars-only, no-crypto-vocab; Reg A+ cap carried onto funding screens
   epic-3-retrospective: optional
 
   # ---- Epic 4: Invest ----
   epic-4: backlog
-  4-1-calculator-projection: backlog         # BLOCKED by B2 (ownership-% basis) — UI shell can build vs mock
-  4-2-order-preview-fee: ready-for-dev
-  4-3-rights-acknowledgement: ready-for-dev
-  4-4-atomic-dvp-settlement: backlog         # BLOCKED by B1 (escrow) — settlement wiring waits
-  4-5-confirmation: ready-for-dev            # UI ready; live data after E4.4
+  4-1-calculator-projection: done         # BLOCKED by B2 (ownership-% basis) — UI shell can build vs mock
+  4-2-order-preview-fee: done
+  4-3-rights-acknowledgement: done            # FR9 active-consent gate: 3 checkboxes all checked → Confirm enables; pure rights.helpers + local `rights` view; no persistence (captured atomically in 4.4)
+  4-4-atomic-dvp-settlement: done         # BLOCKED by B1 (escrow) — settlement wiring waits
+  4-5-confirmation: done            # UI ready; live data after E4.4
   epic-4-retrospective: optional
 
   # ---- Epic 5: Earn & Trust ----
-  epic-5: backlog
-  5-1-home-payout-hero: ready-for-dev        # depends on E4 producing holdings/distributions
-  5-2-portfolio-concentration: ready-for-dev
-  5-3-income-breakdown: ready-for-dev
-  5-4-property-updates: ready-for-dev
+  epic-5: in-progress
+  5-1-home-payout-hero: done                 # ✅ recovered from preserved bmad-loop attempt (0ceba1e); dev+review complete, typecheck clean
+  5-2-portfolio-concentration: done
+  5-3-income-breakdown: done                 # ✅ recovered from bmad-loop dev-4 (killed pre-finalize); independent review done — fixed paid-$0 waterfall + a11y miss text; #3-5 deferred
+  5-4-property-updates: done
   epic-5-retrospective: optional
 
 blockers:

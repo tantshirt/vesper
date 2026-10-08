@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-label="The Monroe — a multifamily building at dusk">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E1B4B"/>
+      <stop offset="0.5" stop-color="#3A2E63"/>
+      <stop offset="0.78" stop-color="#8A6E86"/>
+      <stop offset="1" stop-color="#E8C88C"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.72" cy="0.86" r="0.42">
+      <stop offset="0" stop-color="#F3E1B0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#E8C88C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lit" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F6E6BE"/>
+      <stop offset="1" stop-color="#E8C88C"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#sky)"/>
+  <rect width="800" height="600" fill="url(#sun)"/>
+  <!-- evening star -->
+  <path d="M150 70 L156 92 L178 98 L156 104 L150 126 L144 104 L122 98 L144 92 Z" fill="#F6E6BE"/>
+  <!-- distant skyline -->
+  <rect x="40" y="360" width="70" height="140" rx="3" fill="#211C4A" opacity="0.7"/>
+  <rect x="690" y="330" width="80" height="170" rx="3" fill="#211C4A" opacity="0.7"/>
+  <!-- main building -->
+  <rect x="235" y="150" width="330" height="352" rx="6" fill="#191637"/>
+  <rect x="235" y="150" width="330" height="352" rx="6" fill="#14142B" opacity="0.35"/>
+  <!-- cornice -->
+  <rect x="223" y="138" width="354" height="18" rx="4" fill="#211C4A"/>
+  <!-- window grid 6 cols x 5 rows -->
+  <g>
+    <rect x="266" y="182" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="316" y="182" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="366" y="182" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="416" y="182" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="466" y="182" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="516" y="182" width="34" height="40" rx="3" fill="url(#lit)"/>
+
+    <rect x="266" y="242" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="316" y="242" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="366" y="242" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="416" y="242" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="466" y="242" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="516" y="242" width="34" height="40" rx="3" fill="#2C2760"/>
+
+    <rect x="266" y="302" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="316" y="302" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="366" y="302" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="416" y="302" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="466" y="302" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="516" y="302" width="34" height="40" rx="3" fill="url(#lit)"/>
+
+    <rect x="266" y="362" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="316" y="362" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="366" y="362" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="416" y="362" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="466" y="362" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="516" y="362" width="34" height="40" rx="3" fill="#2C2760"/>
+
+    <rect x="266" y="422" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="316" y="422" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="366" y="422" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="416" y="422" width="34" height="40" rx="3" fill="url(#lit)"/>
+    <rect x="466" y="422" width="34" height="40" rx="3" fill="#2C2760"/>
+    <rect x="516" y="422" width="34" height="40" rx="3" fill="#2C2760"/>
+  </g>
+  <!-- ground -->
+  <rect x="0" y="500" width="800" height="100" fill="#14142B"/>
+  <rect x="0" y="500" width="800" height="4" fill="#211C4A"/>
+</svg>

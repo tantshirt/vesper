@@ -1,0 +1,35 @@
+{
+  "cluster": "devnet",
+  "rpcUrl": "https://api.devnet.solana.com",
+  "programId": "CfVrHrQoHq5tmAKPBQAtG5Eh5qrYuKQf1XrXWconD5M2",
+  "admin": "3dh3Bxu1hJzH3aHfwNAibRqTxyrPsUFyteiuGxycoohh",
+  "usdcMint": "7ToZFYYxq5MQTuW8oTsqkkQEzxRnP5tfGnGkzLH6rwcb",
+  "propertyMint": "DX6fbk4xSKeuAyG3S92AmBWzbugLjDairCRzwED37u7y",
+  "offering": "EsHnfdKt3F9hBuAzu6pKgU6DRHLxvjYao8btNFbrT6uK",
+  "offeringBump": 254,
+  "vault": "8GLghWVcJR2X17r7BCd8HpxSvC8udeWbj8gh7CP2Vbz8",
+  "treasury": "tsBwHJS1C5trjkVPTyTuAH2z3CEPoaSnhkeM6U74Ki8",
+  "buyer": "4z6gL1yCHxNTi5jyWi6TarQcJhjrC1XLRNcvyPJyX5Kf",
+  "buyerUsdc": "7JT5mEt9ZyoAQFN9PcG1do8bN4ojfDkm5tAUoH5JEMtU",
+  "buyerProperty": "4sjbnZ7cREpTV5JybtfGtkW9P3aLjkrUWihnLZXHhdh8",
+  "pricePerToken": "50000000",
+  "totalOffering": "1000",
+  "purchaseAmount": "10",
+  "usdcPaid": "500000000",
+  "signatures": {
+    "createUsdcMint": "4jVbWJ4ir3s9fuLYgRBhHSEpgWimah4ayRYjDC7t3e71aVnxn8zQ2pBozMrGxpkR4f4w9m5heCztC8b2gAPaZCTF",
+    "createPropertyMint": "2DGyZE5d87Ddii2wzdpj5svrCtVs3PoUipkEhRFFVqw7qmPMCTWU3K8HhEjwKzHVuoUSW77AEQRnEMDAX7h9joJf",
+    "createVaultAndMint": "5AjJc4owKkdEaeaQMHYw2csnddR5K29s3G97ZVUrYThsVR7C6mJoo3y5RRgQoKykmcXrsygQijx6nY1tB3pog1p",
+    "createTreasury": "4HLpvG2o6T8Ke7UrdwY1H5SnHyJSe5PzXRgYP5sfYyzMC6z1VH2zgQdCW4MaVeVCYYazjwwnYBCipUcx5QUYNEFo",
+    "fundBuyer": "4bJgxnUY4g1ithEMqQKyJiuwp95fUcDMhM1iFgicPoR8xPEEwU9rgKCHuCbkYEb3yeHjqJYZAn9nUBYWCF5VARcF",
+    "fundBuyerUsdc": "Bg5sMUybsru4489gXTXZqoRP5pyhV9aYmJZiP42RyBVEstPQ92AHpADBvGEP7Zc9GTtHZiDrh1Qpz2rYPwbzriP",
+    "initializeOffering": "D8U8EvWGRhzieV4YppntJhYaqqNFEioq1DN6tvGbUHPHyeRx5DPhcNisnPJTYmbHWPd7QFaATYGhySeVaFiZaNG",
+    "settlePurchase": "7rGxcjCEEFumCuGXxBkxoyXmVLs48zB6CHKTh3tF8bDetdjiT9rJpcSywqf7BgV8o6aqfifpmPD6NiW713FaJsF"
+  },
+  "explorer": {
+    "program": "https://explorer.solana.com/address/CfVrHrQoHq5tmAKPBQAtG5Eh5qrYuKQf1XrXWconD5M2?cluster=devnet",
+    "offering": "https://explorer.solana.com/address/EsHnfdKt3F9hBuAzu6pKgU6DRHLxvjYao8btNFbrT6uK?cluster=devnet",
+    "settlePurchase": "https://explorer.solana.com/tx/7rGxcjCEEFumCuGXxBkxoyXmVLs48zB6CHKTh3tF8bDetdjiT9rJpcSywqf7BgV8o6aqfifpmPD6NiW713FaJsF?cluster=devnet"
+  },
+  "verifiedAt": "2026-07-10T14:13:05.403Z"
+}

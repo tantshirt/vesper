@@ -28,3 +28,5 @@ yarn-error.log*
 # agent tooling mirrors (reinstallable; not project source)
 .agents/
 .opencode/
+.bmad-loop/runs/
+.bmad-loop/cache/

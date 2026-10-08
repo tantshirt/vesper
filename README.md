@@ -9,6 +9,7 @@ Premium consumer **real estate tokenization on Solana** — own income-producing
 | Path | What |
 |------|------|
 | `app/` | The consumer app — Next.js + Convex + Privy (see [`app/README.md`](app/README.md)) |
+| `vesper_dvp/` | Quasar Solana program for atomic DvP + Token-ACL eligibility |
 | `_bmad-output/A-Product-Brief/` | Product brief + platform requirements |
 | `_bmad-output/B-Trigger-Map/` | Personas + driving forces + feature-impact |
 | `_bmad-output/C-UX-Scenarios/` | 6 UX scenarios + screen specs |
@@ -25,8 +26,8 @@ Planning + design complete (WDS + BMad Method). Build in progress:
 
 - ✅ **E1.1** Reactive backbone — Next.js + Convex + Privy (customJwt auth, audit log)
 - ✅ **E1.4** Core schema + seed (The Monroe, 8 human-signed diligence gates)
-- 🟡 **E2.1** Explore — live listing screen (build-verified)
-- ⏭ **E2.2** Property Detail — next
+- ✅ **E2.1** Explore — live listing screen
+- ✅ **E2.2** Property Detail + proof surface
 
 See [`_bmad-output/implementation-artifacts/sprint-status.yaml`](_bmad-output/implementation-artifacts/sprint-status.yaml).
 
@@ -36,10 +37,10 @@ See [`_bmad-output/implementation-artifacts/sprint-status.yaml`](_bmad-output/im
 cd app
 npm install
 npx convex dev            # login → generates types, deploys schema
-npm run seed              # seed The Monroe
-npm run dev               # http://localhost:3000/explore
+npm run seed              # requires Convex env VESPER_ENABLE_DEMO_SEED=true
+npm run dev               # http://localhost:3000/app/explore
 ```
 
 ## Stack
 
-Next.js (App Router) · Convex · Privy (embedded Solana wallet) · Anchor / Token-2022 / Token ACL · USDC atomic DvP · Helius · Vercel AI Gateway. Consumer app only in this repo; admin/sponsor portal + AI diligence are a separate surface.
+Next.js (App Router) · Convex · Privy (embedded Solana wallet) · Quasar / Token-2022 / Token ACL · USDC atomic DvP · Helius · Vercel AI Gateway. Consumer app only in this repo; admin/sponsor portal + AI diligence are a separate surface.
