@@ -6,16 +6,17 @@
  *
  * Flow (all against the configured cluster, with priority fees + confirmations):
  *   1. create a mock USDC mint (classic SPL, 6 decimals; authority = admin/payer)
- *   2. create a Token-2022 property mint (0 decimals; authority = admin)
+ *   2. create a frozen-by-default Token-2022 property mint (0 decimals; authority = admin)
  *   3. create the offering PDA's vault (Token-2022 ATA owned by the PDA) and
- *      pre-mint the full offering into it
+ *      thaw/fund it, transfer freeze authority to the offering PDA, and revoke mint authority
  *   4. create a treasury USDC account (admin's USDC ATA)
  *   5. create a fresh buyer keypair funded via SystemProgram.transfer (NOT airdrop)
  *   6. create + fund the buyer's USDC ATA (mint mock USDC to it)
  *   7. initializeOffering (admin signs)
- *   8. build the settle tx via buildSettlePurchaseTransaction, sign as buyer, send
- *   9. assert post-state and print every signature + explorer link
- *  10. persist created addresses to app/scripts/devnet-e2e.out.json
+ *   8. attest buyer Eligibility
+ *   9. build the settle tx via buildSettlePurchaseTransaction, sign as buyer, send
+ *  10. assert post-state and print every signature + explorer link
+ *  11. persist created addresses to app/scripts/devnet-e2e.out.json
  *
  * Run:  npx tsx app/scripts/devnet-e2e.ts
  * Env:  RPC_URL (default https://api.devnet.solana.com)
@@ -40,12 +41,18 @@ import {
 import {
   MINT_SIZE,
   getMintLen,
+  ExtensionType,
+  AccountState,
   getMinimumBalanceForRentExemptMint,
+  createInitializeDefaultAccountStateInstruction,
   createInitializeMint2Instruction,
   createAssociatedTokenAccountIdempotentInstruction,
+  createThawAccountInstruction,
   createMintToInstruction,
+  createSetAuthorityInstruction,
+  AuthorityType,
   getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+} from "../lib/solana/token";
 
 import {
   PROGRAM_ID,
@@ -56,6 +63,7 @@ import {
   USDC_DECIMALS,
   deriveOfferingPda,
   buildInitializeOfferingInstruction,
+  buildSetEligibilityInstruction,
   buildSettlePurchaseTransaction,
 } from "../lib/solana/dvp";
 
@@ -174,9 +182,13 @@ async function main() {
   console.log(`Admin / payer : ${admin.publicKey.toBase58()}`);
 
   const adminBalance = await connection.getBalance(admin.publicKey);
-  console.log(`Admin balance : ${(adminBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL`);
+  console.log(
+    `Admin balance : ${(adminBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL`,
+  );
   if (adminBalance < 0.2 * LAMPORTS_PER_SOL) {
-    throw new Error("Admin balance too low (< 0.2 SOL). Fund the admin keypair.");
+    throw new Error(
+      "Admin balance too low (< 0.2 SOL). Fund the admin keypair.",
+    );
   }
 
   const sigs: Record<string, string> = {};
@@ -211,12 +223,12 @@ async function main() {
     console.log(`  usdc_mint = ${usdcMint.publicKey.toBase58()}`);
   }
 
-  // --- 2. Property mint (Token-2022, 0 decimals) -------------------------
+  // --- 2. Property mint (Token-2022, 0 decimals, frozen-by-default) ------
   const propertyMint = Keypair.generate();
+  const [offeringPda, offeringBump] = deriveOfferingPda(propertyMint.publicKey);
   {
-    const space = getMintLen([]); // basic Token-2022 mint, no extensions
-    const lamports =
-      await connection.getMinimumBalanceForRentExemption(space);
+    const space = getMintLen([ExtensionType.DefaultAccountState]);
+    const lamports = await connection.getMinimumBalanceForRentExemption(space);
     const ixs = [
       SystemProgram.createAccount({
         fromPubkey: admin.publicKey,
@@ -225,17 +237,22 @@ async function main() {
         lamports,
         programId: TOKEN_2022_PROGRAM_ID,
       }),
+      createInitializeDefaultAccountStateInstruction(
+        propertyMint.publicKey,
+        AccountState.Frozen,
+        TOKEN_2022_PROGRAM_ID,
+      ),
       createInitializeMint2Instruction(
         propertyMint.publicKey,
         PROPERTY_DECIMALS,
         admin.publicKey, // mint authority
-        null,
+        admin.publicKey, // staged freeze authority; transferred after vault funding
         TOKEN_2022_PROGRAM_ID,
       ),
     ];
     sigs.createPropertyMint = await sendIxs(
       connection,
-      "create property mint (Token-2022, 0dp)",
+      "create property mint (Token-2022, 0dp, frozen-by-default)",
       admin,
       ixs,
       [propertyMint],
@@ -244,8 +261,9 @@ async function main() {
   }
 
   // --- 3. Offering PDA + vault (Token-2022 ATA owned by PDA) + pre-mint ---
-  const [offeringPda, offeringBump] = deriveOfferingPda(propertyMint.publicKey);
-  console.log(`  offering PDA = ${offeringPda.toBase58()} (bump ${offeringBump})`);
+  console.log(
+    `  offering PDA = ${offeringPda.toBase58()} (bump ${offeringBump})`,
+  );
 
   const vault = getAssociatedTokenAddressSync(
     propertyMint.publicKey,
@@ -264,6 +282,13 @@ async function main() {
         TOKEN_2022_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID,
       ),
+      createThawAccountInstruction(
+        vault,
+        propertyMint.publicKey,
+        admin.publicKey,
+        [],
+        TOKEN_2022_PROGRAM_ID,
+      ),
       createMintToInstruction(
         propertyMint.publicKey,
         vault,
@@ -272,10 +297,26 @@ async function main() {
         [],
         TOKEN_2022_PROGRAM_ID,
       ),
+      createSetAuthorityInstruction(
+        propertyMint.publicKey,
+        admin.publicKey,
+        AuthorityType.FreezeAccount,
+        offeringPda,
+        [],
+        TOKEN_2022_PROGRAM_ID,
+      ),
+      createSetAuthorityInstruction(
+        propertyMint.publicKey,
+        admin.publicKey,
+        AuthorityType.MintTokens,
+        null,
+        [],
+        TOKEN_2022_PROGRAM_ID,
+      ),
     ];
     sigs.createVaultAndMint = await sendIxs(
       connection,
-      `create vault + pre-mint ${TOTAL_OFFERING} property tokens`,
+      `create/thaw vault + pre-mint ${TOTAL_OFFERING} + bind freeze authority + revoke mint authority`,
       admin,
       ixs,
     );
@@ -385,13 +426,28 @@ async function main() {
     );
   }
 
+  // --- 8. attest buyer Eligibility --------------------------------------
+  sigs.setBuyerEligibility = await sendIxs(
+    connection,
+    "set buyer Eligibility eligible=true",
+    admin,
+    [
+      buildSetEligibilityInstruction({
+        authority: admin.publicKey,
+        propertyMint: propertyMint.publicKey,
+        owner: buyer.publicKey,
+        eligible: true,
+      }),
+    ],
+  );
+
   // --- capture pre-state --------------------------------------------------
   const vaultBefore = await tokenBalance(connection, vault);
   const treasuryBefore = await tokenBalance(connection, treasury);
   console.log("-".repeat(72));
   console.log(`Pre-buy  : vault=${vaultBefore}  treasury=${treasuryBefore}`);
 
-  // --- 8. build settle tx via the reusable client, sign as buyer, send ---
+  // --- 9. build settle tx via the reusable client, sign as buyer, send ---
   const built = await buildSettlePurchaseTransaction({
     connection,
     buyer: buyer.publicKey,
@@ -399,21 +455,17 @@ async function main() {
     tokenAmount: PURCHASE_AMOUNT,
     computeUnitPrice: COMPUTE_UNIT_PRICE,
     computeUnitLimit: COMPUTE_UNIT_LIMIT,
-    // This legacy smoke test creates a basic Token-2022 mint with no DefaultAccountState.
-    // The ACL-specific script covers frozen-by-default mint behavior and eligibility-gated thaw.
-    includeThaw: false,
   });
   console.log(
-    `Settle   : buying ${PURCHASE_AMOUNT} tokens for ${built.usdcAmount} USDC base units`,
+    `Settle   : buying ${PURCHASE_AMOUNT} tokens for ${built.quote.totalUsdcAmount} USDC base units (${built.quote.principalUsdcAmount} principal + ${built.quote.platformFeeUsdcAmount} fee)`,
   );
 
-  // buyer is the only tx-level signer
-  built.transaction.sign([buyer]);
+  // Devnet proof only: buyer + offering authority are both required by the protocol.
+  built.transaction.sign([buyer, admin]);
 
   let settleSig = "";
   {
     const maxAttempts = 8;
-    let lastErr: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         settleSig = await connection.sendRawTransaction(
@@ -433,12 +485,12 @@ async function main() {
         }
         break;
       } catch (err) {
-        lastErr = err;
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `  [settle retry ${attempt}/${maxAttempts}] ${msg}`,
-        );
-        if (msg.includes("block height exceeded") || msg.includes("Blockhash")) {
+        console.warn(`  [settle retry ${attempt}/${maxAttempts}] ${msg}`);
+        if (
+          msg.includes("block height exceeded") ||
+          msg.includes("Blockhash")
+        ) {
           // stale blockhash — rebuild + re-sign
           const rebuilt = await buildSettlePurchaseTransaction({
             connection,
@@ -447,9 +499,8 @@ async function main() {
             tokenAmount: PURCHASE_AMOUNT,
             computeUnitPrice: COMPUTE_UNIT_PRICE,
             computeUnitLimit: COMPUTE_UNIT_LIMIT,
-            includeThaw: false,
           });
-          rebuilt.transaction.sign([buyer]);
+          rebuilt.transaction.sign([buyer, admin]);
           built.transaction = rebuilt.transaction;
           built.blockhash = rebuilt.blockhash;
           built.lastValidBlockHeight = rebuilt.lastValidBlockHeight;
@@ -467,15 +518,17 @@ async function main() {
   console.log(`  [ok] settlePurchase: ${settleSig}`);
   console.log(`       ${explorer(settleSig)}`);
 
-  // --- 9. assert post-state ----------------------------------------------
-  const expectedUsdc = PURCHASE_AMOUNT * PRICE_PER_TOKEN;
+  // --- 10. assert post-state ---------------------------------------------
+  const expectedUsdc = built.quote.totalUsdcAmount;
   const buyerProperty = built.buyerProperty;
   const buyerPropBal = await tokenBalance(connection, buyerProperty);
   const vaultAfter = await tokenBalance(connection, vault);
   const treasuryAfter = await tokenBalance(connection, treasury);
 
   console.log("-".repeat(72));
-  console.log(`Post-buy : buyer_property=${buyerPropBal}  vault=${vaultAfter}  treasury=${treasuryAfter}`);
+  console.log(
+    `Post-buy : buyer_property=${buyerPropBal}  vault=${vaultAfter}  treasury=${treasuryAfter}`,
+  );
 
   const checks: Array<[string, boolean, string]> = [
     [
@@ -534,7 +587,9 @@ async function main() {
   console.log("-".repeat(72));
   console.log(`Persisted addresses -> ${outPath}`);
   console.log("=".repeat(72));
-  console.log(allPass ? "E2E RESULT: SUCCESS ✅" : "E2E RESULT: ASSERTIONS FAILED ❌");
+  console.log(
+    allPass ? "E2E RESULT: SUCCESS ✅" : "E2E RESULT: ASSERTIONS FAILED ❌",
+  );
   console.log("=".repeat(72));
 
   if (!allPass) process.exit(1);

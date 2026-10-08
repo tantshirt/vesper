@@ -1,6 +1,6 @@
 import { query, internalMutation } from "./_generated/server";
 import { writeAudit } from "./audit";
-import { findUserByIdentity } from "./security";
+import { findUserByIdentity, requireSeedWrites } from "./security";
 import type { Doc, Id } from "./_generated/dataModel";
 
 // Story 5.1 — Home: the payout is the hero (FR12).
@@ -241,6 +241,11 @@ export const summary = query({
 export const devSeedDistribution = internalMutation({
   args: {},
   handler: async (ctx) => {
+    // Fail closed outside test / VESPER_ENABLE_DEMO_SEED — parity with its seed siblings
+    // (seedDemo.ts, properties.ts) and, since this writes `incomeLedger` rows `status:"paid"`, a guard
+    // on a self-settle-shaped path that must never run against a live deployment.
+    requireSeedWrites("devSeedDistribution");
+
     const now = Date.now();
     const period = periodFor(now);
     const holdings = await ctx.db.query("holdings").collect();

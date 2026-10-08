@@ -1,0 +1,12 @@
+[package]
+name = "vesper-dvp-runtime-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+resolver = "2"
+
+[dependencies]
+quasar-svm = { git = "https://github.com/blueshift-gg/quasar-svm", rev = "c63afd21885e16cb67b9dd9720330eef9e949d90" }
+spl-token-interface = { version = "2.0.0" }

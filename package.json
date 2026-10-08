@@ -1,0 +1,33 @@
+{
+  "name": "vesper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vesper monorepo — consumer app (app/), admin control plane (admin/), shared Convex backend (app/convex).",
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "app",
+    "admin"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace vesper-app",
+    "build": "npm run build --workspace vesper-app",
+    "lint": "npm run lint --workspace vesper-app",
+    "test": "npm run test --workspace vesper-app",
+    "check:tokens": "npm run check:tokens --workspace vesper-app",
+    "convex": "npm run convex --workspace vesper-app",
+    "dev:admin": "npm run dev --workspace vesper-admin",
+    "build:admin": "npm run build --workspace vesper-admin",
+    "lint:admin": "npm run lint --workspace vesper-admin"
+  },
+  "overrides": {
+    "elliptic": "^6.6.1",
+    "esbuild": "^0.25.12",
+    "postcss": "^8.5.10",
+    "uuid": "^11.1.1",
+    "ws": "^8.20.2"
+  }
+}

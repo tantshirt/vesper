@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
 import { isLikelySolanaSignature, requireSeedWrites } from "./security";
@@ -41,7 +41,12 @@ export const getOnChainProof = query({
       name: v.string(),
       mint: v.optional(v.string()),
       spvName: v.string(),
-      status: v.union(v.literal("open"), v.literal("funded"), v.literal("closed")),
+      status: v.union(
+        v.literal("gating"),
+        v.literal("open"),
+        v.literal("funded"),
+        v.literal("closed"),
+      ),
       holderCount: v.number(),
       receipts: v.array(v.object({ dvpTxSig: v.string() })),
     }),
@@ -105,8 +110,11 @@ export const listOpen = query({
 });
 
 // E1.4 seed — The Monroe with 8 signed diligence gates, matching the design prototypes.
-// Run: `npm run seed` (convex run properties:seedTheMonroe).
-export const seedTheMonroe = mutation({
+// Run: `npm run seed` (convex run properties:seedTheMonroe). An **internalMutation** — ABSENT from the
+// public `api` (matching the crown-jewel posture of grantRoles/provisionSponsor): a demo seed that
+// bypasses the SoD wall / gate ceremony / listing flow must never be reachable from a client, only via
+// the Convex CLI/dashboard (which already holds deployment credentials). Also env-gated (requireSeedWrites).
+export const seedTheMonroe = internalMutation({
   args: {},
   handler: async (ctx) => {
     requireSeedWrites("Property seed");

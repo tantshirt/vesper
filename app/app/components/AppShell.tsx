@@ -7,23 +7,21 @@ import {
   House,
   MagnifyingGlass,
   Buildings,
-  CurrencyDollar,
-  Newspaper,
+  Storefront,
+  BookOpenText,
   type Icon,
 } from "@phosphor-icons/react";
 import { Logo } from "./Logo";
 
-// Shared navigation for the authenticated app. One source of truth for both the
-// desktop left sidebar and the mobile bottom tab bar (only built screens — no Market/Learn yet).
-// Icons are Phosphor (regular weight → `fill` + accent when the tab is active), replacing the old
-// Unicode glyphs so the nav reads as a real, consistent icon set.
+// Shared navigation for the authenticated app. Income and updates remain available
+// from Home and Portfolio, where they have the context needed to be useful.
 type NavItem = { href: string; label: string; icon: Icon; exact?: boolean };
 const NAV: NavItem[] = [
   { href: "/app", label: "Home", icon: House, exact: true },
   { href: "/app/explore", label: "Explore", icon: MagnifyingGlass },
   { href: "/app/portfolio", label: "Portfolio", icon: Buildings },
-  { href: "/app/income", label: "Income", icon: CurrencyDollar },
-  { href: "/app/updates", label: "Updates", icon: Newspaper },
+  { href: "/app/market", label: "Market", icon: Storefront },
+  { href: "/app/learn", label: "Learn", icon: BookOpenText },
 ];
 
 function isActive(pathname: string, href: string, exact?: boolean) {

@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { roleValidator, sponsorRoleValidator } from "./roles";
 
 // Core entities (E1.1 users + auditLog; E1.4 the rest). Shape is seed — owned by code from here.
 // Data-ownership per architecture spine: on-chain owns token truth; Convex owns intent,
@@ -13,17 +14,160 @@ export default defineSchema({
     walletAddress: v.optional(v.string()), // Privy embedded Solana wallet
     regAInvestedThisYear: v.optional(v.number()), // for Reg A+ cap (I5)
     regAAnnualLimit: v.optional(v.number()), // E3.2: computed Reg A+ per-investor cap (10% of greater of income/net worth)
+    regARegulatoryYear: v.optional(v.number()), // UTC calendar year owning both Reg A accumulator fields
+    regAInvestedByYear: v.optional(
+      v.array(v.object({ year: v.number(), amount: v.number() })),
+    ), // durable year buckets; prevents late confirmations from relabeling the current accumulator
     createdAt: v.number(),
   }).index("by_privyId", ["privyId"]).index("by_wallet", ["walletAddress"]), // by_wallet: E1.3 chain-event routing
 
+  // One-time, server-issued wallet ownership challenges. The challenge binds the authenticated
+  // identity, canonical Solana address, relying-party domain and expiry. Consumed rows are retained
+  // for replay detection and audit correlation; only the hashed/signature-free challenge metadata is
+  // persisted here.
+  walletLinkChallenges: defineTable({
+    userId: v.id("users"),
+    identityKey: v.string(),
+    walletAddress: v.string(),
+    domain: v.string(),
+    message: v.string(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_wallet", ["walletAddress"]),
+
+  // --- Admin Story 1.1: staff identity, kept STRICTLY separate from consumer `users` ---
+  // Staff sign in via WorkOS SSO and are keyed on `workosId` (the WorkOS token `sub`); consumers are
+  // keyed on `privyId`. The scope wall (security.ts) enforces that these never cross-resolve. Staff
+  // access is grant-only: a valid WorkOS JWT with no row here is NOT staff. Permissions are DERIVED
+  // from `roles` on every request (roles.ts) — never stored — so a role edit takes effect at once.
+  staff: defineTable({
+    workosId: v.string(),
+    email: v.string(),
+    name: v.string(), // the named human — every admin action attributes to this, never to a system
+    roles: v.array(roleValidator),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    createdAt: v.number(),
+  }).index("by_workosId", ["workosId"]),
+
   // Append-only. Every money/ownership/eligibility/diligence mutation writes here (FR16 / spine I3).
+  // Admin Story 1.3: `onchainRef` is OPTIONAL — the on-chain reference (tx sig / mint) an admin
+  // on-chain action produces. Optional keeps all 25 existing consumer callers compiling unchanged and
+  // every legacy row valid (no migration). `by_actor` supports the audit view's actor filter.
   auditLog: defineTable({
     actor: v.string(),
     action: v.string(),
     target: v.string(),
     meta: v.optional(v.any()),
+    onchainRef: v.optional(v.string()),
     timestamp: v.number(),
-  }).index("by_target", ["target"]).index("by_timestamp", ["timestamp"]),
+  })
+    .index("by_target", ["target"])
+    .index("by_timestamp", ["timestamp"])
+    .index("by_actor", ["actor"]),
+
+  // --- Admin Story 1.2: segregation-of-duties — the listing-revenue-vs-diligence wall ---
+  // Records that a staff member holds a fee/listing/billing stake in a specific property. A row here
+  // BARS that staff from signing that property's diligence gates (assertNoFeeConflict, sod.ts).
+  // Append-only in spirit: rows are added/removed ONLY via the audited internalMutations in sod.ts,
+  // never on the public `api`. `by_staff_property` answers "does this staff conflict on this property?"
+  // in one indexed lookup; `by_property` lists every conflicted staff for a property.
+  staffPropertyInterest: defineTable({
+    workosId: v.string(), // the staff member with the stake (their WorkOS `sub` — the identity, not a name)
+    propertyId: v.id("properties"),
+    kind: v.union(v.literal("listing"), v.literal("billing"), v.literal("fee")),
+    recordedBy: v.string(), // the human who recorded this interest — audited as the actor
+    createdAt: v.number(),
+  })
+    .index("by_staff_property", ["workosId", "propertyId"])
+    .index("by_property", ["propertyId"]),
+
+  // --- Admin Story 1.4: audited, time-boxed break-glass ---
+  // A break-glass grant confers its `scope` (a set of permissions) to `workosId` ONLY while
+  // `Date.now() < expiresAt` AND `status === "active"` (see rbac.ts effectivePermissions). Expired
+  // (by clock) or revoked records confer NOTHING. Every row is created ONLY via the audited
+  // `breakglass.use`-gated `invokeBreakGlass` mutation, carries a MANDATORY human reason, and is
+  // compliance-visible via `listActiveBreakGlass`. `by_workosId` answers "what active elevation does
+  // this staff member hold right now?" in one indexed lookup on the permission-resolution hot path.
+  breakGlass: defineTable({
+    workosId: v.string(), // the staff member the elevated scope is conferred to (their WorkOS `sub`)
+    scope: v.array(v.string()), // the permissions conferred while active (validated against the catalog at write time)
+    reason: v.string(), // MANDATORY non-empty justification — a break-glass entry naming no reason is worthless
+    invokedBy: v.string(), // the human who authorized the elevation — audited as the actor
+    createdAt: v.number(),
+    expiresAt: v.number(), // bounded (≤ 60 min from creation); permissions lapse the instant now ≥ this
+    status: v.union(v.literal("active"), v.literal("expired"), v.literal("revoked")),
+  }).index("by_workosId", ["workosId"]),
+
+  // --- Admin Story 6.1: walled sponsor onboarding + KYB/Gate 0 (tenant isolation) ---
+  // A sponsor ORG is the tenant boundary: every sponsor query/mutation resolves the caller to exactly
+  // one `sponsorOrgId` (via `sponsorMembers`) and filters by it server-side. `kybStatus` is Gate 0 —
+  // a deal cannot be `submitted` until it is "passed" (recorded via the stubbed Middesk seam). `kybRef`
+  // is the (stubbed) Middesk reference, optional so a fresh org with no KYB yet stays valid.
+  sponsorOrgs: defineTable({
+    name: v.string(),
+    kybStatus: v.union(
+      v.literal("none"),
+      v.literal("pending"),
+      v.literal("passed"),
+      v.literal("failed"),
+    ),
+    kybRef: v.optional(v.string()), // ref to the (stubbed) Middesk KYB inquiry that produced kybStatus
+    createdAt: v.number(),
+  }),
+
+  // Links a WorkOS-invited sponsor human (a `staff` row) to their ONE org + sponsor role. `by_workosId`
+  // is the tenant-resolution hot path: `requireSponsor` turns the caller's `staff.workosId` into their
+  // `sponsorOrgId` in one indexed lookup. Grant-only — rows are created ONLY by the internal
+  // `provisionSponsor` mutation (absent from the public api), mirroring the staff grant posture.
+  sponsorMembers: defineTable({
+    workosId: v.string(), // the sponsor human's WorkOS `sub` (matches their `staff` row)
+    sponsorOrgId: v.id("sponsorOrgs"),
+    role: sponsorRoleValidator,
+    createdAt: v.number(),
+  }).index("by_workosId", ["workosId"]),
+
+  // A sponsor deal, keyed to its org. `by_org` is the ONLY read path sponsors have — a sponsor can
+  // never enumerate deals outside their `sponsorOrgId`. `status` advances draft → kyb_pending →
+  // submitted; the `submitted` transition is GATED on the org's `kybStatus === "passed"` (Gate 0).
+  // A `submitted` deal is finally PROMOTED into a `properties` row by ops (gates.ts
+  // `createPropertyFromDeal`, gate.sign-gated) — `promoted` is the terminal state and `propertyId`
+  // stores the created property, so a deal is promoted AT MOST ONCE (a re-promote is refused). Both are
+  // additive — every pre-existing deal row stays valid with no migration.
+  sponsorDeals: defineTable({
+    sponsorOrgId: v.id("sponsorOrgs"),
+    propertyName: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("kyb_pending"),
+      v.literal("submitted"),
+      v.literal("promoted"),
+    ),
+    propertyId: v.optional(v.id("properties")), // set on promotion — the property this deal became
+    createdAt: v.number(),
+  }).index("by_org", ["sponsorOrgId"]),
+
+  // --- Admin Story 6.2: sponsor intake documents (DEAL-keyed, tenant-isolated) ---
+  // A document uploaded against a sponsor deal's intake checklist. DELIBERATELY separate from 2-1's
+  // property-keyed `diligenceDocuments` (that table is internal-diligence storage): sponsor docs are
+  // keyed to a `sponsorDeals` row and are reachable ONLY through `requireSponsor` + a deal-ownership
+  // assert, so one tenant can never read/write another's. `status` is the validation-on-upload
+  // outcome: `received` (a valid required kind with a non-empty storageRef) or `rejected` (a durable
+  // business rejection carrying a human `rejectReason` — never a thrown/rolled-back error, per the
+  // 1-2/1-4 lesson). `storageRef` is an OPAQUE locator — validation is on kind/metadata, never bytes
+  // (no OCR / live storage vendor in this story). `uploadedBy` is the named sponsor human. `by_deal`
+  // is the only read path — the checklist, timeline, and submit gate all fan out from it.
+  sponsorDocuments: defineTable({
+    dealId: v.id("sponsorDeals"),
+    kind: v.string(), // free-form on the wire so a WRONG kind is a business rejection, not a validator throw
+    storageRef: v.string(), // opaque storage locator; empty ⇒ rejected
+    status: v.union(v.literal("received"), v.literal("rejected")),
+    rejectReason: v.optional(v.string()), // set iff status === "rejected" — the plain human reason
+    uploadedBy: v.string(), // the named sponsor human — attribution, never a system
+    createdAt: v.number(),
+  }).index("by_deal", ["dealId"]),
 
   // --- E1.4: the rest of the core (seed shape; refined by their owning stories) ---
   properties: defineTable({
@@ -34,21 +178,60 @@ export default defineSchema({
     targetNetYield: v.number(), // e.g. 0.062
     offeringSize: v.number(), // USD basis for ownership % (B2 open decision)
     fundedPct: v.number(),
-    status: v.union(v.literal("open"), v.literal("funded"), v.literal("closed")),
+    // Admin Story 3.1 adds the pre-open `"gating"` state: a property under active diligence, its 8
+    // gates being signed, NOT yet browsable by investors (listOpen still filters status:"open"). A
+    // property advances open only after every gate is signed (allGatesSigned, gates.ts). Additive — no
+    // migration; every existing row stays valid.
+    status: v.union(
+      v.literal("gating"),
+      v.literal("open"),
+      v.literal("funded"),
+      v.literal("closed"),
+    ),
     spvName: v.string(),
     minInvestment: v.number(),
     mint: v.optional(v.string()), // E1.3: on-chain token address → routes chain events to this property
+    // Admin Story 3.2 — the mint-intent lifecycle for the mint & listing console. `minting` is set the
+    // instant the STUB-MINT server-wallet seam returns (optimistic intent, on-chain-unconfirmed);
+    // `confirmed` is set ONLY once the mint is reconciled from chain truth (3-3 Helius confirm — a stub
+    // confirm helper stands in for the demo). Listing (status gating→open) is gated on `confirmed`, so a
+    // property can never be listed on an unconfirmed mint. Optional/absent ⇒ never minted; additive, no
+    // migration — every existing row stays valid.
+    mintStatus: v.optional(
+      v.union(v.literal("none"), v.literal("minting"), v.literal("confirmed")),
+    ),
+    mintSlot: v.optional(v.number()),
     firstDistributionDate: v.optional(v.string()), // E4.5: YYYY-MM-DD; optional so existing docs stay valid (no migration)
-  }).index("by_status", ["status"]).index("by_mint", ["mint"]), // by_mint: E1.3 chain-event routing
+    // Admin Story 6.3: the sponsor↔property OPERATOR link. When set, this is the ONE sponsor org that
+    // operates the property and may author its monthly updates; `sponsorUpdates` scopes every read/write
+    // by it (a property whose link ≠ the caller's org reads as not-found). Optional so every existing
+    // property stays valid with no migration — it is POPULATED at listing (Epic 3); tests seed it.
+    operatorSponsorOrgId: v.optional(v.id("sponsorOrgs")),
+  })
+    .index("by_status", ["status"])
+    .index("by_mint", ["mint"]) // by_mint: E1.3 chain-event routing
+    .index("by_operator", ["operatorSponsorOrgId"]), // Admin 6.3: a sponsor's operated properties in one lookup
 
+  // Admin Story 3.1 — the gate SIGNATURE ceremony's storage. A gate is `pending` until a human (or,
+  // for a multi-party gate, TWO distinct humans) signs it through the SoD engine (1-2). The added
+  // fields carry the ceremony's state:
+  //   • `multiParty` — DATA (B3 placeholder): true ⇒ the gate needs 2 DISTINCT signers, false/absent ⇒ 1.
+  //     Which gates are multi-party is a data edit (GATE_DEFINITIONS + this field), never a rebuild.
+  //   • `signerWorkosIds` — the distinct human IDENTITIES that have signed so far. Passed into 1-2's
+  //     requireGateSigner as the existing-signer set so a self-approval (same human twice) is blocked.
+  //   • `evidencePackageId` — the 2-2 evidence package the signer acted on (evidence, never an approval).
+  // All optional so every pre-existing (seeded, already-passed) gate row stays valid with no migration.
   diligenceGates: defineTable({
     propertyId: v.id("properties"),
     gateNo: v.number(), // 0..7
     label: v.string(),
     status: v.union(v.literal("pending"), v.literal("passed"), v.literal("failed")),
-    signedByHuman: v.optional(v.string()), // NEVER an AI (spine I4)
+    signedByHuman: v.optional(v.string()), // NEVER an AI (spine I4) — the distinct human signer(s)
     signedAt: v.optional(v.number()),
     evidenceRef: v.optional(v.string()),
+    multiParty: v.optional(v.boolean()), // true ⇒ requires 2 DISTINCT signers (B3 data placeholder)
+    signerWorkosIds: v.optional(v.array(v.string())), // the distinct human identities that have signed
+    evidencePackageId: v.optional(v.id("evidencePackages")), // the 2-2 evidence acted on (never an approval)
   }).index("by_property", ["propertyId"]),
 
   orders: defineTable({
@@ -56,15 +239,67 @@ export default defineSchema({
     propertyId: v.id("properties"),
     amount: v.number(),
     platformFee: v.number(),
-    status: v.union(v.literal("pending"), v.literal("settled"), v.literal("failed")),
+    status: v.union(
+      // Legacy demo states. Production code may read them but never creates them.
+      v.literal("pending"),
+      v.literal("settled"),
+      v.literal("failed"),
+      // Durable production purchase-operation states.
+      v.literal("prepared"),
+      v.literal("awaiting_authorization"),
+      v.literal("submitted"),
+      v.literal("confirmed_on_chain"),
+      v.literal("reconciling"),
+      v.literal("complete"),
+      v.literal("blocked"),
+      v.literal("failed_safe"),
+      v.literal("outcome_unknown"),
+      v.literal("expired"),
+    ),
     dvpTxSig: v.optional(v.string()), // Convex never self-settles; set only on on-chain DvP confirm (I2)
+    walletAddress: v.optional(v.string()),
+    propertyMint: v.optional(v.string()),
+    tokenAmountRaw: v.optional(v.string()),
+    principalBaseUnits: v.optional(v.string()),
+    platformFeeBaseUnits: v.optional(v.string()),
+    totalBaseUnits: v.optional(v.string()),
+    paymentDecimals: v.optional(v.number()),
+    regulatoryYear: v.optional(v.number()),
+    acknowledgedRiskIds: v.optional(v.array(v.string())),
+    teachBackOwnership: v.optional(v.string()),
+    teachBackLiquidity: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    authorizationClaimId: v.optional(v.string()),
+    authorizationClaimExpiresAt: v.optional(v.number()),
+    authorizedTransaction: v.optional(v.string()), // immutable authority-signed transaction, base64
+    authorizedBlockhash: v.optional(v.string()),
+    authorizedLastValidBlockHeight: v.optional(v.number()),
+    authorizedChain: v.optional(
+      v.union(v.literal("solana:devnet"), v.literal("solana:testnet"), v.literal("solana:mainnet")),
+    ),
+    authorizationIssuedAt: v.optional(v.number()),
+    submittedAt: v.optional(v.number()),
+    confirmedAt: v.optional(v.number()),
+    reconciledAt: v.optional(v.number()),
+    consumerAcknowledgedAt: v.optional(v.number()),
+    chainSlot: v.optional(v.number()),
+    failureCode: v.optional(v.string()),
+    lastCheckpoint: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_user", ["userId"]).index("by_property", ["propertyId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_property", ["propertyId"])
+    .index("by_user_property", ["userId", "propertyId"])
+    .index("by_signature", ["dvpTxSig"]),
 
   holdings: defineTable({
     userId: v.id("users"),
     propertyId: v.id("properties"),
     tokenAmount: v.number(),
+    tokenAmountRaw: v.optional(v.string()),
+    tokenDecimals: v.optional(v.number()),
+    chainSlot: v.optional(v.number()),
     ownershipPct: v.number(),
     costBasis: v.number(),
   })
@@ -72,6 +307,9 @@ export default defineSchema({
     .index("by_property", ["propertyId"]) // by_property: E2.4 count holders per property without a scan
     .index("by_user_property", ["userId", "propertyId"]), // settle/reconcile fetch one holding by (user, property)
 
+  // Admin Story 5.1 adds the compliance-adjudication fields (`amlFlag`, `reviewedBy`, `reviewReason`)
+  // — all OPTIONAL so the consumer `recordEligibility` path (E3.2) leaves them unset and no migration
+  // is needed. `by_property` lists a property's eligibility rows for the compliance review queue.
   eligibility: defineTable({
     userId: v.id("users"),
     propertyId: v.id("properties"),
@@ -79,7 +317,49 @@ export default defineSchema({
     jurisdiction: v.string(),
     tokenAclState: v.union(v.literal("frozen"), v.literal("thawed")),
     personaInquiryId: v.optional(v.string()), // E3.2: ref to the (stubbed) Persona KYC inquiry that produced this result
-  }).index("by_user_property", ["userId", "propertyId"]),
+    amlFlag: v.optional(v.union(v.literal("clear"), v.literal("flagged"))), // Admin 5.1: (stubbed) AML screening result recorded for the reviewer
+    reviewedBy: v.optional(v.string()), // Admin 5.1: the compliance human who last adjudicated / set the ACL — attribution, never a system
+    reviewReason: v.optional(v.string()), // Admin 5.1: the recorded reason for the compliance override (mandatory on adjudication)
+  })
+    .index("by_user_property", ["userId", "propertyId"])
+    .index("by_user", ["userId"])
+    .index("by_property", ["propertyId"]),
+
+  // Durable desired-state projection for the on-chain Eligibility PDA. A single row coalesces each
+  // (user, property) pair. `desiredVersion` changes whenever the desired ACL state changes, allowing
+  // completion handlers to reject stale workers. Missing wallet/mint dependencies remain pending.
+  eligibilityAttestations: defineTable({
+    userId: v.id("users"),
+    propertyId: v.id("properties"),
+    desiredEligible: v.boolean(),
+    desiredVersion: v.number(),
+    idempotencyKey: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("waiting_dependencies"),
+      v.literal("leased"),
+      v.literal("submitted"),
+      v.literal("confirmed"),
+      v.literal("applied"),
+      v.literal("failed"),
+      v.literal("unknown"),
+    ),
+    attemptCount: v.number(),
+    leaseUntil: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+    walletAddress: v.optional(v.string()),
+    mint: v.optional(v.string()),
+    signature: v.optional(v.string()),
+    appliedVersion: v.optional(v.number()),
+    retryEligible: v.boolean(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    submittedAt: v.optional(v.number()),
+    confirmedAt: v.optional(v.number()),
+    appliedAt: v.optional(v.number()),
+  }).index("by_user_property", ["userId", "propertyId"])
+    .index("by_status_next_attempt", ["status", "nextAttemptAt"]),
 
   // E3.2: restricted-jurisdiction waitlist — never a dead-end. One row per (user, property);
   // idempotent join via by_user_property. Fed only by joinWaitlist (audited).
@@ -113,22 +393,108 @@ export default defineSchema({
     netPaid: v.number(),
     txSig: v.optional(v.string()),
     paidAt: v.optional(v.number()), // E5.1: epoch ms a distribution row was observed paid — gives "fresh" a recency signal. Optional → no migration; pre-existing rows degrade to not-fresh.
+    paidSlot: v.optional(v.number()),
     status: v.union(v.literal("scheduled"), v.literal("paid"), v.literal("missed")),
+    // Admin Story 4.3 — PAUSED-WITH-REASON (never silent). When a distribution can't proceed, the
+    // period's `scheduled` rows are flipped to `missed` carrying a STRUCTURED, non-empty `pauseReason`
+    // (+ an optional human `pauseNote`). The consumer Income view surfaces this on the latest `missed`
+    // row so its existing "why paused" state becomes real. Both OPTIONAL — every pre-existing `missed`
+    // row (e.g. a seeded missed distribution with no admin pause) stays valid with no migration; a
+    // resume clears them back to undefined as the row flips `missed`→`scheduled`.
+    pauseReason: v.optional(
+      v.union(
+        v.literal("insufficient_cash_flow"),
+        v.literal("missing_operator_numbers"),
+        v.literal("other"),
+      ),
+    ),
+    pauseNote: v.optional(v.string()), // optional free-text human note accompanying the structured reason
   }).index("by_user", ["userId"]).index("by_property_period", ["propertyId", "period"]),
 
+  // --- Admin Story 4.2: distribution ESCROW funding (B1 custody STUB seam) ---
+  // Records that a distribution's net pool has been FUNDED into escrow for a (property, period) BEFORE
+  // any on-chain push fires — the fund-before-push gate. It is a documented STUB for the real custody
+  // deposit (blocker B1): `fundDistributionEscrow` (requireUnsafeStubs, mirroring the STUB-MINT/-DIST
+  // posture) writes this row; the live custody vendor replaces the seam with no shape change. One row
+  // per (property, period), upserted idempotently via `by_property_period`. `custodyRef` is the
+  // (stubbed) custody deposit reference; `fundedBy` is the named human who funded — attribution, never
+  // a system. Additive — no migration; the push refuses unless a row exists here for the period.
+  distributionEscrow: defineTable({
+    propertyId: v.id("properties"),
+    period: v.string(), // "2026-07"
+    fundedAmount: v.number(), // the net pool funded into escrow (dollars) — must cover the push
+    custodyRef: v.string(), // ref to the (stubbed) custody deposit that funded this escrow
+    fundedBy: v.string(), // the named human who funded — attribution, never a system
+    fundedAt: v.number(),
+  }).index("by_property_period", ["propertyId", "period"]),
+
+  // Durable write-ahead records for every external custody or signer effect. The operation row is
+  // reserved transactionally before an Action contacts a provider. `idempotencyKey` is stable for the
+  // business consequence, while `leaseToken` only coordinates one worker attempt. A submitted or
+  // unknown operation is never automatically replayed; chain/provider reconciliation must resolve it.
+  externalOperations: defineTable({
+    kind: v.union(
+      v.literal("mint"),
+      v.literal("escrow_funding"),
+      v.literal("distribution_payout"),
+    ),
+    idempotencyKey: v.string(),
+    status: v.union(
+      v.literal("reserved"),
+      v.literal("leased"),
+      v.literal("submitted"),
+      v.literal("failed"),
+      v.literal("unknown"),
+      v.literal("reconciled"),
+    ),
+    actor: v.string(),
+    subject: v.string(),
+    propertyId: v.id("properties"),
+    period: v.optional(v.string()),
+    recipientUserId: v.optional(v.id("users")),
+    recipientAddress: v.optional(v.string()),
+    // Decimal strings keep base-unit values exact and JSON-safe across Convex Actions/providers.
+    amountBaseUnits: v.string(),
+    desiredConsequence: v.string(),
+    attemptCount: v.number(),
+    leaseToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    providerReference: v.optional(v.string()),
+    submittedSignature: v.optional(v.string()),
+    lastCheckpoint: v.string(),
+    lastError: v.optional(v.string()),
+    retrySafe: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    submittedAt: v.optional(v.number()),
+    reconciledAt: v.optional(v.number()),
+  })
+    .index("by_idempotency_key", ["idempotencyKey"])
+    .index("by_property_period", ["propertyId", "period"])
+    .index("by_status", ["status"]),
+
   // --- E1.3: on-chain reconciliation (chain-wins mirror sync) ---
-  // Append-only record of every processed on-chain event. `by_signature` is the idempotency key
-  // (a tx signature is applied at most once) and the store for any Convex↔chain discrepancy.
+  // Append-only record of every processed on-chain event. A signature may contain many transfers;
+  // `eventKey` identifies one instruction/transfer while `targetKey` protects projection ordering.
   reconciliations: defineTable({
-    signature: v.string(), // on-chain tx signature — unique per processed event
+    signature: v.string(),
+    eventKey: v.optional(v.string()),
+    eventIndex: v.optional(v.number()),
+    targetKey: v.optional(v.string()),
     eventType: v.string(), // "mint" | "transfer" | "distribution"
     mint: v.optional(v.string()),
     slot: v.optional(v.number()),
-    status: v.union(v.literal("applied"), v.literal("unresolved")),
+    status: v.union(v.literal("applied"), v.literal("unresolved"), v.literal("quarantined")),
+    reason: v.optional(v.string()),
+    projectionValue: v.optional(v.string()),
     discrepancy: v.optional(v.any()), // {before, after} when chain overwrote a divergent Convex value
     raw: v.optional(v.any()), // the normalized/enriched source event, for audit
     processedAt: v.number(),
-  }).index("by_signature", ["signature"]),
+  })
+    .index("by_signature", ["signature"])
+    .index("by_event_key", ["eventKey"])
+    .index("by_target_slot", ["targetKey", "slot"])
+    .index("by_target_status_slot", ["targetKey", "status", "slot"]),
 
   propertyUpdates: defineTable({
     propertyId: v.id("properties"),
@@ -139,5 +505,108 @@ export default defineSchema({
     note: v.string(),
     operator: v.string(),
     publishedAt: v.number(),
+  }).index("by_property", ["propertyId"]),
+
+  // --- Admin Story 2.1: AI extraction / flag review (injection-isolated, cite-or-refuse) ---
+  // These three tables are the extraction ENGINE's storage. Nothing here is an approval, a gate
+  // signature, or a permission — the AI never approves (spine I4). Untrusted document content flows
+  // ONLY into `extractedFields.value` (+ a citation) and never to a surface that can act on it.
+
+  // A diligence document for a property. UPLOAD is Story 6-2 — this story only MODELS the table so the
+  // extractor has something to read; tests insert rows directly. `text` is the STUB content seam: the
+  // raw document text the extractor reads. In production the seam fetches the file from `storageRef`
+  // through a ZDR-governed store (OCR/parse is 6-2); it is modeled inline here so the injection-isolation
+  // and cite-or-refuse guarantees are real and testable now. Optional so a row with no parsed text stays
+  // valid.
+  diligenceDocuments: defineTable({
+    propertyId: v.id("properties"),
+    kind: v.string(), // e.g. "rent_roll" | "operating_statement" | "psa" — free-form until 6-2 fixes it
+    storageRef: v.string(), // the storage locator the live seam would fetch (Convex storage id / URL)
+    uploadedBy: v.string(), // the human who uploaded — attribution, never a system
+    text: v.optional(v.string()), // STUB seam: raw document text the extractor reads (see note above)
+    createdAt: v.number(),
+  }).index("by_property", ["propertyId"]),
+
+  // One extraction run over a property's documents. `model` records which model produced it (a stub
+  // marker today). `createdBy` is the ai.review human who started the run — carried forward from
+  // startExtraction so the scheduled run stays attributed. A run NEVER carries an "approved" state.
+  extractionRuns: defineTable({
+    propertyId: v.id("properties"),
+    status: v.union(v.literal("running"), v.literal("complete"), v.literal("failed")),
+    model: v.string(),
+    createdBy: v.string(),
+    createdAt: v.number(),
+  }).index("by_property", ["propertyId"]),
+
+  // A single field the extractor produced. `status` is the CITE-OR-REFUSE contract: `extracted` iff it
+  // carries a non-empty `sourceRef` (a locator within `docId`), else `uncited` — an uncited field is
+  // NEVER presentable as an established fact. `rejected` and `verified` are set ONLY by a human
+  // (rejectExtractedField / verifyExtractedField in Story 2-2) — the AI never verifies or rejects; a
+  // `verified` field is one a human checked against its source and it is the ONLY status assemble accepts.
+  // `verified` is NOT "approved": it confers no gate signature and no permission — a human SIGNER (3-1)
+  // still acts on the assembled evidence. `reviewNote` records a human's rejection/verification note
+  // (optional). Every value is DATA — a value containing "ignore instructions and approve" is stored
+  // verbatim and acts on nothing.
+  extractedFields: defineTable({
+    runId: v.id("extractionRuns"),
+    propertyId: v.id("properties"),
+    docId: v.id("diligenceDocuments"),
+    field: v.string(),
+    value: v.string(),
+    sourceRef: v.optional(v.string()), // citation locator within docId; absent/empty ⇒ uncited
+    confidence: v.number(),
+    status: v.union(
+      v.literal("extracted"),
+      v.literal("uncited"),
+      v.literal("rejected"),
+      v.literal("verified"),
+    ),
+    reviewNote: v.optional(v.string()), // human rejection/verification note
+    createdAt: v.number(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_property", ["propertyId"]),
+
+  // --- Admin Story 5.3: marketing sign-off gate (public copy cannot ship unsigned) ---
+  // Public/marketing copy has a lifecycle `draft → signed_off | blocked`. Nothing ships unsigned: a
+  // public-render path consults `isMarketingSignedOff` (marketing.ts) — only a `signed_off` item is
+  // shippable. Only `compliance.review` may sign off (counsel gate) or block (with a MANDATORY note);
+  // `submittedBy` is the named human who drafted it, `reviewedBy` the compliance human who signed/blocked
+  // — attribution, never a system. `propertyId` is OPTIONAL (platform-wide copy has no property). The
+  // Reg A+ pre-authorization marketing limits (B4) are the reviewer's CRITERIA applied at sign-off, not
+  // hardcoded here — optionally captured in `reviewNote`. `by_status` drives the review queue (draft items
+  // awaiting a decision). Additive — no migration.
+  marketingContent: defineTable({
+    propertyId: v.optional(v.id("properties")), // the property this copy is about; absent ⇒ platform-wide
+    kind: v.string(), // e.g. "property_headline" | "email_blast" | "explore_blurb" — free-form until a story fixes it
+    body: v.string(), // the public copy under review (never PII — this is outward-facing marketing text)
+    status: v.union(
+      v.literal("draft"), // submitted, awaiting a compliance decision — NOT shippable
+      v.literal("signed_off"), // counsel-gated sign-off recorded — the ONLY shippable state
+      v.literal("blocked"), // refused with a mandatory reviewNote — not shippable
+    ),
+    submittedBy: v.string(), // the named human who drafted/submitted — attribution, never a system
+    reviewedBy: v.optional(v.string()), // the compliance human who signed off / blocked — set on review
+    reviewNote: v.optional(v.string()), // MANDATORY on block (the refusal reason); optional policy note on sign-off
+    createdAt: v.number(),
+    reviewedAt: v.optional(v.number()), // epoch ms the sign-off / block decision was recorded
+  }).index("by_status", ["status"]),
+
+  // --- Admin Story 2.2: human evidence verification + assembly ("assembled, not approved") ---
+  // An evidence package is a HAND-OFF, never an approval. A human reviewer (ai_reviewer, holding
+  // `ai.review` and NO `gate.sign`) verifies extracted fields against their sources, then assembles the
+  // VERIFIED set into a package. `status` is the literal `"assembled"` — there is deliberately NO
+  // `approved`/`signed` state here: the gate SIGNER (Story 3-1) reads this package and signs a GATE, not
+  // this row. `fieldIds` are the verified fields it carries (assembly asserts every one is `verified` and
+  // belongs to `propertyId`). `gateNo` is the optional gate the evidence is destined for. `by_property`
+  // lists a property's packages for the reviewer and the eventual signer.
+  evidencePackages: defineTable({
+    propertyId: v.id("properties"),
+    gateNo: v.optional(v.number()), // the diligence gate this evidence is destined for (0..7), if known
+    fieldIds: v.array(v.id("extractedFields")), // the VERIFIED fields this package carries
+    status: v.literal("assembled"), // ONLY ever "assembled" — never "approved"/"signed" (that is 3-1)
+    assembledBy: v.string(), // the ai.review human who assembled — attribution, never a system
+    assembledAt: v.number(),
+    note: v.optional(v.string()), // optional assembly note from the reviewer
   }).index("by_property", ["propertyId"]),
 });

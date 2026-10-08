@@ -7,14 +7,19 @@ This file tracks Quasar-specific findings from the Vesper port and likely upstre
 - The active on-chain source is now rooted at `vesper_dvp/src`.
 - The old Anchor scaffold was removed so there is one program source of truth.
 - `quasar build` succeeds and generates the SBF artifact, IDL, and Rust client.
-- `cargo test --features idl-build --no-run` succeeds.
+- `cargo test` discovers and runs the nine exploit-path QuasarSVM cases through the root
+  `tests/runtime.rs` integration target.
 - The app uses the generated Quasar IDL at `app/lib/solana/vesper_dvp.idl.json`.
+- Settlement deployment remains blocked on a configured production signer/custody provider for the
+  `offering.authority` partial signature. The client intentionally provides no private-key fallback.
 
 ## Upstream Findings
 
-1. `quasar init --framework quasarsvm-rust` currently pulls an incompatible dependency graph.
+1. `quasar-lang` and `quasar-svm` currently pull an incompatible combined dependency graph.
 
-   `quasar-lang` depends on `solana-address <2.6`, while current `quasar-svm` pulls newer Solana crates that select `solana-address 2.6.x`. The workaround for this repo is `framework = "none"` in `Quasar.toml`, plus compile/build checks instead of QuasarSVM tests.
+   `quasar-lang` depends on `solana-address <2.6`, while current `quasar-svm` pulls newer Solana crates that select `solana-address 2.6.x`. The workaround for this repo is `framework = "none"` in `Quasar.toml`.
+   Runtime coverage lives in the standalone `runtime-tests` workspace, while nine root integration
+   tests invoke those cases so the prescribed `cargo test` command still executes and lists them.
 
 2. The CLI scaffold is stale against current Quasar examples.
 

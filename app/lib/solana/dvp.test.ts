@@ -1,20 +1,33 @@
 // @vitest-environment node
 
 import { Buffer } from "node:buffer";
-import { PublicKey } from "@solana/web3.js";
+import {
+  Keypair,
+  PublicKey,
+  TransactionMessage,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 
 import {
   FREEZE_DISCRIMINATOR,
   INITIALIZE_OFFERING_DISCRIMINATOR,
   OFFERING_ACCOUNT_DISCRIMINATOR,
+  PURCHASE_SETTLED_EVENT_DISCRIMINATOR,
   SETTLE_PURCHASE_DISCRIMINATOR,
   SET_ELIGIBILITY_DISCRIMINATOR,
+  SET_OFFERING_CLOSED_DISCRIMINATOR,
   THAW_DISCRIMINATOR,
   TOKEN_2022_PROGRAM_ID,
+  applyPlatformSettlementAuthorization,
   buildFreezeInstruction,
+  buildInitializeOfferingInstruction,
+  buildSetOfferingClosedInstruction,
+  buildSettlePurchaseInstruction,
   buildThawInstruction,
+  calculatePurchaseQuote,
   decodeOffering,
+  decodePurchaseSettledEvent,
   deriveEligibilityPda,
   deriveOfferingPda,
 } from "./dvp";
@@ -36,6 +49,7 @@ describe("Quasar DvP client ABI", () => {
     expect(Array.from(SET_ELIGIBILITY_DISCRIMINATOR)).toEqual([2]);
     expect(Array.from(THAW_DISCRIMINATOR)).toEqual([3]);
     expect(Array.from(FREEZE_DISCRIMINATOR)).toEqual([4]);
+    expect(Array.from(SET_OFFERING_CLOSED_DISCRIMINATOR)).toEqual([5]);
     expect(Array.from(OFFERING_ACCOUNT_DISCRIMINATOR)).toEqual([1]);
   });
 
@@ -99,13 +113,41 @@ describe("Quasar DvP client ABI", () => {
 
     expect(Array.from(ix.data)).toEqual([3]);
     expect(ix.keys).toHaveLength(7);
-    expect(ix.keys[0]).toMatchObject({ pubkey: cranker, isSigner: true, isWritable: true });
-    expect(ix.keys[1]).toMatchObject({ pubkey: offering, isSigner: false, isWritable: false });
-    expect(ix.keys[2]).toMatchObject({ pubkey: propertyMint, isSigner: false, isWritable: false });
-    expect(ix.keys[3]).toMatchObject({ pubkey: tokenAccount, isSigner: false, isWritable: true });
-    expect(ix.keys[4]).toMatchObject({ pubkey: owner, isSigner: false, isWritable: false });
-    expect(ix.keys[5]).toMatchObject({ pubkey: eligibility, isSigner: false, isWritable: false });
-    expect(ix.keys[6]).toMatchObject({ pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false });
+    expect(ix.keys[0]).toMatchObject({
+      pubkey: cranker,
+      isSigner: true,
+      isWritable: true,
+    });
+    expect(ix.keys[1]).toMatchObject({
+      pubkey: offering,
+      isSigner: false,
+      isWritable: false,
+    });
+    expect(ix.keys[2]).toMatchObject({
+      pubkey: propertyMint,
+      isSigner: false,
+      isWritable: false,
+    });
+    expect(ix.keys[3]).toMatchObject({
+      pubkey: tokenAccount,
+      isSigner: false,
+      isWritable: true,
+    });
+    expect(ix.keys[4]).toMatchObject({
+      pubkey: owner,
+      isSigner: false,
+      isWritable: false,
+    });
+    expect(ix.keys[5]).toMatchObject({
+      pubkey: eligibility,
+      isSigner: false,
+      isWritable: false,
+    });
+    expect(ix.keys[6]).toMatchObject({
+      pubkey: TOKEN_2022_PROGRAM_ID,
+      isSigner: false,
+      isWritable: false,
+    });
   });
 
   it("builds freeze with the generated Quasar account order", () => {
@@ -127,6 +169,243 @@ describe("Quasar DvP client ABI", () => {
       { pubkey: propertyMint, isSigner: false, isWritable: false },
       { pubkey: tokenAccount, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+    ]);
+  });
+
+  it("builds initialization with Token-2022 property and classic payment programs", () => {
+    const authority = key(13);
+    const propertyMint = key(14);
+    const usdcMint = key(15);
+    const [offering] = deriveOfferingPda(propertyMint);
+    const ix = buildInitializeOfferingInstruction({
+      authority,
+      propertyMint,
+      usdcMint,
+      offering,
+      vault: key(16),
+      treasury: key(17),
+      pricePerToken: 50_000_000n,
+      totalOffering: 100n,
+    });
+
+    expect(ix.keys).toHaveLength(9);
+    expect(ix.keys[6].pubkey).toEqual(TOKEN_2022_PROGRAM_ID);
+    expect(ix.keys[7].pubkey.toBase58()).toBe(
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    );
+  });
+
+  it("binds settlement to the buyer Eligibility PDA", () => {
+    const buyer = key(18);
+    const propertyMint = key(19);
+    const [offering] = deriveOfferingPda(propertyMint);
+    const [eligibility] = deriveEligibilityPda(propertyMint, buyer);
+    const authority = key(27);
+    const ix = buildSettlePurchaseInstruction({
+      buyer,
+      offering,
+      propertyMint,
+      usdcMint: key(20),
+      vault: key(21),
+      buyerProperty: key(22),
+      buyerUsdc: key(23),
+      treasury: key(24),
+      authority,
+      tokenAmount: 2n,
+    });
+
+    expect(ix.keys).toHaveLength(12);
+    expect(ix.keys[8]).toEqual({
+      pubkey: eligibility,
+      isSigner: false,
+      isWritable: false,
+    });
+    expect(ix.keys[11]).toEqual({
+      pubkey: authority,
+      isSigner: true,
+      isWritable: false,
+    });
+  });
+
+  it("quotes the exact 90-bps fee and fee-inclusive chain total", () => {
+    expect(calculatePurchaseQuote(2n, 50_000_000n)).toEqual({
+      principalUsdcAmount: 100_000_000n,
+      platformFeeUsdcAmount: 900_000n,
+      totalUsdcAmount: 100_900_000n,
+    });
+  });
+
+  it("rounds the fee half-up to the nearest payment cent", () => {
+    expect(calculatePurchaseQuote(1n, 555_555n).platformFeeUsdcAmount).toBe(0n);
+    expect(calculatePurchaseQuote(1n, 555_556n).platformFeeUsdcAmount).toBe(
+      10_000n,
+    );
+  });
+
+  it("rejects principal and total overflow", () => {
+    const maxU64 = (1n << 64n) - 1n;
+    expect(() => calculatePurchaseQuote(2n, maxU64)).toThrow("principal");
+    expect(() => calculatePurchaseQuote(1n, maxU64)).toThrow("fee or total");
+  });
+
+  it("rejects unsafe number inputs before u64 encoding", () => {
+    expect(() => calculatePurchaseQuote(Number.MAX_SAFE_INTEGER + 1, 1n)).toThrow(
+      "safe integer",
+    );
+    expect(() => calculatePurchaseQuote(1n, Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      "safe integer",
+    );
+    expect(() =>
+      buildSettlePurchaseInstruction({
+        buyer: key(40),
+        authority: key(41),
+        offering: key(42),
+        propertyMint: key(43),
+        usdcMint: key(44),
+        vault: key(45),
+        buyerProperty: key(46),
+        buyerUsdc: key(47),
+        treasury: key(48),
+        tokenAmount: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow("safe integer");
+  });
+
+  it("decodes principal, fee, and total from PurchaseSettled evidence", () => {
+    const offering = key(28);
+    const buyer = key(29);
+    const propertyMint = key(30);
+    const data = Buffer.concat([
+      PURCHASE_SETTLED_EVENT_DISCRIMINATOR,
+      offering.toBuffer(),
+      buyer.toBuffer(),
+      propertyMint.toBuffer(),
+      u64(2n),
+      u64(100_000_000n),
+      u64(900_000n),
+      u64(100_900_000n),
+      u64(12n),
+    ]);
+
+    expect(decodePurchaseSettledEvent(data)).toEqual({
+      offering,
+      buyer,
+      propertyMint,
+      tokenAmount: 2n,
+      principalUsdcAmount: 100_000_000n,
+      platformFeeUsdcAmount: 900_000n,
+      totalUsdcAmount: 100_900_000n,
+      soldAfter: 12n,
+    });
+  });
+
+  it("fails closed without the configured platform authority signature", async () => {
+    const buyer = key(31);
+    const authoritySigner = Keypair.generate();
+    const authority = authoritySigner.publicKey;
+    const propertyMint = key(33);
+    const [offeringAddress] = deriveOfferingPda(propertyMint);
+    const offering = {
+      authority,
+      propertyMint,
+      usdcMint: key(34),
+      treasury: key(35),
+      vault: key(36),
+      pricePerToken: 50_000_000n,
+      totalOffering: 100n,
+      sold: 0n,
+      bump: 1,
+      closed: false,
+    };
+    const ix = buildSettlePurchaseInstruction({
+      buyer,
+      authority,
+      offering: offeringAddress,
+      propertyMint,
+      usdcMint: offering.usdcMint,
+      vault: offering.vault,
+      buyerProperty: key(37),
+      buyerUsdc: key(38),
+      treasury: offering.treasury,
+      tokenAmount: 1n,
+    });
+    const transaction = new VersionedTransaction(
+      new TransactionMessage({
+        payerKey: buyer,
+        recentBlockhash: "11111111111111111111111111111111",
+        instructions: [ix],
+      }).compileToV0Message(),
+    );
+    const request = {
+      transaction,
+      offering,
+      offeringAddress,
+      buyer,
+      propertyMint,
+      tokenAmount: 1n,
+      quote: calculatePurchaseQuote(1n, offering.pricePerToken),
+    };
+
+    await expect(applyPlatformSettlementAuthorization(request)).rejects.toThrow(
+      "not configured",
+    );
+    await expect(
+      applyPlatformSettlementAuthorization(request, {
+        authority: key(39),
+        signSettlement: async () => transaction,
+      }),
+    ).rejects.toThrow("does not match");
+    await expect(
+      applyPlatformSettlementAuthorization(request, {
+        authority,
+        signSettlement: async () => transaction,
+      }),
+    ).rejects.toThrow("signature is missing");
+
+    await expect(
+      applyPlatformSettlementAuthorization(request, {
+        authority,
+        signSettlement: async () => {
+          const index = transaction.message.staticAccountKeys.findIndex((key) =>
+            key.equals(authority),
+          );
+          transaction.signatures[index] = new Uint8Array(64).fill(1);
+          return transaction;
+        },
+      }),
+    ).rejects.toThrow("signature is invalid");
+
+    const authorized = await applyPlatformSettlementAuthorization(request, {
+      authority,
+      signSettlement: async () => {
+        transaction.sign([authoritySigner]);
+        return transaction;
+      },
+    });
+    expect(
+      authorized.signatures[
+        authorized.message.staticAccountKeys.findIndex((key) =>
+          key.equals(authority),
+        )
+      ].some((byte) => byte !== 0),
+    ).toBe(true);
+  });
+
+  it("builds authority-only offering close and reopen", () => {
+    const authority = key(25);
+    const propertyMint = key(26);
+    const [offering] = deriveOfferingPda(propertyMint);
+    const ix = buildSetOfferingClosedInstruction({
+      authority,
+      propertyMint,
+      closed: true,
+    });
+
+    expect(Array.from(ix.data)).toEqual([5, 1]);
+    expect(ix.keys).toEqual([
+      { pubkey: authority, isSigner: true, isWritable: false },
+      { pubkey: offering, isSigner: false, isWritable: true },
+      { pubkey: propertyMint, isSigner: false, isWritable: false },
     ]);
   });
 });

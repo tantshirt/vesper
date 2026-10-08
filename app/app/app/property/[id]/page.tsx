@@ -19,6 +19,11 @@ export default function PropertyPage() {
   const { property: p, gates } = data;
   const pct = (n: number) => `${(n * 100).toFixed(n * 100 % 1 === 0 ? 0 : 1)}%`;
   const funded = Math.round(p.fundedPct * 100);
+  const signedGateCount = gates.filter(
+    (gate) => gate.status === "passed" && gate.signedByHuman?.trim(),
+  ).length;
+  const diligenceLabel =
+    gates.length > 0 ? `${signedGateCount}/${gates.length} gates signed` : "Review pending";
 
   return (
     <main className="pd">
@@ -40,7 +45,7 @@ export default function PropertyPage() {
           <h1 className="pd-name">{p.name}</h1>
           <p className="pd-sub">{p.location} · {p.propertyType} · {p.units} units</p>
         </div>
-        <span className="pd-verified">✓ Verified</span>
+        <span className="pd-verified">{diligenceLabel}</span>
       </div>
 
       <div className="pd-tags">
@@ -51,7 +56,7 @@ export default function PropertyPage() {
       <div className="pd-metric">
         <div className="pd-eb">Target net yield</div>
         <div className="metric">{pct(p.targetNetYield)}<small> / year</small></div>
-        <p className="pd-note">Net of every fee. A target, not a guarantee.</p>
+        <p className="pd-note">Net of every fee. Target, not guaranteed.</p>
       </div>
 
       <section className="pd-blk">
@@ -68,10 +73,14 @@ export default function PropertyPage() {
         <p className="pd-eb">Can you get out?</p>
         <h2 className="pd-h">Selling, honestly.</h2>
         <div className="liq">
-          <div className="lrow"><span>Est. time to sell</span><b>~3–6 weeks</b></div>
-          <div className="lrow"><span>Lock-up</span><b>None</b></div>
+          <div className="lrow"><span>Resale</span><b>Not currently available</b></div>
+          <div className="lrow"><span>Live market data</span><b>Not available</b></div>
         </div>
-        <p className="liq-foot">⚠ Liquidity is never guaranteed — your order may not fill right away. No “Sell now” button that isn't true.</p>
+        <p className="liq-foot">
+          There are no current bids, spread, last-sale price, or time-to-fill data to show. Any future
+          resale will be subject to investor eligibility and offering transfer restrictions.
+        </p>
+        <Link href="/app/market" className="proof-link">View market availability</Link>
       </section>
 
       <TrustStack gates={gates} />
@@ -91,7 +100,10 @@ export default function PropertyPage() {
 
       <div className="pd-spacer" />
       <div className="pd-bar">
-        <div className="pd-bar-meta">{p.name} · {pct(p.targetNetYield)}<b>Invest from ${p.minInvestment}</b></div>
+        <div className="pd-bar-meta">
+          Target net yield {pct(p.targetNetYield)} · Target, not guaranteed.
+          <b>Invest from ${p.minInvestment}</b>
+        </div>
         <Link href={`/app/invest/${p._id}`} className="cta">Invest</Link>
       </div>
     </main>

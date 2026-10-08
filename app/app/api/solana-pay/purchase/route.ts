@@ -1,152 +1,218 @@
-/**
- * Solana Pay Transaction Request endpoint for a primary property purchase.
- *
- * Implements the Solana Pay Transaction Request spec
- * (https://docs.solanapay.com/spec#transaction-request):
- *   - GET  → { label, icon } so a wallet can render the merchant before signing.
- *   - POST → { transaction, message } where `transaction` is a base64 serialized
- *            UNSIGNED VersionedTransaction the wallet then signs + submits.
- *
- * The unsigned tx is built by the framework-agnostic DvP client
- * (`@/lib/solana/dvp`), which fetches the on-chain Offering, prepends idempotent
- * ATA creation, appends `settlePurchase`, and sets feePayer = buyer. The buyer
- * is the ONLY tx-level signer — this route never signs.
- *
- * Consumer copy stays fiat-native: the `message` says "shares", never "USDC".
- */
-
 import { NextResponse } from "next/server";
-import { Connection, PublicKey } from "@solana/web3.js";
-import { buildSettlePurchaseTransaction, DEVNET_RPC_URL } from "@/lib/solana/dvp";
+import { ConvexHttpClient } from "convex/browser";
+import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { getTokenAccount, TOKEN_PROGRAM_ID } from "../../../../lib/solana/token";
+import { api } from "../../../../convex/_generated/api";
+import {
+  applyPlatformSettlementAuthorization,
+  buildSettlePurchaseTransaction,
+  type PlatformSettlementSignerProvider,
+} from "../../../../lib/solana/dvp";
+import {
+  assertExactOperationQuote,
+  parseExactUnsignedInteger,
+  type BuildIntent,
+} from "./quoteBinding";
 
-const MAX_TOKEN_AMOUNT = 1_000_000;
-
-function solanaPayEnabled(): boolean {
-  return process.env.VESPER_ENABLE_SOLANA_PAY === "true";
+function purchaseEnabled(): boolean {
+  return process.env.VESPER_ENABLE_REAL_PURCHASE === "true";
 }
 
-function getConnection(): Connection {
-  return new Connection(
-    process.env.SOLANA_RPC_URL ?? DEVNET_RPC_URL,
-    "confirmed",
-  );
+function bearerToken(req: Request): string | null {
+  const value = req.headers.get("authorization");
+  return value?.startsWith("Bearer ") ? value.slice(7).trim() || null : null;
 }
 
-/** Parse + validate `propertyMint` (base58 pubkey) and `tokenAmount` (positive int) from the query. */
-function parseParams(url: URL):
-  | { ok: true; propertyMint: PublicKey; tokenAmount: number }
-  | { ok: false; error: string } {
-  const propertyMintRaw = url.searchParams.get("propertyMint");
-  const tokenAmountRaw = url.searchParams.get("tokenAmount");
+type PurchaseChain = "solana:devnet" | "solana:testnet" | "solana:mainnet";
 
-  if (!propertyMintRaw) {
-    return { ok: false, error: "Missing required query param: propertyMint" };
+export function purchaseNetwork(): { connection: Connection; chain: PurchaseChain } {
+  const rpcUrl = process.env.SOLANA_RPC_URL;
+  const cluster = process.env.SOLANA_CLUSTER;
+  if (!rpcUrl || !cluster) {
+    throw new Error("Real purchase network is not configured");
   }
-  let propertyMint: PublicKey;
+  if (cluster !== "devnet" && cluster !== "testnet" && cluster !== "mainnet") {
+    throw new Error("Real purchase cluster is invalid");
+  }
   try {
-    propertyMint = new PublicKey(propertyMintRaw);
+    new URL(rpcUrl);
   } catch {
-    return { ok: false, error: "Invalid propertyMint (must be a base58 pubkey)" };
+    throw new Error("Real purchase RPC URL is invalid");
   }
-
-  if (!tokenAmountRaw) {
-    return { ok: false, error: "Missing required query param: tokenAmount" };
-  }
-  const tokenAmount = Number(tokenAmountRaw);
-  if (!Number.isInteger(tokenAmount) || tokenAmount <= 0 || tokenAmount > MAX_TOKEN_AMOUNT) {
-    return { ok: false, error: "Invalid tokenAmount (must be a positive integer)" };
-  }
-
-  return { ok: true, propertyMint, tokenAmount };
+  return {
+    connection: new Connection(rpcUrl, "confirmed"),
+    chain: `solana:${cluster}`,
+  };
 }
 
-/**
- * GET — merchant metadata. Solana-Pay-compatible wallets call this first to
- * render the label + icon. The icon is an absolute URL derived from the request
- * origin so it resolves regardless of deploy host.
- */
+function convexClient(token: string): ConvexHttpClient {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) throw new Error("Convex is not configured");
+  const client = new ConvexHttpClient(url);
+  client.setAuth(token);
+  return client;
+}
+
+function signerProvider(operationId: string): PlatformSettlementSignerProvider {
+  const url = process.env.VESPER_SETTLEMENT_SIGNER_URL;
+  const token = process.env.VESPER_SETTLEMENT_SIGNER_TOKEN;
+  const authorityRaw = process.env.VESPER_SETTLEMENT_SIGNER_AUTHORITY;
+  if (!url || !token || !authorityRaw) {
+    throw new Error("Platform settlement signer provider is not configured");
+  }
+  const authority = new PublicKey(authorityRaw);
+  return {
+    authority,
+    async signSettlement(request) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          purpose: "vesper-primary-purchase",
+          operationId,
+          authority: request.offering.authority.toBase58(),
+          buyer: request.buyer.toBase58(),
+          propertyMint: request.propertyMint.toBase58(),
+          tokenAmountRaw: request.tokenAmount.toString(),
+          principalBaseUnits: request.quote.principalUsdcAmount.toString(),
+          platformFeeBaseUnits: request.quote.platformFeeUsdcAmount.toString(),
+          totalBaseUnits: request.quote.totalUsdcAmount.toString(),
+          transaction: Buffer.from(request.transaction.serialize()).toString("base64"),
+        }),
+      });
+      if (!response.ok) throw new Error("Platform settlement signer rejected the order");
+      const body = (await response.json()) as { transaction?: unknown };
+      if (typeof body.transaction !== "string") throw new Error("Platform signer returned no transaction");
+      return VersionedTransaction.deserialize(Buffer.from(body.transaction, "base64"));
+    },
+  };
+}
+
 export async function GET(req: Request) {
-  if (!solanaPayEnabled()) {
-    return NextResponse.json({ error: "Solana Pay is disabled" }, { status: 404 });
+  if (!purchaseEnabled()) {
+    return NextResponse.json({ error: "Purchases are unavailable" }, { status: 404 });
   }
-  const url = new URL(req.url);
-  const params = parseParams(url);
-  if (!params.ok) {
-    return NextResponse.json({ error: params.error }, { status: 400 });
-  }
-  return NextResponse.json({
-    label: "Vesper",
-    icon: new URL("/brand/mark.svg", url.origin).toString(),
-  });
+  const origin = new URL(req.url).origin;
+  return NextResponse.json({ label: "Vesper", icon: new URL("/brand/mark.svg", origin).toString() });
 }
 
-/**
- * POST — build the unsigned purchase transaction for `account` (the buyer).
- * Body: { account: "<buyer base58 pubkey>" }. Returns base64 of the serialized
- * unsigned VersionedTransaction plus a fiat-native display message.
- */
 export async function POST(req: Request) {
-  if (!solanaPayEnabled()) {
-    return NextResponse.json({ error: "Solana Pay is disabled" }, { status: 404 });
+  if (!purchaseEnabled()) {
+    return NextResponse.json({ error: "Purchases are unavailable" }, { status: 404 });
   }
-  const url = new URL(req.url);
-  const params = parseParams(url);
-  if (!params.ok) {
-    return NextResponse.json({ error: params.error }, { status: 400 });
+  const token = bearerToken(req);
+  if (!token) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+  let operationId: string;
+  try {
+    const body = (await req.json()) as { operationId?: unknown };
+    if (typeof body.operationId !== "string" || body.operationId.length === 0) {
+      return NextResponse.json({ error: "Prepared order required" }, { status: 400 });
+    }
+    operationId = body.operationId;
+  } catch {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  // Read + validate the buyer account from the JSON body.
-  let body: unknown;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-  const accountRaw =
-    body && typeof body === "object"
-      ? (body as Record<string, unknown>).account
-      : undefined;
-  if (typeof accountRaw !== "string" || accountRaw.length === 0) {
-    return NextResponse.json(
-      { error: "Missing required field: account" },
-      { status: 400 },
-    );
-  }
-  let buyer: PublicKey;
-  try {
-    buyer = new PublicKey(accountRaw);
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid account (must be a base58 pubkey)" },
-      { status: 400 },
-    );
-  }
-
-  // Build against live devnet.
-  try {
-    const { transaction } = await buildSettlePurchaseTransaction({
-      connection: getConnection(),
+    const convex = convexClient(token);
+    const network = purchaseNetwork();
+    const claimId = crypto.randomUUID();
+    const claim = await convex.mutation(api.settlement.claimPurchaseAuthorization, {
+      operationId: operationId as never,
+      claimId,
+    });
+    if (claim.status === "expired") {
+      return NextResponse.json({ error: "This prepared order is no longer available" }, { status: 409 });
+    }
+    if (claim.status === "in_progress") {
+      return NextResponse.json({ error: "This authorization is still being prepared" }, { status: 409 });
+    }
+    if (claim.status === "issued") {
+      return NextResponse.json({
+        operationId,
+        transaction: claim.transaction,
+        blockhash: claim.blockhash,
+        lastValidBlockHeight: claim.lastValidBlockHeight,
+        chain: claim.chain,
+        message: "Review and authorize this property purchase.",
+      });
+    }
+    const intent = claim.intent as BuildIntent;
+    const { connection, chain } = network;
+    const buyer = new PublicKey(intent.walletAddress);
+    const propertyMint = new PublicKey(intent.propertyMint);
+    const tokenAmount = parseExactUnsignedInteger(intent.tokenAmountRaw, "token amount");
+    const built = await buildSettlePurchaseTransaction({
+      connection,
       buyer,
-      propertyMint: params.propertyMint,
-      tokenAmount: params.tokenAmount,
+      propertyMint,
+      tokenAmount,
     });
+    assertExactOperationQuote(intent, built.quote);
 
-    const base64 = Buffer.from(transaction.serialize()).toString("base64");
-    const shares = params.tokenAmount === 1 ? "share" : "shares";
+    let spendableBaseUnits = 0n;
+    try {
+      const paymentAccount = await getTokenAccount(
+        connection,
+        built.buyerUsdc,
+        "confirmed",
+        TOKEN_PROGRAM_ID,
+      );
+      if (!paymentAccount.owner.equals(buyer) || !paymentAccount.mint.equals(built.offering.usdcMint)) {
+        throw new Error("Canonical payment account does not match this order");
+      }
+      spendableBaseUnits = paymentAccount.amount;
+    } catch {
+      // Missing or malformed canonical payment custody is never replaced by the Convex read model.
+    }
+    if (spendableBaseUnits < built.quote.totalUsdcAmount) {
+      throw new Error("Insufficient spendable funds");
+    }
 
-    return NextResponse.json({
-      transaction: base64,
-      message: `Buy ${params.tokenAmount} ${shares} of ${params.propertyMint.toBase58()}`,
-    });
-  } catch (err) {
-    // A build failure here is a server/upstream fault (RPC error, missing/closed Offering, decode
-    // failure) — NOT a client bad-request. Log the detail server-side and return a generic 502 rather
-    // than echoing err.message to the caller: the raw message leaks internal RPC/endpoint detail, and
-    // this endpoint is reachable unauthenticated whenever VESPER_ENABLE_SOLANA_PAY is true.
-    console.error("[solana-pay/purchase] buildSettlePurchaseTransaction failed:", err);
-    return NextResponse.json(
-      { error: "Unable to build the purchase transaction. Please try again." },
-      { status: 502 },
+    const authorized = await applyPlatformSettlementAuthorization(
+      {
+        transaction: built.transaction,
+        offering: built.offering,
+        offeringAddress: built.offeringAddress,
+        buyer,
+        propertyMint,
+        tokenAmount,
+        quote: built.quote,
+      },
+      signerProvider(intent.operationId),
     );
+    const canonical = await convex.mutation(api.settlement.finalizePurchaseAuthorization, {
+      operationId: operationId as never,
+      claimId,
+      transaction: Buffer.from(authorized.serialize()).toString("base64"),
+      blockhash: built.blockhash,
+      lastValidBlockHeight: built.lastValidBlockHeight,
+      chain,
+    });
+    return NextResponse.json({
+      operationId: intent.operationId,
+      transaction: canonical.transaction,
+      blockhash: canonical.blockhash,
+      lastValidBlockHeight: canonical.lastValidBlockHeight,
+      chain: canonical.chain,
+      message: "Review and authorize this property purchase.",
+    });
+  } catch (error) {
+    console.error("[purchase] unable to authorize prepared order", error);
+    const message = error instanceof Error ? error.message : "Purchase could not be prepared";
+    const status = /not authenticated|not found/i.test(message) ? 401 : /expired|cannot be authorized/i.test(message) ? 409 : 422;
+    const publicMessage =
+      status === 401
+        ? "Authentication required"
+        : status === 409
+          ? "This prepared order is no longer available"
+          : /insufficient spendable funds/i.test(message)
+            ? "Insufficient spendable funds"
+            : "Purchase could not be prepared";
+    return NextResponse.json({ error: publicMessage }, { status });
   }
 }

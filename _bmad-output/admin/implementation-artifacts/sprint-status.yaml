@@ -1,0 +1,90 @@
+# Vesper Admin — Sprint Status
+# Generated from admin/planning-artifacts/epics-and-stories.md + sprint-plan.md
+# STATUS: backlog | ready-for-dev | in-progress | review | done
+# Epics are numbered 1–6 here to match the loop's numeric parser; they correspond to AE1–AE6 in the prose.
+# Build order: 1 (AE1 foundation) → (6 intake + 2 evidence) → 3 spine → 4 → 5 alongside
+
+generated: 2026-07-11
+last_updated: 2026-07-11
+project: Vesper Admin
+project_key: VSPR-ADM
+tracking_system: file-system
+story_location: "_bmad-output/admin/implementation-artifacts/stories"
+source_epics: "_bmad-output/admin/planning-artifacts/epics-and-stories.md"
+readiness: "admin/planning-artifacts/readiness-report.md — CONDITIONAL GO"
+
+development_status:
+  # ---- Epic 1 (AE1): Admin Foundation, RBAC & Segregation of Duties (Sprint 0–1; GO now) ----
+  epic-1: done                                 # ✅ EPIC AE1 COMPLETE — admin foundation: workspace, WorkOS auth, RBAC+scope wall, audit backbone, design system, SoD engine, Platform Admin + break-glass. 634 tests pass.
+  1-1-scaffold-workos-rbac: done               # ✅ monorepo workspace (app/+admin/), admin Next16 app, WorkOS as 2nd Convex provider (conditional), staff model + roles.ts/rbac.ts (grantRoles internalMutation, scope wall), 19 RBAC tests. Consumer intact: 599 tests pass, build/lint/token-guard green. Verified independently.
+  1-3-audit-log: done                          # ✅ auditLog +onchainRef +by_actor index; writeAudit threads onchainRef (25 callers intact); audit.read/export perms (compliance+platform_admin export, ops read); listAudit/exportAudit permission-gated read-only queries; append-only proven structurally; admin Audit console page + nav. 609 tests pass.
+  1-5-design-system-extension: done            # ✅ admin data layer: density scale + mono-data + StatusChip/DataTable/MonoData/OnChainActionPanel/Money primitives + styleguide route, all token-derived. check:tokens/lint/tsc/build:admin green; consumer untouched.
+  1-2-segregation-of-duties: done              # ✅ staffPropertyInterest table + sod.ts engine (assertNoFeeConflict/assertDistinctSigner/requireGateSigner, ActionCtx). Durable blocked-attempt audit via action-scheduled logBlockedAttempt (survives throw); reuses 1-1 requirePermission path; interest mutations internal-only. 7 tests + 616 total pass. (Spec's mutation-scheduler mechanism was corrected to ActionCtx during impl.)
+  1-4-platform-admin-break-glass: done         # ✅ manageStaffRoles (rbac.manage-gated public grant surface; blocked grants use return-rejection + inline durable audit, no throw); self-escalation/platform-admin-operational/SoD-fee walls; effectivePermissions unions time-boxed break-glass; applyGrant shared grant core (1-1 protections intact). 19 tests, 634 total pass.
+  epic-1-retrospective: notify
+
+  # ---- Epic 2 (AE2): Diligence & AI Evidence (Sprint 1–2; GO) ----
+  epic-2: done                                 # ✅ EPIC AE2 COMPLETE — AI diligence: extraction (2-1) + human verify/assemble (2-2). AI extracts, human verifies, evidence "assembled not approved" routes to a (different) human signer. 661 tests pass.
+  2-1-ai-extraction-review: done               # ✅ diligenceExtract module (STRUCTURALLY isolated: no gate/mint/sign imports; public surface = startExtraction+rejectExtractedField data writes only; model seam internalAction requireUnsafeStubs-stubbed). Cite-or-refuse (uncited fields never presented as fact); injection strings stay inert data (proven: gate stays unsigned, roles unchanged). ai.review-gated. 8 tests, 653 total pass.
+  2-2-evidence-assembly: done                  # ✅ verifyExtractedField (extracted→verified, human); assembleEvidencePackage (ONLY verified fields; status v.literal("assembled") — "approved" unrepresentable; module has no sign/approve/mint export). Routes to a human signer (3-1). 8 tests, 661 total pass.
+  epic-2-retrospective: notify
+
+  # ---- Epic 3 (AE3): Gate → Mint → List ★ (Sprint 2–3) ----
+  epic-3: done                                 # ✅ EPIC AE3 COMPLETE — THE SPINE: gate ceremony (3-1) → mint (3-2) → confirm/reconcile (3-3) → list. gate→mint→confirm→list end-to-end on the devnet-stub path. 726 tests pass.
+  3-1-gate-signature-ceremony: done            # ✅ THE SPINE. gates.ts: signGate (ACTION → 1-2 requireGateSigner, no forked SoD); multi-party (gate 6, DATA/GATE_DEFINITIONS placeholder pending B3) needs 2 distinct signers (self-approval blocked+durably audited); fee-conflict blocked; platform_admin denied; allGatesSigned advancement gate; evidence(2-2) shown as flags never approvals; no AI/non-human sign path. beginGating + workspace. 11 tests, 708 total pass. (B3 = data edit to GATE_DEFINITIONS.multiParty, not a rebuild.)
+  3-2-mint-listing-console: done               # ✅ mint.ts: mintOffering (action, mint.execute) — permission→idempotency(no double-mint)→allGatesSigned wall(3-1)→requireStepUp(B2 stub)→STUB-MINT seam→recordMint. listOffering refuses until mintStatus confirmed then gating→open. platform_admin denied. requireStepUp added to security.ts (B2 placeholder). 10 tests, 718 total pass. (B2 = wire real WebAuthn into requireStepUp; mint seam = real devnet-acl recipe + server wallet.)
+  3-3-mint-reconciliation: done                # ✅ reconcile.ts extended (mint_confirmed event + applyMintConfirmation; extracted shared applyChainEventInner core — real Helius webhook path + demo confirm share ONE path, existing holding/distribution reconcile unchanged). confirmMintStub routes through it (chain-wins/idempotent/audited). mintStatus→confirmed unblocks listOffering. reconciliationStatus banner. 8 tests, 726 total pass.
+  epic-3-retrospective: notify
+
+  # ---- Epic 4 (AE4): Distributions (Sprint 4–5) ----
+  epic-4: done                                 # ✅ EPIC AE4 COMPLETE — distributions: builder+matches-target (4-1), fund/push no-self-settle (4-2), reconcile + paused-with-reason (4-3). 754 tests pass.
+  4-1-distribution-builder: done               # ✅ distributionBuild.ts: buildDistribution (distribution.execute) reuses computeShares + splitDistribution (mgmt fee INSIDE net, pool=gross-costs, not re-charged); scheduled rows only (never paid); idempotent upsert per (user,period), paid rows untouched; matchesTarget vs targetNetYield (variance surfaces, no throw); unlisted refused; platform_admin denied. 11 tests, 737 total pass.
+  4-3-distribution-reconciliation: done        # ✅ pauseDistribution/resumeDistribution (distribution.execute; NEVER silent — in-handler reason guard; scheduled→missed+pauseReason; paused period can't push). income.ts ADDITIVE surfaces pauseReason on consumer missed row (why-paused real). Reconcile paid-flip unchanged. platform_admin denied. 8 tests, 754 total pass.
+  4-2-fund-push: done                          # ✅ distributionPay.ts: fundDistributionEscrow (B1 stub, requireUnsafeStubs) → pushDistribution (action, distribution.execute, requireStepUp, fund-before-push) reuses runDistributionPush (STUB-DIST) — stamps txSig but NEVER sets paid (NO self-settle; paid flip owned by reconcile income.reconciled via confirmDistributionStub→applyChainEventInner, actor helius). Push-failure safe+retryable+no-double-pay; platform_admin denied. 9 tests, 746 total pass.
+  epic-4-retrospective: notify
+
+  # ---- Epic 5 (AE5): Compliance & Reg A+ (alongside Epic 3) ----
+  epic-5: done                                 # ✅ EPIC AE5 COMPLETE — compliance: KYC/AML adjudication→ACL (5-1), Reg A+ cap oversight (5-2), marketing sign-off gate (5-3; export reused from 1-3). 762 tests pass.
+  5-1-kyc-acl-eligibility: done                # ✅ compliance.ts adjudication over existing eligibility table: adjudicateEligibility (compliance.review, non-empty reason, ineligible→frozen, schedules on-chain attestation), setTokenAclState (freeze.execute), screenAml (stubbed AML). No PII in audit/queue; consumer recordEligibility unaffected. 11 tests, 672 total pass.
+  5-2-rega-cap-enforcement: done               # ✅ OVERSIGHT only — enforcement already exists in settlement.businessGateDecision. regACapStatus pure helper (mirrors settlement's rule: unset→over, invested≥limit→over, ≥80%→near); listCapUsage (compliance.review, no PII); cap-usage table. settlement untouched. 9 tests, 690 total pass.
+  5-3-marketing-signoff-export: done           # ✅ marketing.ts: draft→signed_off|blocked lifecycle; signOffMarketing/blockMarketing (compliance.review-gated; block requires non-empty note; audited named human); isMarketingSignedOff pure gate (only signed_off shippable — consumer wiring noted). Audit export REUSED from 1-3 (linked, not rebuilt). B4 = reviewer policy. platform_admin denied. 8 tests, 762 total pass.
+  epic-5-retrospective: notify
+
+  # ---- Epic 6 (AE6): Sponsor Portal (Sprint 1–5) ----
+  epic-6: done                                 # ✅ EPIC AE6 COMPLETE — sponsor portal: onboarding+tenant-isolation (6-1), intake checklist/upload (6-2), monthly-update composer (6-3), funding/holder dashboard (6-4). 768 tests pass.
+  6-1-sponsor-onboarding-kyb: done             # ✅ requireSponsor tenant-isolation primitive (org resolved server-side, never client arg); sponsorOrgs/Members/Deals; two-way wall (internal↔sponsor); getDeal/submitDeal not-owned→not-found; KYB/Gate 0 (stubbed Middesk, requireUnsafeStubs) gates submitted; provisionSponsor internal via applyGrant; walled /sponsor shell. 11 tests, 645 total pass.
+  6-2-intake-checklist-upload: done            # ✅ sponsorIntake.ts: uploadDocument (sponsor.documents — both roles; validate kind → received|rejected+reason, no throw), checklistStatus/dealTimeline/listDealDocuments (org-scoped via resolveOwnedDeal). submitDeal extended: KYB gate then checklist gate. sponsorDocuments table. 9 tests, 681 total pass.
+  6-3-monthly-update-composer: done            # ✅ sponsorUpdates.ts: publishUpdate (sponsor.updates both roles; tenant-scoped to operatorSponsorOrgId; ALL fields required incl. quiet months) + myOperatedProperties/listMyUpdates. properties +operatorSponsorOrgId (populated at listing/Epic3). Reuses existing propertyUpdates + flagOverdueUpdates unchanged. 7 tests, 697 total pass.
+  6-4-sponsor-funding-dashboard: done          # ✅ sponsorFunding.ts: myOfferingFunding/myOfferingDetail (sponsor.read, org-scoped via operatorSponsorOrgId). AGGREGATES ONLY (holderCount/totalTokens/topHoldingPct/fundedPct/amountRaised) — NO investor PII (no userId/wallet/name/amount; exact-allow-list test). Tenant-isolated (B can't see A; crafted id→null); non-sponsor denied. 6 tests, 768 total pass.
+  epic-6-retrospective: notify
+
+blockers:
+  - id: B1
+    decision: "Escrow / fund-custody vendor"
+    blocks: [4-2-fund-push]
+    owner: "founders + counsel"
+    note: "Same blocker as consumer DD-001/4-4. Stub escrow/settlement boundary; build UI + Convex shells on a mock."
+  - id: B2
+    decision: "MFA / step-up posture (irreversible on-chain actions)"
+    blocks: [3-2-mint-listing-console, 4-2-fund-push]
+    owner: "eng + security"
+    note: "Recommend WebAuthn hardware-key step-up. Stub behind an interface if it slips."
+  - id: B3
+    decision: "Internal Gate 0-7 evidence defs + which gates are multi-party"
+    blocks_partial: [3-1-gate-signature-ceremony, 3-2-mint-listing-console]
+    owner: "product + compliance"
+    note: "Must land before Sprint 2 (3-1 ceremony content)."
+  - id: B4
+    decision: "Reg A+ pre-auth marketing limits"
+    blocks_partial: [5-3-marketing-signoff-export]
+    owner: "counsel"
+
+sprint_0_goal: >
+  Stand up the admin substrate: 1-1 (monorepo workspace + desktop-first admin app + WorkOS SSO +
+  per-request Convex RBAC for the 6 roles), 1-3 (AuditLog with named-human actor + on-chain-ref + export
+  views), and 1-5 (design-system extension as code over globals.css). Demoable: log in as each role,
+  role-scoped shell renders, every mutation writes an audit entry. Resolve B3 in parallel so 3-1 unblocks.
+
+action_items:
+  - "Repoint done: _bmad/bmm/config.yaml → admin tree."
+  - "isolation = none (worktree lacks gitignored node_modules/Convex env the new app needs)."

@@ -1,0 +1,105 @@
+# WDS Design Delivery — the contract between design and development. (Admin track)
+delivery:
+  id: "DD-A02"
+  name: "Push a Distribution (Scenario A2) — compute → fund → push → reconcile"
+  type: "operator_flow"
+  status: "ready_blocked"   # designed; money-movement blocked on custody vendor (B1)
+  priority: "high"
+  created_by: "freya (WDS — admin)"
+  created_at: "2026-07-11T00:00:00Z"
+  updated_at: "2026-07-11T00:00:00Z"
+  version: "1.0"
+
+description: |
+  The settlement half of the ops spine: an operator (Priya) turns a closed month into owners paid
+  in USDC on-chain — computing the waterfall (gross rent → costs → management fee → reserve → net),
+  funding the distribution escrow, pushing the on-chain distribution against the Anchor distribution
+  ledger behind a consequence/cost/finality confirm + step-up auth, and reconciling Convex to chain.
+  This is the back-office act behind the consumer "Rent just landed +$X" hero and the "matches target"
+  income breakdown. Admin analog of DD-002; the structural guarantee behind consumer O4.
+
+user_value:
+  problem: "Owners must be paid on time and at the right number, and no dollar can move without a provable on-chain settlement — Convex must never self-settle."
+  solution: "A distribution builder that computes the exact waterfall (management fee already inside net yield — never re-charged), an escrow-funding step, and an on-chain push that reconciles chain→Convex with chain-wins."
+  success_criteria:
+    - "100% on-time, correctly-computed USDC distributions when cash flow permits (AO3 / O4)"
+    - "Zero distributions posted to Convex without an on-chain confirmation (AO3 / I2/I3)"
+    - "Distribution net matches the offering's target yield, or the variance + reason is surfaced before push"
+
+design_artifacts:
+  scenarios:
+    - id: "A2-push-a-distribution"
+      path: "admin/C-UX-Scenarios/A2-push-a-distribution/"
+      screens: ["A2.1-due-queue","A2.2-waterfall-builder","A2.3-fund-escrow","A2.4-push","A2.5-reconcile"]
+  design_system:
+    path: "admin/D-Design-System/00-admin-design-system.md"
+    inherits: "D-Design-System/00-design-system.md (canonical tokens — verbatim)"
+    components:
+      - "Data table (distributions-due queue)"
+      - "Waterfall builder (gross→costs→mgmt fee→reserve→net, tabular, matches-target check)"
+      - "On-chain action panel (fund + push — exact values, cost, finality, step-up auth)"
+      - "Reconciliation banner (Helius; chain wins)"
+      - "Status chips (Pending · On-chain-confirmed · Complete★)"
+      - "Audit row (append-only, attributed, on-chain ref)"
+
+technical_requirements:
+  platform:
+    frontend: "Next.js (App Router) on Vercel — desktop-first admin app"
+    backend: "Convex (shared) — mirrors IncomeLedger; never authoritative for settlement"
+    auth: "WorkOS (SSO + RBAC; distribution power is distinct from compliance — SoD)"
+    onchain: "Anchor distribution ledger · USDC · Token-2022 holders"
+  integrations:
+    - {name: "Escrow / fund custody", purpose: "Hold + fund USDC for the distribution pre-push", required: true}  # OPEN: vendor undecided (B1) — BLOCKS this delivery's money-movement
+    - {name: "Anchor distribution program", purpose: "Record distribution on-chain ledger; pay holders (admin-triggered, authoritative)", required: true}
+    - {name: "Helius", purpose: "Confirm distribution on-chain → reconcile Convex IncomeLedger", required: true}
+    - {name: "Sponsor operator numbers (from DD-A03 monthly submission)", purpose: "Inputs to the waterfall", required: true}
+    - {name: "Step-up auth (WebAuthn hardware key)", purpose: "Gate the irreversible push", required: true}  # OPEN: MFA posture
+  data_models:
+    - {name: "Distribution", fields: ["propertyId","period","grossRent","costs","mgmtFee","reserve","netPerToken","status(draft|funded|pushed|reconciled|failed)","builtBy(human)","txSig"]}
+    - {name: "IncomeLedger", fields: ["propertyId","userId","distributionId","amountUSDC","onchainRef"]}  # Convex mirror of on-chain ledger
+    - {name: "DistributionEscrow", fields: ["propertyId","period","fundedAmountUSDC","custodyRef"]}  # BLOCKED: custody vendor
+    - {name: "AuditLog", fields: ["actor(human)","action","target","onchainRef","timestamp"]}
+
+acceptance_criteria:
+  functional:
+    - "Waterfall computes gross → costs → management fee → reserve → net-per-token; the management fee is shown as ALREADY INSIDE net yield (never re-charged), matching the consumer income breakdown."
+    - "Net is checked against the offering's target yield; a variance surfaces with a reason before the operator can push."
+    - "Escrow must be funded before push (BLOCKED: custody vendor B1)."
+    - "Push states consequence + cost + finality ('pays N owners, irreversible') and requires step-up auth."
+    - "No distribution is marked settled in Convex until the on-chain push is confirmed by Helius; Convex NEVER self-settles."
+    - "On reconciliation, chain wins on any Convex↔chain conflict; the discrepancy is logged."
+    - "Every build/fund/push/reconcile writes an immutable AuditLog entry with the on-chain ref."
+  non_functional:
+    - "Money + net-per-token in Inter tabular; on-chain refs in mono-data (copyable)."
+    - "Distribution power is walled from compliance/mint powers per role (SoD)."
+    - "WCAG 2.2 AA; status = color + icon + label; irreversible actions never one-click."
+    - "Tokens inherited verbatim from the canonical design system + admin data layer."
+  edge_cases:
+    - "Operator numbers missing/late (sponsor didn't submit) → distribution blocked; links to the overdue sponsor submission; never silent."
+    - "Cash flow insufficient → distribution paused with an explicit reason that feeds the consumer 'why paused' income state; never silent."
+    - "Push fails on-chain → nothing marked paid, escrow reversible per custody terms, failure audited, clear retry."
+    - "Chain shows a different holder set than Convex → chain wins; mirror corrected; logged; surfaced in reconciliation banner."
+    - "Net does not match target → operator must acknowledge the variance + reason before proceeding (or abort)."
+
+testing_guidance:
+  operator_testing:
+    - "Confirm the operator sees net matches target (or the variance) before any irreversible step."
+    - "Confirm the management fee is never double-counted vs. the consumer income breakdown."
+  qa_testing:
+    - "Force an on-chain push failure — confirm no owner is marked paid and state is clean."
+    - "Verify Convex cannot mark a distribution settled without Helius confirmation (no self-settle path)."
+    - "Verify reconciliation: seed a chain↔Convex mismatch and confirm chain wins + log."
+    - "Verify custody-blocked state renders clearly until B1 resolves."
+
+estimated_complexity:
+  size: "large"
+  effort: "5-7 weeks (blocked on custody vendor for money-movement)"
+  risk: "high (treasury correctness + on-chain authority + custody dependency)"
+  dependencies: ["DD-A01 (a minted, listed offering with holders)", "DD-A03 (sponsor monthly operator numbers)", "BLOCKED: custody vendor (B1)"]
+
+notes: |
+  BLOCKER: escrow/fund-custody vendor (B1) gates the fund-escrow + money-movement steps — identical to the
+  consumer DD-001 open decision. The screens and non-money logic (waterfall, matches-target, reconcile design)
+  are ready; the funding + push money-movement is flagged BLOCKED until B1 resolves. OPEN: MFA/step-up posture.
+  Management-fee handling must exactly mirror the consumer income breakdown (already-inside-net). Completes the
+  ops spine with DD-A01.

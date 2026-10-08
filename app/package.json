@@ -8,6 +8,19 @@
     "node": ">=22.0.0",
     "npm": ">=10.0.0"
   },
+  "//exports": "Story 1.1: the admin workspace (vesper-admin) shares this package's Convex backend and design tokens rather than duplicating them. The convex/ directory deliberately does NOT move (25+ modules import ./_generated/* relatively and `npx convex dev` finds convex/ by convention from this package root) — it is exposed through the workspace instead. Only these four entry points are public; everything else in this package stays private to the consumer app.",
+  "exports": {
+    "./convex/_generated/api": {
+      "types": "./convex/_generated/api.d.ts",
+      "default": "./convex/_generated/api.js"
+    },
+    "./convex/_generated/dataModel": {
+      "types": "./convex/_generated/dataModel.d.ts",
+      "default": "./convex/_generated/dataModel.d.ts"
+    },
+    "./convex/roles": "./convex/roles.ts",
+    "./app/globals.css": "./app/globals.css"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -19,11 +32,11 @@
     "check:tokens": "node scripts/check-tokens.mjs",
     "test": "vitest run"
   },
+  "//overrides": "Admin Story 1.1: `overrides` moved to the workspace ROOT package.json — npm honors overrides only there. Do not re-add them here.",
   "dependencies": {
-    "@phosphor-icons/react": "^2.1.10",
+    "@phosphor-icons/react": "2.1.10",
     "@privy-io/react-auth": "^3.34.0",
-    "@solana-program/memo": "^0.11.2",
-    "@solana/spl-token": "^0.4.9",
+    "@solana-program/memo": "^0.10.0",
     "@solana/web3.js": "^1.98.4",
     "convex": "^1.17.0",
     "next": "^16.2.10",
@@ -43,12 +56,5 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.10"
-  },
-  "overrides": {
-    "elliptic": "^6.6.1",
-    "esbuild": "^0.25.12",
-    "postcss": "^8.5.10",
-    "uuid": "^11.1.1",
-    "ws": "^8.20.2"
   }
 }

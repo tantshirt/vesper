@@ -1,13 +1,18 @@
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
+import { Keypair } from "@solana/web3.js";
+import { regulatoryYear } from "./eligibility";
 
 // recordEligibility schedules attestEligibilityOnChain via scheduler.runAfter(0) (a setTimeout under
 // convex-test). Fake timers let finishAllScheduledFunctions(vi.runAllTimers) drain that job inside the
 // test, instead of it firing after teardown and rejecting.
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 async function drainScheduled(t: ReturnType<typeof convexTest>) {
   await t.finishAllScheduledFunctions(vi.runAllTimers);
@@ -139,6 +144,92 @@ describe("recordEligibility — eligibility→ACL mirror + audit", () => {
     expect(actions).not.toContain("acl.thawed");
   });
 
+  test("failed recheck freezes every prior entitlement and versions durable revocations", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    const secondPropertyId = await t.run((ctx) =>
+      ctx.db.insert("properties", {
+        name: "Second",
+        location: "Austin, TX",
+        propertyType: "Multifamily",
+        units: 2,
+        targetNetYield: 0.05,
+        offeringSize: 100_000,
+        fundedPct: 0,
+        status: "open",
+        spvName: "Second LLC",
+        minInvestment: 50,
+      }),
+    );
+    await t.run(async (ctx) => {
+      for (const id of [propertyId, secondPropertyId]) {
+        await ctx.db.insert("eligibility", {
+          userId,
+          propertyId: id,
+          eligible: true,
+          jurisdiction: "US",
+          tokenAclState: "thawed",
+        });
+      }
+    });
+
+    await asUser(t).mutation(api.eligibility.recordEligibility, {
+      propertyId,
+      jurisdiction: "US",
+      annualIncome: 100_000,
+      netWorth: 100_000,
+      verified: false,
+    });
+    await drainScheduled(t);
+
+    const result = await t.run(async (ctx) => ({
+      rows: await ctx.db.query("eligibility").withIndex("by_user", (q) => q.eq("userId", userId)).collect(),
+      outbox: await ctx.db.query("eligibilityAttestations").collect(),
+    }));
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.every((row) => !row.eligible && row.tokenAclState === "frozen")).toBe(true);
+    expect(result.outbox).toHaveLength(2);
+    expect(result.outbox.every((row) => !row.desiredEligible)).toBe(true);
+  });
+
+  test("Reg A accumulators reset only across a known UTC regulatory-year boundary", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    await t.run((ctx) =>
+      ctx.db.patch(userId, {
+        regAAnnualLimit: 9_000,
+        regAInvestedThisYear: 7_000,
+        regARegulatoryYear: regulatoryYear() - 1,
+      }),
+    );
+    await asUser(t).mutation(api.eligibility.recordEligibility, {
+      propertyId,
+      jurisdiction: "US",
+      annualIncome: 100_000,
+      netWorth: 50_000,
+      verified: true,
+    });
+    const user = await t.run((ctx) => ctx.db.get(userId));
+    expect(user?.regARegulatoryYear).toBe(regulatoryYear());
+    expect(user?.regAInvestedThisYear).toBe(0);
+  });
+
+  test("legacy Reg A accumulator with no year is conservatively retained and assigned current year", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    await t.run((ctx) => ctx.db.patch(userId, { regAInvestedThisYear: 7_000 }));
+    await asUser(t).mutation(api.eligibility.recordEligibility, {
+      propertyId,
+      jurisdiction: "US",
+      annualIncome: 100_000,
+      netWorth: 50_000,
+      verified: true,
+    });
+    const user = await t.run((ctx) => ctx.db.get(userId));
+    expect(user?.regARegulatoryYear).toBe(regulatoryYear());
+    expect(user?.regAInvestedThisYear).toBe(7_000);
+  });
+
   test("re-submitting identical data is idempotent — one row, no repeat eligibility/ACL audit", async () => {
     const t = convexTest(schema, modules);
     const { propertyId, userId } = await seed(t);
@@ -182,6 +273,292 @@ describe("recordEligibility — eligibility→ACL mirror + audit", () => {
         verified: true,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("eligibility attestation outbox", () => {
+  test("missing wallet remains pending and wallet linking retriggers the same version", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    await t.run((ctx) => ctx.db.patch(propertyId, { mint: Keypair.generate().publicKey.toBase58() }));
+    await asUser(t).mutation(api.eligibility.recordEligibility, {
+      propertyId,
+      jurisdiction: "US",
+      annualIncome: 100_000,
+      netWorth: 50_000,
+      verified: true,
+    });
+    await drainScheduled(t);
+    let row = await t.run((ctx) =>
+      ctx.db.query("eligibilityAttestations").withIndex("by_user_property", (q) =>
+        q.eq("userId", userId).eq("propertyId", propertyId),
+      ).unique(),
+    );
+    expect(row?.status).toBe("waiting_dependencies");
+    expect(row?.desiredVersion).toBe(1);
+
+    await asUser(t).mutation(api.users.setWalletAddress, {
+      walletAddress: Keypair.generate().publicKey.toBase58(),
+    });
+    await drainScheduled(t);
+    row = await t.run((ctx) =>
+      ctx.db.query("eligibilityAttestations").withIndex("by_user_property", (q) =>
+        q.eq("userId", userId).eq("propertyId", propertyId),
+      ).unique(),
+    );
+    expect(row?.status).toBe("applied");
+    expect(row?.desiredVersion).toBe(1);
+    expect(row?.attemptCount).toBe(1);
+    expect(row?.signature).toMatch(/^STUB-ELIG-on-/);
+  });
+
+  test("stale completion cannot overwrite a newer desired state", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    const attestationId = await t.run((ctx) =>
+      ctx.db.insert("eligibilityAttestations", {
+        userId,
+        propertyId,
+        desiredEligible: false,
+        desiredVersion: 2,
+        idempotencyKey: "v2",
+        status: "pending",
+        attemptCount: 1,
+        retryEligible: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+    );
+    const result = await t.mutation(internal.eligibilityAttest.completeAttestation, {
+      attestationId,
+      expectedVersion: 1,
+      expectedAttempt: 1,
+      outcome: "applied",
+      signature: "stale-signature",
+      retryEligible: false,
+    });
+    expect(result).toEqual({ status: "stale" });
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("eligibilityAttestations")
+        .withIndex("by_user_property", (q) =>
+          q.eq("userId", userId).eq("propertyId", propertyId),
+        )
+        .unique(),
+    );
+    expect(row?.desiredEligible).toBe(false);
+    expect(row?.status).toBe("pending");
+    expect(row?.signature).toBeUndefined();
+  });
+
+  test("stale same-version attempt cannot overwrite a newer lease", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    const attestationId = await t.run((ctx) =>
+      ctx.db.insert("eligibilityAttestations", {
+        userId,
+        propertyId,
+        desiredEligible: true,
+        desiredVersion: 1,
+        idempotencyKey: "v1",
+        status: "leased",
+        attemptCount: 2,
+        leaseUntil: Date.now() + 60_000,
+        retryEligible: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+    );
+    const result = await t.mutation(internal.eligibilityAttest.completeAttestation, {
+      attestationId,
+      expectedVersion: 1,
+      expectedAttempt: 1,
+      outcome: "applied",
+      signature: "attempt-one",
+      retryEligible: false,
+    });
+    expect(result).toEqual({ status: "stale" });
+    const row = await t.run((ctx) => ctx.db.get(attestationId));
+    expect(row?.status).toBe("leased");
+    expect(row?.attemptCount).toBe(2);
+  });
+
+  test("a newer desired version waits for an older leased effect to resolve", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    const attestationId = await t.run((ctx) =>
+      ctx.db.insert("eligibilityAttestations", {
+        userId,
+        propertyId,
+        desiredEligible: true,
+        desiredVersion: 1,
+        idempotencyKey: `${userId}:${propertyId}:1`,
+        status: "leased",
+        attemptCount: 1,
+        leaseUntil: Date.now() + 60_000,
+        retryEligible: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+    );
+
+    await t.mutation(internal.eligibilityAttest.enqueueAttestation, {
+      userId,
+      propertyId,
+      eligible: false,
+    });
+    let row = await t.run((ctx) => ctx.db.get(attestationId));
+    expect(row).toMatchObject({
+      desiredEligible: false,
+      desiredVersion: 2,
+      status: "leased",
+      idempotencyKey: `${userId}:${propertyId}:1`,
+    });
+    expect(
+      await t.mutation(internal.eligibilityAttest.claimAttestation, {
+        attestationId,
+        expectedVersion: 2,
+      }),
+    ).toEqual({ status: "waiting_prior_effect" });
+
+    expect(
+      await t.mutation(internal.eligibilityAttest.completeAttestation, {
+        attestationId,
+        expectedVersion: 1,
+        expectedAttempt: 1,
+        outcome: "applied",
+        signature: "version-one-signature",
+        retryEligible: false,
+      }),
+    ).toEqual({ status: "superseded", outcome: "applied" });
+    row = await t.run((ctx) => ctx.db.get(attestationId));
+    expect(row).toMatchObject({
+      desiredEligible: false,
+      desiredVersion: 2,
+      appliedVersion: 1,
+      status: "pending",
+      idempotencyKey: `${userId}:${propertyId}:2`,
+    });
+  });
+
+  test("an unknown prior effect blocks a newer desired version and cannot be force-retried", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    const attestationId = await t.run((ctx) =>
+      ctx.db.insert("eligibilityAttestations", {
+        userId,
+        propertyId,
+        desiredEligible: true,
+        desiredVersion: 1,
+        idempotencyKey: `${userId}:${propertyId}:1`,
+        status: "unknown",
+        attemptCount: 1,
+        signature: "possibly-submitted",
+        retryEligible: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+    );
+
+    await t.mutation(internal.eligibilityAttest.enqueueAttestation, {
+      userId,
+      propertyId,
+      eligible: false,
+      forceRetry: true,
+    });
+    await t.mutation(internal.eligibilityAttest.enqueueAttestation, {
+      userId,
+      propertyId,
+      eligible: false,
+      forceRetry: true,
+    });
+    const row = await t.run((ctx) => ctx.db.get(attestationId));
+    expect(row).toMatchObject({
+      desiredEligible: false,
+      desiredVersion: 2,
+      status: "unknown",
+      idempotencyKey: `${userId}:${propertyId}:1`,
+      signature: "possibly-submitted",
+    });
+    expect(
+      await t.mutation(internal.eligibilityAttest.claimAttestation, {
+        attestationId,
+        expectedVersion: 2,
+      }),
+    ).toEqual({ status: "waiting_prior_effect" });
+  });
+
+  test("repeated identical decisions coalesce into one row and one desired version", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seed(t);
+    const args = {
+      propertyId,
+      jurisdiction: "US",
+      annualIncome: 100_000,
+      netWorth: 50_000,
+      verified: true,
+    } as const;
+    await asUser(t).mutation(api.eligibility.recordEligibility, args);
+    await asUser(t).mutation(api.eligibility.recordEligibility, args);
+    await drainScheduled(t);
+    const rows = await t.run((ctx) => ctx.db.query("eligibilityAttestations").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0].desiredVersion).toBe(1);
+  });
+
+  test("the synthetic signer fails closed outside tests", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(userId, { walletAddress: Keypair.generate().publicKey.toBase58() });
+      await ctx.db.patch(propertyId, { mint: Keypair.generate().publicKey.toBase58() });
+    });
+    await t.mutation(internal.eligibilityAttest.enqueueAttestation, {
+      userId,
+      propertyId,
+      eligible: true,
+    });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("eligibilityAttestations")
+        .withIndex("by_user_property", (q) =>
+          q.eq("userId", userId).eq("propertyId", propertyId),
+        )
+        .unique(),
+    );
+    expect(row?.status).toBe("failed");
+    expect(row?.retryEligible).toBe(false);
+    expect(row?.lastError).toBe("Eligibility signer is not configured");
+  });
+
+  test("the synthetic signer requires the development runtime and its dedicated flag", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VESPER_RUNTIME_ENV", "development");
+    vi.stubEnv("VESPER_ENABLE_ELIGIBILITY_ATTEST_STUB", "true");
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(userId, { walletAddress: Keypair.generate().publicKey.toBase58() });
+      await ctx.db.patch(propertyId, { mint: Keypair.generate().publicKey.toBase58() });
+    });
+    await t.mutation(internal.eligibilityAttest.enqueueAttestation, {
+      userId,
+      propertyId,
+      eligible: true,
+    });
+    await drainScheduled(t);
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("eligibilityAttestations")
+        .withIndex("by_user_property", (q) =>
+          q.eq("userId", userId).eq("propertyId", propertyId),
+        )
+        .unique(),
+    );
+    expect(row?.status).toBe("applied");
+    expect(row?.signature).toMatch(/^STUB-ELIG-on-/);
   });
 });
 

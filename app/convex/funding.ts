@@ -3,7 +3,12 @@ import { v } from "convex/values";
 import { writeAudit } from "./audit";
 import { settledOrdersTotal } from "./settlement";
 import type { Doc } from "./_generated/dataModel";
-import { findUserByIdentity, identityKey, requireUnsafeStubs } from "./security";
+import {
+  developmentStubEnabled,
+  findUserByIdentity,
+  identityKey,
+  requireDevelopmentStub,
+} from "./security";
 
 // Story 3.3 — Add money (fiat → USDC).
 //
@@ -89,6 +94,17 @@ export const getFundedBalance = query({
   },
 });
 
+export const getFundingRailStatus = query({
+  args: {},
+  handler: async () => ({
+    available: developmentStubEnabled("funding"),
+    verifiedProvider: false,
+    blocker: developmentStubEnabled("funding")
+      ? "Development funding simulation"
+      : "Verified funding provider is not configured",
+  }),
+});
+
 // --- Mutation ---------------------------------------------------------------------------------
 
 // Record a settled deposit through the stubbed on-ramp. Resolve the caller from the JWT (throw if
@@ -107,7 +123,7 @@ export const addMoney = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
     const actor = identityKey(identity);
-    requireUnsafeStubs("Stub funding");
+    requireDevelopmentStub("funding", "Stub funding");
 
     const user = await findUserByIdentity(ctx, identity);
     if (!user) throw new Error("User not provisioned");

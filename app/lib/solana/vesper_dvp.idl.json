@@ -37,6 +37,9 @@
           "name": "propertyTokenProgram"
         },
         {
+          "name": "usdcTokenProgram"
+        },
+        {
           "name": "systemProgram"
         }
       ],
@@ -89,10 +92,17 @@
           "writable": true
         },
         {
+          "name": "eligibility"
+        },
+        {
           "name": "propertyTokenProgram"
         },
         {
           "name": "usdcTokenProgram"
+        },
+        {
+          "name": "authority",
+          "signer": true
         }
       ],
       "args": [
@@ -195,6 +205,31 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "setOfferingClosed",
+      "discriminator": [
+        5
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "offering",
+          "writable": true
+        },
+        {
+          "name": "propertyMint"
+        }
+      ],
+      "args": [
+        {
+          "name": "closed",
+          "type": "bool"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -314,7 +349,15 @@
             "type": "u64"
           },
           {
-            "name": "usdcAmount",
+            "name": "principalUsdcAmount",
+            "type": "u64"
+          },
+          {
+            "name": "platformFeeUsdcAmount",
+            "type": "u64"
+          },
+          {
+            "name": "totalUsdcAmount",
             "type": "u64"
           },
           {
@@ -361,6 +404,30 @@
     {
       "code": 8,
       "name": "InvalidTokenAccount"
+    },
+    {
+      "code": 9,
+      "name": "InvalidPropertyMint"
+    },
+    {
+      "code": 10,
+      "name": "InvalidPaymentMint"
+    },
+    {
+      "code": 11,
+      "name": "UnsupportedMintExtension"
+    },
+    {
+      "code": 12,
+      "name": "InsufficientVaultInventory"
+    },
+    {
+      "code": 13,
+      "name": "TokenAccountMustBeFrozen"
+    },
+    {
+      "code": 14,
+      "name": "PublicThawDisabled"
     }
   ]
 }

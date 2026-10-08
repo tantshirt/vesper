@@ -4,7 +4,7 @@
  * Reusable, dependency-light TypeScript client for the `vesper_dvp` Quasar
  * program deployed to Solana devnet. This module is consumed both by the
  * devnet e2e proof script and by the upcoming Solana Pay endpoint, so it is
- * kept framework-agnostic (plain @solana/web3.js + @solana/spl-token, no
+ * kept framework-agnostic (plain @solana/web3.js, no
  * framework runtime dependency).
  *
  * Instruction data is encoded using Quasar discriminators taken verbatim from
@@ -24,10 +24,8 @@ import {
 import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
-  getAccount,
-  TokenAccountNotFoundError,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-} from "@solana/spl-token";
+} from "./token";
 
 import idl from "./vesper_dvp.idl.json";
 
@@ -76,6 +74,7 @@ export const USDC_DECIMALS = 6;
 
 type IdlInstruction = { name: string; discriminator: number[] };
 type IdlAccount = { name: string; discriminator: number[] };
+type IdlEvent = { name: string; discriminator: number[] };
 
 function idlInstructionDiscriminator(name: string): Buffer {
   const ix = (idl.instructions as IdlInstruction[]).find(
@@ -91,25 +90,41 @@ function idlAccountDiscriminator(name: string): Buffer {
   return Buffer.from(acc.discriminator);
 }
 
+function idlEventDiscriminator(name: string): Buffer {
+  const event = (idl.events as IdlEvent[]).find((item) => item.name === name);
+  if (!event) throw new Error(`Event "${name}" not found in IDL`);
+  return Buffer.from(event.discriminator);
+}
+
 export const SETTLE_PURCHASE_DISCRIMINATOR =
   idlInstructionDiscriminator("settlePurchase");
-export const INITIALIZE_OFFERING_DISCRIMINATOR = idlInstructionDiscriminator(
-  "initializeOffering",
-);
+export const INITIALIZE_OFFERING_DISCRIMINATOR =
+  idlInstructionDiscriminator("initializeOffering");
 export const SET_ELIGIBILITY_DISCRIMINATOR =
   idlInstructionDiscriminator("setEligibility");
 export const THAW_DISCRIMINATOR = idlInstructionDiscriminator("thaw");
 export const FREEZE_DISCRIMINATOR = idlInstructionDiscriminator("freeze");
+export const SET_OFFERING_CLOSED_DISCRIMINATOR =
+  idlInstructionDiscriminator("setOfferingClosed");
 export const OFFERING_ACCOUNT_DISCRIMINATOR =
   idlAccountDiscriminator("Offering");
+export const PURCHASE_SETTLED_EVENT_DISCRIMINATOR =
+  idlEventDiscriminator("PurchaseSettled");
+
+export const PLATFORM_FEE_BPS = 90n;
+export const BPS_DENOMINATOR = 10_000n;
+/** Payment mints are fixed at 6 decimals, so 10,000 base units is one USD cent. */
+export const PAYMENT_CENT_BASE_UNITS = 10_000n;
+const MAX_U64 = (1n << 64n) - 1n;
 
 // ---------------------------------------------------------------------------
 // Borsh helpers (u64 LE)
 // ---------------------------------------------------------------------------
 
 function encodeU64LE(value: bigint | number): Buffer {
+  const normalized = normalizeU64(value, "u64 value");
   const b = Buffer.alloc(8);
-  b.writeBigUInt64LE(BigInt(value));
+  b.writeBigUInt64LE(normalized);
   return b;
 }
 
@@ -117,12 +132,63 @@ function readU64LE(buf: Buffer, offset: number): bigint {
   return buf.readBigUInt64LE(offset);
 }
 
+function normalizeU64(value: bigint | number, label: string): bigint {
+  if (typeof value === "number" && !Number.isSafeInteger(value)) {
+    throw new RangeError(`${label} must be a safe integer or bigint`);
+  }
+  const normalized = BigInt(value);
+  if (normalized < 0n || normalized > MAX_U64) {
+    throw new RangeError(`${label} must fit in an unsigned 64-bit integer`);
+  }
+  return normalized;
+}
+
+export interface PurchaseQuote {
+  principalUsdcAmount: bigint;
+  platformFeeUsdcAmount: bigint;
+  totalUsdcAmount: bigint;
+}
+
+/**
+ * Exact protocol quote in payment-mint base units. The 90-bps fee is rounded half-up to the nearest
+ * payment cent, matching the ratified preview. The annual management fee remains inside net yield.
+ */
+export function calculatePurchaseQuote(
+  tokenAmount: bigint | number,
+  pricePerToken: bigint | number,
+): PurchaseQuote {
+  const tokens = normalizeU64(tokenAmount, "tokenAmount");
+  const price = normalizeU64(pricePerToken, "pricePerToken");
+  const principalUsdcAmount = tokens * price;
+  if (principalUsdcAmount > MAX_U64) {
+    throw new RangeError("purchase principal exceeds u64");
+  }
+
+  const roundingDenominator = BPS_DENOMINATOR * PAYMENT_CENT_BASE_UNITS;
+  const feeCents =
+    (principalUsdcAmount * PLATFORM_FEE_BPS + roundingDenominator / 2n) /
+    roundingDenominator;
+  const platformFeeUsdcAmount = feeCents * PAYMENT_CENT_BASE_UNITS;
+  const totalUsdcAmount = principalUsdcAmount + platformFeeUsdcAmount;
+  if (platformFeeUsdcAmount > MAX_U64 || totalUsdcAmount > MAX_U64) {
+    throw new RangeError("purchase fee or total exceeds u64");
+  }
+
+  return {
+    principalUsdcAmount,
+    platformFeeUsdcAmount,
+    totalUsdcAmount,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // PDA derivation
 // ---------------------------------------------------------------------------
 
 /** Derive the Offering PDA for a property mint: seeds [b"offering", mint]. */
-export function deriveOfferingPda(propertyMint: PublicKey): [PublicKey, number] {
+export function deriveOfferingPda(
+  propertyMint: PublicKey,
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [OFFERING_SEED, propertyMint.toBuffer()],
     PROGRAM_ID,
@@ -155,6 +221,14 @@ export interface Offering {
   sold: bigint;
   bump: number;
   closed: boolean;
+}
+
+export interface PurchaseSettledEvent extends PurchaseQuote {
+  offering: PublicKey;
+  buyer: PublicKey;
+  propertyMint: PublicKey;
+  tokenAmount: bigint;
+  soldAfter: bigint;
 }
 
 /**
@@ -214,6 +288,41 @@ export function decodeOffering(data: Buffer): Offering {
   };
 }
 
+/** Decode the generated Quasar PurchaseSettled event ABI. */
+export function decodePurchaseSettledEvent(data: Buffer): PurchaseSettledEvent {
+  const discriminatorLength = PURCHASE_SETTLED_EVENT_DISCRIMINATOR.length;
+  const expectedLength = discriminatorLength + 32 * 3 + 8 * 5;
+  if (
+    data.length !== expectedLength ||
+    !data
+      .subarray(0, discriminatorLength)
+      .equals(PURCHASE_SETTLED_EVENT_DISCRIMINATOR)
+  ) {
+    throw new Error("Not a PurchaseSettled event");
+  }
+  let offset = discriminatorLength;
+  const publicKey = () => {
+    const key = new PublicKey(data.subarray(offset, offset + 32));
+    offset += 32;
+    return key;
+  };
+  const u64 = () => {
+    const value = readU64LE(data, offset);
+    offset += 8;
+    return value;
+  };
+  return {
+    offering: publicKey(),
+    buyer: publicKey(),
+    propertyMint: publicKey(),
+    tokenAmount: u64(),
+    principalUsdcAmount: u64(),
+    platformFeeUsdcAmount: u64(),
+    totalUsdcAmount: u64(),
+    soldAfter: u64(),
+  };
+}
+
 /** Fetch + decode the Offering account for a property mint. */
 export async function fetchOffering(
   connection: Connection,
@@ -267,8 +376,10 @@ export function deriveBuyerAtas(
  *   5 buyer_property writable (Token-2022 ATA)
  *   6 buyer_usdc     writable (classic SPL ATA)
  *   7 treasury       writable
- *   8 property_token_program  readonly (Token-2022)
- *   9 usdc_token_program      readonly (classic SPL)
+ *   8 eligibility    readonly (buyer Eligibility PDA)
+ *   9 property_token_program  readonly (Token-2022)
+ *  10 usdc_token_program      readonly (classic SPL)
+ *  11 authority               signer, readonly (must equal offering.authority)
  */
 export function buildSettlePurchaseInstruction(params: {
   buyer: PublicKey;
@@ -279,6 +390,7 @@ export function buildSettlePurchaseInstruction(params: {
   buyerProperty: PublicKey;
   buyerUsdc: PublicKey;
   treasury: PublicKey;
+  authority: PublicKey;
   tokenAmount: bigint | number;
 }): TransactionInstruction {
   const data = Buffer.concat([
@@ -296,8 +408,14 @@ export function buildSettlePurchaseInstruction(params: {
       { pubkey: params.buyerProperty, isSigner: false, isWritable: true },
       { pubkey: params.buyerUsdc, isSigner: false, isWritable: true },
       { pubkey: params.treasury, isSigner: false, isWritable: true },
+      {
+        pubkey: deriveEligibilityPda(params.propertyMint, params.buyer)[0],
+        isSigner: false,
+        isWritable: false,
+      },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: params.authority, isSigner: true, isWritable: false },
     ],
     data,
   });
@@ -312,7 +430,8 @@ export function buildSettlePurchaseInstruction(params: {
  *   4 vault          readonly (Token-2022 account owned by offering PDA)
  *   5 treasury       readonly (usdc token account)
  *   6 property_token_program readonly (Token-2022)
- *   7 system_program readonly
+ *   7 usdc_token_program readonly (classic SPL)
+ *   8 system_program readonly
  */
 export function buildInitializeOfferingInstruction(params: {
   authority: PublicKey;
@@ -340,6 +459,7 @@ export function buildInitializeOfferingInstruction(params: {
       { pubkey: params.vault, isSigner: false, isWritable: false },
       { pubkey: params.treasury, isSigner: false, isWritable: false },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
     data,
@@ -383,14 +503,16 @@ export function buildSetEligibilityInstruction(params: {
 }
 
 /**
- * Build the raw `thaw` instruction (permissionless self-thaw, gated by Eligibility). Account order:
- *   0 cranker       signer, writable (whoever pays — permissionless)
+ * Build the legacy `thaw` instruction. The on-chain handler always rejects it; this builder remains
+ * only for ABI tooling and migration diagnostics. Account order:
+ *   0 cranker       signer, writable
  *   1 offering       readonly (PDA)
  *   2 property_mint  readonly
  *   3 token_account  writable (the account to thaw)
  *   4 owner          readonly (token account owner; keys the Eligibility PDA)
  *   5 eligibility    readonly (PDA for `owner`)
  *   6 token_program  readonly (Token-2022 for the property token)
+ * @deprecated Holder accounts are frozen at rest. Settlement owns the only thaw window.
  */
 export function buildThawInstruction(params: {
   cranker: PublicKey;
@@ -453,13 +575,37 @@ export function buildFreezeInstruction(params: {
   });
 }
 
+/**
+ * Build authority-only offering pause/reopen instruction. `closed=true` blocks settlement;
+ * `closed=false` reopens it without changing immutable economic terms.
+ */
+export function buildSetOfferingClosedInstruction(params: {
+  authority: PublicKey;
+  propertyMint: PublicKey;
+  closed: boolean;
+}): TransactionInstruction {
+  const [offering] = deriveOfferingPda(params.propertyMint);
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: params.authority, isSigner: true, isWritable: false },
+      { pubkey: offering, isSigner: false, isWritable: true },
+      { pubkey: params.propertyMint, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.concat([
+      SET_OFFERING_CLOSED_DISCRIMINATOR,
+      Buffer.from([params.closed ? 1 : 0]),
+    ]),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // High-level: build the unsigned settle transaction
 // ---------------------------------------------------------------------------
 
 export interface BuildSettlePurchaseArgs {
   connection: Connection;
-  /** The buyer's public key. Also the fee payer and the only tx-level signer. */
+  /** The buyer's public key and fee payer. The offering authority is the second required signer. */
   buyer: PublicKey;
   /** The Token-2022 property mint being purchased. */
   propertyMint: PublicKey;
@@ -467,30 +613,92 @@ export interface BuildSettlePurchaseArgs {
   tokenAmount: bigint | number;
   /** Priority fee in micro-lamports per compute unit (default 50_000). */
   computeUnitPrice?: number;
-  /** Optional compute-unit limit (default 200_000, enough for the CPIs). */
+  /** Optional compute-unit limit (default 200_000, enough for the token CPIs). */
   computeUnitLimit?: number;
-  /**
-   * Whether to inject a Token-ACL `thaw` for the buyer's property ATA (after ATA creation, before
-   * settle). Default is auto: thaw when the buyer's property ATA is missing or frozen — with
-   * DefaultAccountState=Frozen a freshly-created ATA is frozen, so a first-time buyer thaws; a
-   * returning buyer (already thawed) must NOT re-thaw (that errors). Requires the buyer's on-chain
-   * Eligibility to have been attested (setEligibility) first.
-   */
-  includeThaw?: boolean;
 }
 
 export interface BuildSettlePurchaseResult {
   transaction: VersionedTransaction;
   offering: Offering;
   offeringAddress: PublicKey;
+  buyer: PublicKey;
+  propertyMint: PublicKey;
   buyerProperty: PublicKey;
   buyerUsdc: PublicKey;
-  /** usdc base units that will be paid = tokenAmount * price_per_token. */
-  usdcAmount: bigint;
-  /** Whether a Token-ACL `thaw` instruction was injected before settle. */
-  thawInjected: boolean;
+  tokenAmount: bigint;
+  quote: PurchaseQuote;
   blockhash: string;
   lastValidBlockHeight: number;
+}
+
+export interface PlatformSettlementSigningRequest {
+  transaction: VersionedTransaction;
+  offering: Offering;
+  offeringAddress: PublicKey;
+  buyer: PublicKey;
+  propertyMint: PublicKey;
+  tokenAmount: bigint;
+  quote: PurchaseQuote;
+}
+
+/** Production implementations keep credentials outside this client and return a partially signed tx. */
+export interface PlatformSettlementSignerProvider {
+  authority: PublicKey;
+  signSettlement(
+    request: PlatformSettlementSigningRequest,
+  ): Promise<VersionedTransaction>;
+}
+
+/**
+ * Fail-closed server-signing seam. There is deliberately no local/private-key fallback: deployment
+ * remains blocked until a configured custody or signer provider supplies the offering authority.
+ */
+export async function applyPlatformSettlementAuthorization(
+  request: PlatformSettlementSigningRequest,
+  provider?: PlatformSettlementSignerProvider,
+): Promise<VersionedTransaction> {
+  if (!provider) {
+    throw new Error("Platform settlement signer provider is not configured");
+  }
+  if (!provider.authority.equals(request.offering.authority)) {
+    throw new Error(
+      "Platform settlement signer does not match offering authority",
+    );
+  }
+  const expectedMessage = Buffer.from(request.transaction.message.serialize());
+  const signed = await provider.signSettlement(request);
+  if (!Buffer.from(signed.message.serialize()).equals(expectedMessage)) {
+    throw new Error(
+      "Platform settlement signer changed the transaction message",
+    );
+  }
+  const authorityIndex = signed.message.staticAccountKeys.findIndex((key) =>
+    key.equals(request.offering.authority),
+  );
+  if (
+    authorityIndex < 0 ||
+    authorityIndex >= signed.message.header.numRequiredSignatures ||
+    !signed.signatures[authorityIndex]?.some((byte) => byte !== 0)
+  ) {
+    throw new Error("Platform settlement authority signature is missing");
+  }
+  const verificationKey = await crypto.subtle.importKey(
+    "raw",
+    Uint8Array.from(request.offering.authority.toBytes()).buffer,
+    { name: "Ed25519" },
+    false,
+    ["verify"],
+  );
+  const signatureValid = await crypto.subtle.verify(
+    { name: "Ed25519" },
+    verificationKey,
+    Uint8Array.from(signed.signatures[authorityIndex]).buffer,
+    Uint8Array.from(expectedMessage).buffer,
+  );
+  if (!signatureValid) {
+    throw new Error("Platform settlement authority signature is invalid");
+  }
+  return signed;
 }
 
 /**
@@ -502,8 +710,8 @@ export interface BuildSettlePurchaseResult {
  * appends the `settlePurchase` instruction, adds compute-budget instructions,
  * sets feePayer = buyer and a fresh recentBlockhash, and returns the unsigned tx.
  *
- * The buyer signs later (single tx-level signer). The offering PDA signs the
- * delivery leg internally via CPI — that is not a transaction signature.
+ * The platform authority partially signs through `applyPlatformSettlementAuthorization`; the buyer
+ * then signs through the wallet. The offering PDA separately signs the delivery CPI internally.
  */
 export async function buildSettlePurchaseTransaction(
   args: BuildSettlePurchaseArgs,
@@ -521,40 +729,17 @@ export async function buildSettlePurchaseTransaction(
     connection,
     propertyMint,
   );
+  const normalizedTokenAmount = normalizeU64(tokenAmount, "tokenAmount");
+  const quote = calculatePurchaseQuote(
+    normalizedTokenAmount,
+    offering.pricePerToken,
+  );
 
   const { buyerProperty, buyerUsdc } = deriveBuyerAtas(
     buyer,
     propertyMint,
     offering.usdcMint,
   );
-
-  // Decide whether to thaw the buyer's property ATA. Auto: a missing or frozen ATA needs the one-time
-  // Token-ACL thaw; an already-thawed ATA must be left alone (re-thaw errors).
-  let thawInjected: boolean;
-  if (typeof args.includeThaw === "boolean") {
-    thawInjected = args.includeThaw;
-  } else {
-    try {
-      const acct = await getAccount(
-        connection,
-        buyerProperty,
-        "confirmed",
-        TOKEN_2022_PROGRAM_ID,
-      );
-      thawInjected = acct.isFrozen;
-    } catch (err) {
-      // ONLY a genuinely missing ATA means "it will be created frozen in this tx → inject a thaw".
-      // Any other failure (a transient RPC/network error) must NOT be swallowed into thawInjected=true:
-      // for a returning buyer whose ATA already exists and is thawed, a spurious thaw re-thaws an
-      // already-thawed account and reverts the whole settle. Surface the error instead of building a
-      // transaction that is guaranteed to fail on-chain.
-      if (err instanceof TokenAccountNotFoundError) {
-        thawInjected = true;
-      } else {
-        throw err;
-      }
-    }
-  }
 
   const instructions: TransactionInstruction[] = [
     ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnitLimit }),
@@ -578,19 +763,7 @@ export async function buildSettlePurchaseTransaction(
       TOKEN_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID,
     ),
-    // Token-ACL: thaw the (frozen-by-default) property ATA before delivery. Gated on-chain by the
-    // buyer's Eligibility attestation; the offering PDA (mint freeze authority) signs the thaw via CPI.
-    ...(thawInjected
-      ? [
-          buildThawInstruction({
-            cranker: buyer,
-            propertyMint,
-            tokenAccount: buyerProperty,
-            owner: buyer,
-            tokenProgram: TOKEN_2022_PROGRAM_ID,
-          }),
-        ]
-      : []),
+    // Settlement owns the only permitted thaw window and refreezes the destination atomically.
     buildSettlePurchaseInstruction({
       buyer,
       offering: offeringAddress,
@@ -600,7 +773,8 @@ export async function buildSettlePurchaseTransaction(
       buyerProperty,
       buyerUsdc,
       treasury: offering.treasury,
-      tokenAmount,
+      authority: offering.authority,
+      tokenAmount: normalizedTokenAmount,
     }),
   ];
 
@@ -619,10 +793,12 @@ export async function buildSettlePurchaseTransaction(
     transaction,
     offering,
     offeringAddress,
+    buyer,
+    propertyMint,
     buyerProperty,
     buyerUsdc,
-    usdcAmount: BigInt(tokenAmount) * offering.pricePerToken,
-    thawInjected,
+    tokenAmount: normalizedTokenAmount,
+    quote,
     blockhash,
     lastValidBlockHeight,
   };
