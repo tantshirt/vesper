@@ -2,7 +2,11 @@ import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
-import { allGatesSigned, GATE_DEFINITIONS, signGate } from "./gates";
+import {
+  allGatesSigned,
+  GATE_DEFINITIONS,
+  signGate,
+} from "./gates";
 import type { Id } from "./_generated/dataModel";
 
 // Admin Story 3.1 — the gate SIGNATURE CEREMONY. THE SPINE. These prove the story's core claims, they
@@ -84,6 +88,24 @@ async function gateRow(t: ReturnType<typeof convexTest>, propertyId: Id<"propert
   });
 }
 
+async function evidenceFor(
+  t: ReturnType<typeof convexTest>,
+  propertyId: Id<"properties">,
+  gateNo: number,
+  assembledAt = Date.now(),
+) {
+  return await t.run(async (ctx) =>
+    ctx.db.insert("evidencePackages", {
+      propertyId,
+      gateNo,
+      fieldIds: [],
+      status: "assembled",
+      assembledBy: "reviewer@vesper.co",
+      assembledAt,
+    }),
+  );
+}
+
 describe("beginGating — creates the 8 gates + moves the property to gating (idempotent)", () => {
   test("creates 8 pending gates from GATE_DEFINITIONS and sets status gating; re-run is a no-op", async () => {
     const t = convexTest(schema, modules);
@@ -130,10 +152,11 @@ describe("signGate — single-party gate passes at ONE named human", () => {
   test("signing a single-party gate makes it passed, attributed to the human, and audited", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await seedGatingProperty(t);
+    const evidencePackageId = await evidenceFor(t, propertyId, 0);
 
     const res = await t
       .withIdentity(workos("user_ops1"))
-      .action(api.gates.signGate, { propertyId, gateNo: 0 });
+      .action(api.gates.signGate, { propertyId, gateNo: 0, evidencePackageId });
     expect(res.passed).toBe(true);
     expect(res.signerCount).toBe(1);
 
@@ -173,17 +196,66 @@ describe("signGate — single-party gate passes at ONE named human", () => {
     const gate = await gateRow(t, propertyId, 1);
     expect(gate?.evidencePackageId).toBe(pkgId);
   });
+
+  test("rejects missing, future, superseded, cross-property, and wrong-gate evidence", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await seedGatingProperty(t);
+    const otherPropertyId = await seedProperty(t);
+    const wrongProperty = await evidenceFor(t, otherPropertyId, 0);
+    const wrongGate = await evidenceFor(t, propertyId, 1);
+    const future = await evidenceFor(t, propertyId, 0, Date.now() + 1);
+
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(
+        api.gates.signGate,
+        { propertyId, gateNo: 0 } as never,
+      ),
+    ).rejects.toThrow("Missing required field `evidencePackageId`");
+
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+        propertyId,
+        gateNo: 0,
+        evidencePackageId: wrongProperty,
+      }),
+    ).rejects.toThrow("is not current for this property and gate");
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+        propertyId,
+        gateNo: 0,
+        evidencePackageId: wrongGate,
+      }),
+    ).rejects.toThrow("is not current for this property and gate");
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+        propertyId,
+        gateNo: 0,
+        evidencePackageId: future,
+      }),
+    ).rejects.toThrow("is not current for this property and gate");
+
+    const older = await evidenceFor(t, propertyId, 0, Date.now() - 1);
+    await evidenceFor(t, propertyId, 0, Date.now());
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+        propertyId,
+        gateNo: 0,
+        evidencePackageId: older,
+      }),
+    ).rejects.toThrow("is not current for this property and gate");
+  });
 });
 
 describe("signGate — multi-party gate 6 needs TWO DISTINCT humans + blocks self-approval", () => {
   test("one signer leaves gate 6 pending; a DISTINCT second signer passes it", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await seedGatingProperty(t);
+    const evidencePackageId = await evidenceFor(t, propertyId, 6);
 
     // First distinct signer → still pending (needs 2).
     const first = await t
       .withIdentity(workos("user_ops1"))
-      .action(api.gates.signGate, { propertyId, gateNo: 6 });
+      .action(api.gates.signGate, { propertyId, gateNo: 6, evidencePackageId });
     expect(first.passed).toBe(false);
     expect(first.signerCount).toBe(1);
     expect((await gateRow(t, propertyId, 6))?.status).toBe("pending");
@@ -191,7 +263,7 @@ describe("signGate — multi-party gate 6 needs TWO DISTINCT humans + blocks sel
     // Second DISTINCT signer → passes with both names attributed.
     const second = await t
       .withIdentity(workos("user_ops2"))
-      .action(api.gates.signGate, { propertyId, gateNo: 6 });
+      .action(api.gates.signGate, { propertyId, gateNo: 6, evidencePackageId });
     expect(second.passed).toBe(true);
     expect(second.signerCount).toBe(2);
 
@@ -204,14 +276,23 @@ describe("signGate — multi-party gate 6 needs TWO DISTINCT humans + blocks sel
   test("the SAME human signing gate 6 twice is blocked (self-approval) + DURABLY audited sod.blocked", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await seedGatingProperty(t);
+    const evidencePackageId = await evidenceFor(t, propertyId, 6);
 
     // First sign leaves it pending at 1 signer.
-    await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo: 6 });
+    await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+      propertyId,
+      gateNo: 6,
+      evidencePackageId,
+    });
     expect((await gateRow(t, propertyId, 6))?.status).toBe("pending");
 
     // The SAME human attempting the second signature is blocked by 1-2's distinct-signer wall.
     await expect(
-      t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo: 6 }),
+      t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+        propertyId,
+        gateNo: 6,
+        evidencePackageId,
+      }),
     ).rejects.toThrow("SoD: a distinct second signer is required");
 
     // The gate never advanced, and the block is DURABLE (scheduled from the action, survives the throw).
@@ -230,6 +311,7 @@ describe("signGate — fee-conflicted signer is blocked (1-2)", () => {
   test("a signer with a recorded property interest is blocked + durably audits sod.fee_conflict", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await seedGatingProperty(t);
+    const evidencePackageId = await evidenceFor(t, propertyId, 0);
     // Record the conflict through the ONLY recording path (audited internalMutation in 1-2).
     await t.mutation(internal.sod.recordPropertyInterest, {
       workosId: "user_ops1",
@@ -239,7 +321,11 @@ describe("signGate — fee-conflicted signer is blocked (1-2)", () => {
     });
 
     await expect(
-      t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo: 0 }),
+      t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+        propertyId,
+        gateNo: 0,
+        evidencePackageId,
+      }),
     ).rejects.toThrow("SoD: fee/listing interest bars signing this property");
 
     // Gate untouched; durable fee-conflict block present after draining.
@@ -255,10 +341,15 @@ describe("signGate — platform_admin is denied at the PERMISSION step (no opera
   test("platform_admin cannot sign a gate — denied at gate.sign, no SoD leakage", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await seedGatingProperty(t);
+    const evidencePackageId = await evidenceFor(t, propertyId, 0);
     await seedStaff(t, { workosId: "user_pa", roles: ["platform_admin"], name: "Sam Lee" });
 
     await expect(
-      t.withIdentity(workos("user_pa")).action(api.gates.signGate, { propertyId, gateNo: 0 }),
+      t.withIdentity(workos("user_pa")).action(api.gates.signGate, {
+        propertyId,
+        gateNo: 0,
+        evidencePackageId,
+      }),
     ).rejects.toThrow("Not permitted: gate.sign");
 
     // Denied before any SoD wall ran → no sod.blocked, and the gate never advanced.
@@ -278,18 +369,36 @@ describe("allGatesSigned — the advancement gate (false until ALL 8 pass)", () 
 
     // Sign the 7 single-party gates (0..5, 7).
     for (const gateNo of [0, 1, 2, 3, 4, 5, 7]) {
-      await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo });
+      const evidencePackageId = await evidenceFor(t, propertyId, gateNo);
+      await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+        propertyId,
+        gateNo,
+        evidencePackageId,
+      });
       // Still false — gate 6 (multi-party) remains unsigned.
       expect(await t.run(async (ctx) => allGatesSigned(ctx, propertyId))).toBe(false);
     }
 
     // Gate 6 needs two distinct signers. One signer → still false.
-    await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo: 6 });
+    const evidencePackageId = await evidenceFor(t, propertyId, 6);
+    await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, {
+      propertyId,
+      gateNo: 6,
+      evidencePackageId,
+    });
     expect(await t.run(async (ctx) => allGatesSigned(ctx, propertyId))).toBe(false);
 
     // Distinct second signer on gate 6 → NOW all 8 pass.
-    await t.withIdentity(workos("user_ops2")).action(api.gates.signGate, { propertyId, gateNo: 6 });
+    await t.withIdentity(workos("user_ops2")).action(api.gates.signGate, {
+      propertyId,
+      gateNo: 6,
+      evidencePackageId,
+    });
     expect(await t.run(async (ctx) => allGatesSigned(ctx, propertyId))).toBe(true);
+
+    await evidenceFor(t, propertyId, 0, Date.now() + 1);
+    vi.advanceTimersByTime(1);
+    expect(await t.run(async (ctx) => allGatesSigned(ctx, propertyId))).toBe(false);
   });
 });
 
@@ -297,9 +406,10 @@ describe("no non-human / AI signing path — signing structurally requires a Wor
   test("signGate with NO identity is refused (there is no system/AI signer)", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await seedGatingProperty(t);
+    const evidencePackageId = await evidenceFor(t, propertyId, 0);
     // No .withIdentity → no authenticated human. requireGateSigner → requireStaff throws.
     await expect(
-      t.action(api.gates.signGate, { propertyId, gateNo: 0 }),
+      t.action(api.gates.signGate, { propertyId, gateNo: 0, evidencePackageId }),
     ).rejects.toThrow("Not authenticated");
     expect((await gateRow(t, propertyId, 0))?.status).toBe("pending");
   });

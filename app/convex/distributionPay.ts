@@ -1,10 +1,10 @@
 import { action, mutation, query, internalMutation, internalQuery } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
 import { requirePermission, logOperationalDenial } from "./rbac";
-import { requireStepUp, requireUnsafeStubs } from "./security";
+import { requireStepUp } from "./security";
 import { roundCents } from "./distribution";
 import { applyChainEventInner } from "./reconcile";
 
@@ -34,6 +34,79 @@ import { applyChainEventInner } from "./reconcile";
 function pushSeamShouldFail(): boolean {
   return process.env.VESPER_STUB_DIST_PUSH_FAIL === "true";
 }
+
+function distributionConfirmationStubEnabled(): boolean {
+  return process.env.NODE_ENV === "test" ||
+    (process.env.VESPER_RUNTIME_ENV === "development" &&
+      process.env.VESPER_ENABLE_DISTRIBUTION_CONFIRM_STUB === "true");
+}
+
+function escrowProviderEnabled(): boolean {
+  return process.env.NODE_ENV === "test" ||
+    (process.env.VESPER_RUNTIME_ENV === "development" &&
+      process.env.VESPER_ENABLE_ESCROW_STUB === "true");
+}
+
+function distributionProviderEnabled(): boolean {
+  return process.env.NODE_ENV === "test" ||
+    (process.env.VESPER_RUNTIME_ENV === "development" &&
+      process.env.VESPER_ENABLE_DISTRIBUTION_STUB === "true");
+}
+
+function requireDistributionProvider(): void {
+  if (!distributionProviderEnabled()) {
+    throw new Error("Distribution payout is disabled until a server-attested provider is configured");
+  }
+}
+
+function requireEscrowProvider(): void {
+  if (!escrowProviderEnabled()) {
+    throw new Error("Distribution escrow is disabled until a custody provider is configured");
+  }
+}
+
+function toUsdcBaseUnits(amountDollars: number): string {
+  const cents = Math.round(amountDollars * 100);
+  if (!Number.isSafeInteger(cents) || Math.abs(amountDollars * 100 - cents) > 1e-6 || cents <= 0) {
+    throw new Error("Escrow amount must be a positive exact cent amount");
+  }
+  return (BigInt(cents) * 10_000n).toString();
+}
+
+function scheduledBaseUnits(rows: Array<{ status: string; netPaid: number }>): string {
+  let total = 0n;
+  for (const row of rows) {
+    if (row.status !== "scheduled") continue;
+    total += BigInt(toUsdcBaseUnits(row.netPaid));
+  }
+  if (total <= 0n) throw new Error("Scheduled distribution amount must be positive");
+  return total.toString();
+}
+
+type OperationStatus = "reserved" | "leased" | "submitted" | "failed" | "unknown" | "reconciled";
+type EscrowReservation =
+  | {
+      execute: true;
+      operationId: Id<"externalOperations">;
+      leaseToken: string;
+      idempotencyKey: string;
+      fundedAmount: number;
+      amountBaseUnits: string;
+    }
+  | {
+      execute: false;
+      operationId: Id<"externalOperations">;
+      status: OperationStatus;
+      fundedAmount: number;
+      custodyRef: string | null;
+    };
+type EscrowFundingResult = {
+  funded: boolean;
+  fundedAmount: number;
+  custodyRef: string | null;
+  alreadyReserved?: true;
+  status?: OperationStatus;
+};
 
 // ── The 4-3 pause reason — a STRUCTURED, closed set (never a silent/free-form pause) ──────────────────
 // pauseDistribution NEVER pauses without one of these. The arg is a plain string that the handler
@@ -77,18 +150,32 @@ export const loadPushState = internalQuery({
       .withIndex("by_property_period", (q) => q.eq("propertyId", propertyId).eq("period", period))
       .unique();
 
+    const fundingOperation = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", `escrow:${propertyId}:${period}`))
+      .unique();
+
+    const scheduled = rows.filter((r) => r.status === "scheduled");
+    const currentAmountBaseUnits = scheduled.length > 0 ? scheduledBaseUnits(scheduled) : null;
+    const escrowAmountBaseUnits = escrow ? toUsdcBaseUnits(escrow.fundedAmount) : null;
+    const fundingOperationValid = !!fundingOperation &&
+      fundingOperation.kind === "escrow_funding" &&
+      (fundingOperation.status === "submitted" || fundingOperation.status === "reconciled") &&
+      fundingOperation.providerReference === escrow?.custodyRef;
+
     return {
       mint: property.mint ?? null,
-      scheduledCount: rows.filter((r) => r.status === "scheduled").length,
+      scheduledCount: scheduled.length,
       paidCount: rows.filter((r) => r.status === "paid").length,
       // 4-3: a paused period's rows are `missed` (carrying a pauseReason) — the push refuses it until a
       // resume flips them back to `scheduled`. Counted here so pushDistribution can refuse EXPLICITLY.
       missedCount: rows.filter((r) => r.status === "missed").length,
-      // The full built net pool (all non-missed rows) — runDistributionPush re-apportions this exact
-      // amount, so the per-holder push equals the scheduled draft.
-      poolNet: roundCents(rows.reduce((s, r) => s + (r.status === "missed" ? 0 : r.netPaid), 0)),
       escrowFunded: !!escrow,
       fundedAmount: escrow?.fundedAmount ?? 0,
+      currentAmountBaseUnits,
+      escrowAmountBaseUnits,
+      reservedAmountBaseUnits: fundingOperation?.amountBaseUnits ?? null,
+      fundingOperationValid,
     };
   },
 });
@@ -100,58 +187,234 @@ export const loadPushState = internalQuery({
 // (Σ netPaid) and upserts the escrow row IDEMPOTENTLY per (property, period) — a re-fund updates in
 // place, never duplicates. Audits `distribution.escrow.funded` to the NAMED human. NO push here; the
 // push is a distinct, step-up-gated act.
-export const fundDistributionEscrow = mutation({
-  args: { propertyId: v.id("properties"), period: v.string() },
-  handler: async (ctx, { propertyId, period }) => {
-    const staff = await requirePermission(ctx, "distribution.execute");
-    requireUnsafeStubs("Distribution escrow");
-    const actor = staff.email || staff.name || staff.workosId;
-
+export const reserveEscrowFunding = internalMutation({
+  args: { propertyId: v.id("properties"), period: v.string(), actor: v.string() },
+  handler: async (ctx, { propertyId, period, actor }) => {
     const rows = await ctx.db
       .query("incomeLedger")
       .withIndex("by_property_period", (q) => q.eq("propertyId", propertyId).eq("period", period))
       .collect();
-    const scheduled = rows.filter((r) => r.status === "scheduled");
+    const scheduled = rows.filter((row) => row.status === "scheduled");
     if (scheduled.length === 0) {
       throw new Error("No scheduled distribution draft to fund — build the draft first");
     }
+    const fundedAmount = roundCents(
+      scheduled.reduce((sum, row) => sum + row.netPaid, 0),
+    );
+    const amountBaseUnits = toUsdcBaseUnits(fundedAmount);
+    const idempotencyKey = `escrow:${propertyId}:${period}`;
+    const existing = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", idempotencyKey))
+      .unique();
+    if (existing) {
+      if (existing.status === "leased" && (existing.leaseExpiresAt ?? 0) <= Date.now()) {
+        await ctx.db.patch(existing._id, {
+          status: "unknown",
+          retrySafe: false,
+          leaseToken: undefined,
+          leaseExpiresAt: undefined,
+          lastCheckpoint: "escrow_lease_expired_after_possible_custody_effect",
+          lastError: "Escrow worker lease expired; custody outcome requires reconciliation",
+          updatedAt: Date.now(),
+        });
+        return {
+          execute: false as const,
+          operationId: existing._id,
+          status: "unknown" as const,
+          fundedAmount,
+          custodyRef: existing.providerReference ?? null,
+        };
+      }
+      if (existing.amountBaseUnits !== amountBaseUnits) {
+        await ctx.db.patch(existing._id, {
+          status: "unknown",
+          retrySafe: false,
+          lastCheckpoint: "escrow_amount_mismatch_requires_reconciliation",
+          lastError: "Distribution amount changed after funding was reserved",
+          updatedAt: Date.now(),
+        });
+      }
+      return {
+        execute: false as const,
+        operationId: existing._id,
+        status: existing.amountBaseUnits === amountBaseUnits ? existing.status : "unknown",
+        fundedAmount,
+        custodyRef: existing.providerReference ?? null,
+      };
+    }
 
-    // Fund the FULL built pool (every non-missed row's net) so the escrow always covers the push.
-    const fundedAmount = roundCents(rows.reduce((s, r) => s + (r.status === "missed" ? 0 : r.netPaid), 0));
-    // The (stubbed) custody deposit reference — deterministic per (property, period) so a re-fund is a
-    // clean idempotent update. The real custody vendor returns its own ref here with no shape change.
-    const custodyRef = `STUB-ESCROW-${propertyId}-${period}`;
+    const now = Date.now();
+    const leaseToken = `${idempotencyKey}:1:${now}`;
+    const operationId = await ctx.db.insert("externalOperations", {
+      kind: "escrow_funding",
+      idempotencyKey,
+      status: "leased",
+      actor,
+      subject: `${propertyId}:${period}`,
+      propertyId,
+      period,
+      amountBaseUnits,
+      desiredConsequence: "fund_distribution_escrow",
+      attemptCount: 1,
+      leaseToken,
+      leaseExpiresAt: now + 60_000,
+      lastCheckpoint: "reserved_before_custody_effect",
+      retrySafe: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { execute: true as const, operationId, leaseToken, idempotencyKey, fundedAmount, amountBaseUnits };
+  },
+});
 
+export const recordEscrowFunding = internalMutation({
+  args: {
+    operationId: v.id("externalOperations"),
+    leaseToken: v.string(),
+    custodyRef: v.string(),
+    fundedAmount: v.number(),
+  },
+  handler: async (ctx, { operationId, leaseToken, custodyRef, fundedAmount }) => {
+    const operation = await ctx.db.get(operationId);
+    if (!operation || operation.kind !== "escrow_funding") throw new Error("Escrow operation not found");
+    if (operation.status !== "leased" || operation.leaseToken !== leaseToken) {
+      throw new Error("Escrow funding lease is no longer current");
+    }
+    if (toUsdcBaseUnits(fundedAmount) !== operation.amountBaseUnits) {
+      throw new Error("Custody funding amount does not match the reserved escrow amount");
+    }
+    const now = Date.now();
+    await ctx.db.patch(operationId, {
+      status: "submitted",
+      providerReference: custodyRef,
+      submittedAt: now,
+      leaseToken: undefined,
+      leaseExpiresAt: undefined,
+      lastCheckpoint: "custody_provider_accepted",
+      retrySafe: false,
+      updatedAt: now,
+    });
+    const existing = await ctx.db
+      .query("distributionEscrow")
+      .withIndex("by_property_period", (q) =>
+        q.eq("propertyId", operation.propertyId).eq("period", operation.period!),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, { fundedAmount, custodyRef, fundedBy: operation.actor, fundedAt: now });
+    } else {
+      await ctx.db.insert("distributionEscrow", {
+        propertyId: operation.propertyId,
+        period: operation.period!,
+        fundedAmount,
+        custodyRef,
+        fundedBy: operation.actor,
+        fundedAt: now,
+      });
+    }
+    await writeAudit(ctx, {
+      actor: operation.actor,
+      action: "distribution.escrow.funded",
+      target: operation.propertyId,
+      meta: { period: operation.period, fundedAmount, amountBaseUnits: operation.amountBaseUnits, custodyRef },
+    });
+    return { funded: true as const, fundedAmount, custodyRef };
+  },
+});
+
+export const markEscrowUnknown = internalMutation({
+  args: { operationId: v.id("externalOperations"), leaseToken: v.string(), message: v.string() },
+  handler: async (ctx, { operationId, leaseToken, message }) => {
+    const operation = await ctx.db.get(operationId);
+    if (!operation || operation.status !== "leased" || operation.leaseToken !== leaseToken) return;
+    await ctx.db.patch(operationId, {
+      status: "unknown",
+      retrySafe: false,
+      leaseToken: undefined,
+      leaseExpiresAt: undefined,
+      lastCheckpoint: "custody_outcome_unknown_requires_reconciliation",
+      lastError: message,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const applyVerifiedEscrowProviderLookup = internalMutation({
+  args: {
+    propertyId: v.id("properties"),
+    period: v.string(),
+    amountBaseUnits: v.string(),
+    custodyRef: v.string(),
+  },
+  handler: async (ctx, { propertyId, period, amountBaseUnits, custodyRef }) => {
+    const operation = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", `escrow:${propertyId}:${period}`))
+      .unique();
+    if (!operation || operation.kind !== "escrow_funding") throw new Error("Escrow operation not found");
+    if (operation.amountBaseUnits !== amountBaseUnits) throw new Error("Verified escrow lookup amount mismatch");
+    const fundedAmount = Number(BigInt(amountBaseUnits)) / 1_000_000;
+    if (!Number.isSafeInteger(Number(BigInt(amountBaseUnits)))) throw new Error("Escrow amount exceeds safe display range");
+    const now = Date.now();
     const existing = await ctx.db
       .query("distributionEscrow")
       .withIndex("by_property_period", (q) => q.eq("propertyId", propertyId).eq("period", period))
       .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        fundedAmount,
-        custodyRef,
-        fundedBy: actor,
-        fundedAt: Date.now(),
-      });
-    } else {
-      await ctx.db.insert("distributionEscrow", {
-        propertyId,
-        period,
-        fundedAmount,
-        custodyRef,
-        fundedBy: actor,
-        fundedAt: Date.now(),
-      });
-    }
-
-    await writeAudit(ctx, {
-      actor, // the named human who funded — never a system
-      action: "distribution.escrow.funded",
-      target: propertyId,
-      meta: { period, fundedAmount, custodyRef, holders: scheduled.length },
+    if (existing) await ctx.db.patch(existing._id, { fundedAmount, custodyRef, fundedBy: operation.actor, fundedAt: now });
+    else await ctx.db.insert("distributionEscrow", { propertyId, period, fundedAmount, custodyRef, fundedBy: operation.actor, fundedAt: now });
+    await ctx.db.patch(operation._id, {
+      status: "reconciled",
+      providerReference: custodyRef,
+      submittedAt: operation.submittedAt ?? now,
+      reconciledAt: now,
+      leaseToken: undefined,
+      leaseExpiresAt: undefined,
+      lastCheckpoint: "verified_custody_lookup_reconciled",
+      lastError: undefined,
+      retrySafe: false,
+      updatedAt: now,
     });
+    return { status: "reconciled" as const, fundedAmount, custodyRef };
+  },
+});
 
-    return { funded: true as const, fundedAmount, custodyRef };
+export const fundDistributionEscrow = action({
+  args: { propertyId: v.id("properties"), period: v.string() },
+  handler: async (ctx, { propertyId, period }): Promise<EscrowFundingResult> => {
+    const staff: Doc<"staff"> = await ctx.runQuery(internal.distributionPay.resolveDistributor, {});
+    requireEscrowProvider();
+    const actor = staff.email || staff.name || staff.workosId;
+    const reservation: EscrowReservation = await ctx.runMutation(internal.distributionPay.reserveEscrowFunding, {
+      propertyId,
+      period,
+      actor,
+    });
+    if (!reservation.execute) {
+      return {
+        funded: reservation.status === "submitted" || reservation.status === "reconciled",
+        alreadyReserved: true as const,
+        fundedAmount: reservation.fundedAmount,
+        custodyRef: reservation.custodyRef,
+        status: reservation.status,
+      };
+    }
+    try {
+      const custodyRef = `STUB-ESCROW-${reservation.idempotencyKey}`;
+      return await ctx.runMutation(internal.distributionPay.recordEscrowFunding, {
+        operationId: reservation.operationId,
+        leaseToken: reservation.leaseToken,
+        custodyRef,
+        fundedAmount: reservation.fundedAmount,
+      });
+    } catch (error) {
+      await ctx.runMutation(internal.distributionPay.markEscrowUnknown, {
+        operationId: reservation.operationId,
+        leaseToken: reservation.leaseToken,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   },
 });
 
@@ -194,7 +457,7 @@ export const pushDistribution = action({
   handler: async (
     ctx,
     { propertyId, period },
-  ): Promise<{ pushed: number; skippedNoWallet: number; skippedZero: number }> => {
+  ): Promise<{ pushed: number; alreadyHandled: number; unresolved: number }> => {
     // INV2: a distribution.execute denial on this ACTION is durably logged (survives the re-throw) — see
     // logOperationalDenial. A denied caller (e.g. platform_admin) leaves an `rbac.denied.durable` trace.
     let staff: Doc<"staff">;
@@ -224,9 +487,17 @@ export const pushDistribution = action({
     if (!state.escrowFunded) {
       throw new Error("Cannot push: fund the distribution escrow first");
     }
+    if (!state.fundingOperationValid ||
+      state.currentAmountBaseUnits !== state.escrowAmountBaseUnits ||
+      state.currentAmountBaseUnits !== state.reservedAmountBaseUnits) {
+      throw new Error("Cannot push: funded escrow no longer matches the locked distribution draft");
+    }
 
     // STEP-UP (B2 placeholder) — the irreversible, final push requires a step-up re-auth. Stub seam.
     requireStepUp(ctx, "distribution.execute");
+    // A definite configuration refusal happens before any payout operation is reserved. Once the
+    // provider call begins, distributionPush records any exception as unknown and suppresses replay.
+    requireDistributionProvider();
 
     try {
       // The push seam can reject (real Privy signAndSend); prove the failure path is safe via the flag.
@@ -237,12 +508,12 @@ export const pushDistribution = action({
       const res = await ctx.runAction(internal.distributionPush.runDistributionPush, {
         propertyId,
         period,
-        poolNet: state.poolNet,
+        actor,
       });
       return {
         pushed: res.pushed,
-        skippedNoWallet: res.skippedNoWallet,
-        skippedZero: res.skippedZero,
+        alreadyHandled: res.alreadyHandled,
+        unresolved: res.unresolved.length,
       };
     } catch (err) {
       // Failure is safe + audited + retryable: no row was flipped paid (push never pays), and the draft
@@ -271,7 +542,9 @@ export const confirmDistributionStub = mutation({
   args: { propertyId: v.id("properties"), period: v.string() },
   handler: async (ctx, { propertyId, period }) => {
     await requirePermission(ctx, "distribution.execute");
-    requireUnsafeStubs("Distribution confirmation");
+    if (!distributionConfirmationStubEnabled()) {
+      throw new Error("Distribution confirmation stub is disabled");
+    }
 
     const property = await ctx.db.get(propertyId);
     if (!property) throw new Error("Property not found");
@@ -348,6 +621,13 @@ export const pauseDistribution = mutation({
     if (rows.some((r) => r.status === "paid")) {
       throw new Error("Cannot pause: distribution already paid");
     }
+    const fundingOperation = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", `escrow:${propertyId}:${period}`))
+      .unique();
+    if (fundingOperation) {
+      throw new Error("Cannot mutate a distribution draft after escrow funding has been reserved");
+    }
 
     const scheduled = rows.filter((r) => r.status === "scheduled");
     if (scheduled.length === 0) {
@@ -387,6 +667,13 @@ export const resumeDistribution = mutation({
       .query("incomeLedger")
       .withIndex("by_property_period", (q) => q.eq("propertyId", propertyId).eq("period", period))
       .collect();
+    const fundingOperation = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", `escrow:${propertyId}:${period}`))
+      .unique();
+    if (fundingOperation) {
+      throw new Error("Cannot mutate a distribution draft after escrow funding has been reserved");
+    }
     const missed = rows.filter((r) => r.status === "missed");
     if (missed.length === 0) {
       throw new Error("No paused distribution to resume");

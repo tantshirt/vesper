@@ -6,14 +6,56 @@ import {
   internalMutation,
   internalQuery,
 } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
 import { requirePermission, requireStaff, effectivePermissions, logOperationalDenial } from "./rbac";
-import { requireStepUp, requireUnsafeStubs } from "./security";
+import { requireStepUp } from "./security";
 import { allGatesSigned } from "./gates";
 import { applyChainEventInner } from "./reconcile";
+
+const MINT_LEASE_MS = 60_000;
+type OperationStatus = "reserved" | "leased" | "submitted" | "failed" | "unknown" | "reconciled";
+type MintReservation =
+  | {
+      execute: true;
+      operationId: Id<"externalOperations">;
+      leaseToken: string;
+      idempotencyKey: string;
+      supply: number;
+    }
+  | {
+      execute: false;
+      operationId: Id<"externalOperations">;
+      status: OperationStatus;
+      mint: string | null;
+      signature: string | null;
+    };
+type MintOfferingResult = {
+  minted: boolean;
+  mint: string | null;
+  signature: string | null;
+  mintStatus?: "minting";
+  alreadyReserved?: true;
+  status?: OperationStatus;
+};
+
+function mintProviderEnabled(): boolean {
+  return process.env.NODE_ENV === "test" ||
+    (process.env.NODE_ENV !== "production" && process.env.VESPER_ENABLE_MINT_STUB === "true");
+}
+
+function mintConfirmationStubEnabled(): boolean {
+  return process.env.NODE_ENV === "test" ||
+    (process.env.NODE_ENV !== "production" && process.env.VESPER_ENABLE_MINT_CONFIRM_STUB === "true");
+}
+
+function requireMintProvider(): void {
+  if (!mintProviderEnabled()) {
+    throw new Error("Property-token mint is disabled until a server-attested provider is configured");
+  }
+}
 
 // Admin Story 3.2 — the MINT & LISTING console. The irreversible on-chain act that turns a fully-gated
 // (3-1) property into an investable offering. THREE walls make it impossible to fat-finger:
@@ -50,15 +92,18 @@ import { applyChainEventInner } from "./reconcile";
 //   // ...all signed + submitted via privy.walletApi.solana.signAndSendTransaction({ walletId: SERVER_WALLET_ID, transaction })
 //   // returning the REAL mint pubkey + tx signature (which the 3-3 Helius reconcile then confirms).
 export const mintServerSeam = internalAction({
-  args: { propertyId: v.id("properties"), supply: v.number() },
+  args: { propertyId: v.id("properties"), supply: v.number(), idempotencyKey: v.string() },
   handler: async (
     _ctx,
-    { propertyId, supply },
+    { propertyId, supply, idempotencyKey },
   ): Promise<{ mint: string; signature: string }> => {
-    requireUnsafeStubs("Property-token mint");
+    requireMintProvider();
+    if (process.env.VESPER_STUB_MINT_PROVIDER_THROW === "true") {
+      throw new Error("Mint provider call failed after dispatch");
+    }
     return {
       mint: `STUB-MINT-${propertyId}`,
-      signature: `STUB-MINTSIG-${propertyId}-${supply}`,
+      signature: `STUB-MINTSIG-${idempotencyKey}-${supply}`,
     };
   },
 });
@@ -92,6 +137,189 @@ export const loadMintTarget = internalQuery({
   },
 });
 
+export const reserveMintOperation = internalMutation({
+  args: { propertyId: v.id("properties"), actor: v.string() },
+  handler: async (ctx, { propertyId, actor }) => {
+    const property = await ctx.db.get(propertyId);
+    if (!property) throw new Error("Property not found");
+    if (!await allGatesSigned(ctx, propertyId)) {
+      throw new Error("Cannot mint: every diligence gate must be signed first");
+    }
+    const supply = property.offeringSize;
+    if (!Number.isSafeInteger(supply) || supply <= 0) {
+      throw new Error("Mint supply must be a positive safe integer");
+    }
+    const idempotencyKey = `mint:${propertyId}`;
+    const existing = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", idempotencyKey))
+      .unique();
+    if (existing) {
+      if (existing.amountBaseUnits !== String(supply)) {
+        await ctx.db.patch(existing._id, {
+          status: "unknown",
+          retrySafe: false,
+          lastCheckpoint: "mint_supply_mismatch_requires_reconciliation",
+          lastError: "Offering supply changed after mint reservation",
+          updatedAt: Date.now(),
+        });
+        return {
+          execute: false as const,
+          operationId: existing._id,
+          status: "unknown" as const,
+          mint: existing.providerReference ?? null,
+          signature: existing.submittedSignature ?? null,
+        };
+      }
+      if (existing.status === "leased" && (existing.leaseExpiresAt ?? 0) <= Date.now()) {
+        await ctx.db.patch(existing._id, {
+          status: "unknown",
+          retrySafe: false,
+          leaseToken: undefined,
+          leaseExpiresAt: undefined,
+          lastCheckpoint: "mint_lease_expired_after_possible_provider_effect",
+          lastError: "Mint worker lease expired; provider outcome requires reconciliation",
+          updatedAt: Date.now(),
+        });
+        return {
+          execute: false as const,
+          operationId: existing._id,
+          status: "unknown" as const,
+          mint: existing.providerReference ?? null,
+          signature: existing.submittedSignature ?? null,
+        };
+      }
+      return {
+        execute: false as const,
+        operationId: existing._id,
+        status: existing.status,
+        mint: existing.providerReference ?? null,
+        signature: existing.submittedSignature ?? null,
+      };
+    }
+    if (property.mint) throw new Error("Property already minted");
+
+    const now = Date.now();
+    const leaseToken = `${idempotencyKey}:1:${now}`;
+    const operationId = await ctx.db.insert("externalOperations", {
+      kind: "mint",
+      idempotencyKey,
+      status: "leased",
+      actor,
+      subject: String(propertyId),
+      propertyId,
+      amountBaseUnits: String(supply),
+      desiredConsequence: "create_property_mint_and_initialize_offering",
+      attemptCount: 1,
+      leaseToken,
+      leaseExpiresAt: now + MINT_LEASE_MS,
+      lastCheckpoint: "reserved_before_mint_provider_effect",
+      retrySafe: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { execute: true as const, operationId, leaseToken, idempotencyKey, supply };
+  },
+});
+
+export const recordMintSubmitted = internalMutation({
+  args: {
+    operationId: v.id("externalOperations"),
+    leaseToken: v.string(),
+    mint: v.string(),
+    signature: v.string(),
+  },
+  handler: async (ctx, { operationId, leaseToken, mint, signature }) => {
+    const operation = await ctx.db.get(operationId);
+    if (!operation || operation.kind !== "mint") throw new Error("Mint operation not found");
+    if (operation.status !== "leased" || operation.leaseToken !== leaseToken) {
+      throw new Error("Mint lease is no longer current");
+    }
+    const property = await ctx.db.get(operation.propertyId);
+    if (!property) throw new Error("Property not found");
+    if (property.mint && property.mint !== mint) {
+      throw new Error("Property has a different mint; reconciliation required");
+    }
+    const now = Date.now();
+    await ctx.db.patch(operationId, {
+      status: "submitted",
+      providerReference: mint,
+      submittedSignature: signature,
+      submittedAt: now,
+      leaseToken: undefined,
+      leaseExpiresAt: undefined,
+      lastCheckpoint: "mint_provider_accepted_awaiting_chain_confirmation",
+      retrySafe: false,
+      updatedAt: now,
+    });
+    await ctx.db.patch(operation.propertyId, { mint, mintStatus: "minting" });
+    await writeAudit(ctx, {
+      actor: operation.actor,
+      action: "mint.executed",
+      target: operation.propertyId,
+      onchainRef: signature,
+      meta: { mint, supply: Number(operation.amountBaseUnits), mintStatus: "minting", operationId },
+    });
+    return { minted: true as const, mint, mintStatus: "minting" as const, signature };
+  },
+});
+
+export const markMintUnknown = internalMutation({
+  args: { operationId: v.id("externalOperations"), leaseToken: v.string(), message: v.string() },
+  handler: async (ctx, { operationId, leaseToken, message }) => {
+    const operation = await ctx.db.get(operationId);
+    if (!operation || operation.status !== "leased" || operation.leaseToken !== leaseToken) return;
+    await ctx.db.patch(operationId, {
+      status: "unknown",
+      retrySafe: false,
+      leaseToken: undefined,
+      leaseExpiresAt: undefined,
+      lastCheckpoint: "mint_provider_outcome_unknown_requires_reconciliation",
+      lastError: message,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// Called only by a trusted provider-reconciliation worker after looking up the stable idempotency key.
+// It repairs the crash window between provider acceptance and Convex recording; chain confirmation is
+// still required before the operation becomes reconciled or the offering can be listed.
+export const applyVerifiedMintProviderLookup = internalMutation({
+  args: {
+    propertyId: v.id("properties"),
+    mint: v.string(),
+    signature: v.string(),
+    amountBaseUnits: v.string(),
+  },
+  handler: async (ctx, { propertyId, mint, signature, amountBaseUnits }) => {
+    const operation = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", `mint:${propertyId}`))
+      .unique();
+    if (!operation || operation.kind !== "mint") throw new Error("Mint operation not found");
+    if (operation.amountBaseUnits !== amountBaseUnits) throw new Error("Verified mint lookup amount mismatch");
+    if (operation.status === "reconciled") return { status: "reconciled" as const };
+    const property = await ctx.db.get(propertyId);
+    if (!property) throw new Error("Property not found");
+    if (property.mint && property.mint !== mint) throw new Error("Verified mint lookup conflicts with property mint");
+    const now = Date.now();
+    await ctx.db.patch(operation._id, {
+      status: "submitted",
+      providerReference: mint,
+      submittedSignature: signature,
+      submittedAt: operation.submittedAt ?? now,
+      leaseToken: undefined,
+      leaseExpiresAt: undefined,
+      lastCheckpoint: "verified_provider_lookup_restored_submission",
+      lastError: undefined,
+      retrySafe: false,
+      updatedAt: now,
+    });
+    await ctx.db.patch(propertyId, { mint, mintStatus: "minting" });
+    return { status: "submitted" as const, mint, signature };
+  },
+});
+
 // ── mintOffering — the irreversible mint (ACTION, mint.execute-gated) ─────────────────────────────────
 // An ACTION because it drives the server-wallet signing seam (mintServerSeam). Flow, first-failing-wall
 // wins:
@@ -106,7 +334,7 @@ export const mintOffering = action({
   handler: async (
     ctx,
     { propertyId },
-  ): Promise<{ minted: true; mint: string; mintStatus: "minting"; signature: string }> => {
+  ): Promise<MintOfferingResult> => {
     // INV2: a mint.execute denial on this ACTION is durably logged (survives the re-throw) — see
     // logOperationalDenial. A denied caller (e.g. platform_admin) leaves an `rbac.denied.durable` trace.
     let staff: Doc<"staff">;
@@ -118,34 +346,43 @@ export const mintOffering = action({
     }
     const actor = staff.email || staff.name || staff.workosId;
 
-    const target = await ctx.runQuery(internal.mint.loadMintTarget, { propertyId });
-    if (!target) throw new Error("Property not found");
-
-    // Idempotent — a property already minted refuses re-mint. Caught BEFORE the seam so a second attempt
-    // never fires a duplicate on-chain mint.
-    if (target.mint) throw new Error("Property already minted");
-
-    // GATE WALL (3-1) — the spine. A property cannot be minted with any unsigned gate. REUSES 3-1.
-    if (!target.allSigned) {
-      throw new Error("Cannot mint: every diligence gate must be signed first");
-    }
-
     // STEP-UP (B2 placeholder) — the irreversible act requires a step-up re-auth. Stub seam.
     requireStepUp(ctx, "mint.execute");
-
-    // STUB-MINT server-wallet seam — the deferred real frozen-by-default Token-2022 mint + init offering.
-    const { mint, signature } = await ctx.runAction(internal.mint.mintServerSeam, {
-      propertyId,
-      supply: target.supply,
-    });
-
-    return await ctx.runMutation(internal.mint.recordMint, {
+    // Definite configuration refusal is checked before reserving an operation. After reservation, any
+    // provider exception is conservatively unknown because dispatch may have occurred.
+    requireMintProvider();
+    const reservation: MintReservation = await ctx.runMutation(internal.mint.reserveMintOperation, {
       propertyId,
       actor,
-      mint,
-      signature,
-      supply: target.supply,
     });
+    if (!reservation.execute) {
+      return {
+        minted: reservation.status === "submitted" || reservation.status === "reconciled",
+        alreadyReserved: true as const,
+        status: reservation.status,
+        mint: reservation.mint ?? null,
+        signature: reservation.signature ?? null,
+      };
+    }
+    try {
+      const result: { mint: string; signature: string } = await ctx.runAction(internal.mint.mintServerSeam, {
+        propertyId,
+        supply: reservation.supply,
+        idempotencyKey: reservation.idempotencyKey,
+      });
+      return await ctx.runMutation(internal.mint.recordMintSubmitted, {
+        operationId: reservation.operationId,
+        leaseToken: reservation.leaseToken,
+        ...result,
+      });
+    } catch (error) {
+      await ctx.runMutation(internal.mint.markMintUnknown, {
+        operationId: reservation.operationId,
+        leaseToken: reservation.leaseToken,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   },
 });
 
@@ -190,7 +427,7 @@ export const confirmMintStub = mutation({
   args: { propertyId: v.id("properties") },
   handler: async (ctx, { propertyId }) => {
     await requirePermission(ctx, "mint.execute");
-    requireUnsafeStubs("Mint confirmation");
+    if (!mintConfirmationStubEnabled()) throw new Error("Mint confirmation stub is disabled");
     const property = await ctx.db.get(propertyId);
     if (!property) throw new Error("Property not found");
     if (property.mintStatus === "confirmed") {
@@ -208,6 +445,19 @@ export const confirmMintStub = mutation({
       signature: `STUB-CONFIRM-${propertyId}`,
       mint: property.mint,
     });
+    const operation = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) => q.eq("idempotencyKey", `mint:${propertyId}`))
+      .unique();
+    if (operation && operation.providerReference === property.mint) {
+      await ctx.db.patch(operation._id, {
+        status: "reconciled",
+        reconciledAt: Date.now(),
+        lastCheckpoint: "verified_chain_event_reconciled",
+        retrySafe: false,
+        updatedAt: Date.now(),
+      });
+    }
     return { mintStatus: "confirmed" as const, alreadyConfirmed: false };
   },
 });

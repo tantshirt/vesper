@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   investGateState,
   shouldMirrorWallet,
+  shouldHoldForPurchaseRestore,
   hasCryptoVocabulary,
   remainingRegAHeadroom,
   formatUsd,
@@ -13,6 +14,15 @@ import {
 
 const ADDR = "So1anaAddr1111111111111111111111111111111111";
 const OTHER = "So1anaAddr2222222222222222222222222222222222";
+
+describe("purchase reload gate", () => {
+  test("holds authenticated UI until the durable operation query resolves", () => {
+    expect(shouldHoldForPurchaseRestore(true, undefined)).toBe(true);
+    expect(shouldHoldForPurchaseRestore(true, null)).toBe(false);
+    expect(shouldHoldForPurchaseRestore(true, { status: "submitted" })).toBe(false);
+    expect(shouldHoldForPurchaseRestore(false, undefined)).toBe(false);
+  });
+});
 
 describe("investGateState — one screen per matrix row", () => {
   const base = {

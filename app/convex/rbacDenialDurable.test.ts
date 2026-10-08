@@ -55,6 +55,19 @@ async function seedProperty(t: ReturnType<typeof convexTest>): Promise<Id<"prope
   );
 }
 
+async function evidenceFor(t: ReturnType<typeof convexTest>, propertyId: Id<"properties">) {
+  return await t.run(async (ctx) =>
+    ctx.db.insert("evidencePackages", {
+      propertyId,
+      gateNo: 0,
+      fieldIds: [],
+      status: "assembled",
+      assembledBy: "reviewer@vesper.co",
+      assembledAt: Date.now(),
+    }),
+  );
+}
+
 describe("INV2 — denied OPERATIONAL actions leave a durable rbac.denied.durable audit row", () => {
   test("a non-gate.sign staff calling signGate throws AND durably logs the denial", async () => {
     const t = convexTest(schema, modules);
@@ -73,9 +86,10 @@ describe("INV2 — denied OPERATIONAL actions leave a durable rbac.denied.durabl
     );
     // platform_admin holds NO gate.sign — denied at the 1-1 wall.
     await seedStaff(t, { workosId: "user_pa", roles: ["platform_admin"], email: "sam@vesper.co" });
+    const evidencePackageId = await evidenceFor(t, propertyId);
 
     await expect(
-      t.withIdentity(workos("user_pa")).action(api.gates.signGate, { propertyId, gateNo: 0 }),
+      t.withIdentity(workos("user_pa")).action(api.gates.signGate, { propertyId, gateNo: 0, evidencePackageId }),
     ).rejects.toThrow("Not permitted: gate.sign");
 
     const durable = (await auditRows(t)).filter((a) => a.action === "rbac.denied.durable");
@@ -116,8 +130,9 @@ describe("INV2 — denied OPERATIONAL actions leave a durable rbac.denied.durabl
       }),
     );
     await seedStaff(t, { workosId: "user_ops", roles: ["ops_diligence"] });
+    const evidencePackageId = await evidenceFor(t, propertyId);
 
-    await t.withIdentity(workos("user_ops")).action(api.gates.signGate, { propertyId, gateNo: 0 });
+    await t.withIdentity(workos("user_ops")).action(api.gates.signGate, { propertyId, gateNo: 0, evidencePackageId });
 
     const durable = (await auditRows(t)).filter((a) => a.action === "rbac.denied.durable");
     expect(durable).toHaveLength(0);

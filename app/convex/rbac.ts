@@ -4,7 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
-import { isWorkosIdentity } from "./security";
+import { isStaffIdentity } from "./security";
 import {
   permissionsForRoles,
   roleValidator,
@@ -30,7 +30,7 @@ export async function requireStaff(ctx: StaffReadCtx): Promise<Doc<"staff">> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
   // A Privy (consumer) token, or any non-WorkOS issuer, is refused here — the scope wall.
-  if (!isWorkosIdentity(identity)) throw new Error("Not authenticated as staff");
+  if (!isStaffIdentity(identity)) throw new Error("Not authenticated as staff");
 
   const staff = await ctx.db
     .query("staff")
@@ -158,7 +158,7 @@ export const me = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity || !isWorkosIdentity(identity)) return null;
+    if (!identity || !isStaffIdentity(identity)) return null;
 
     const staff = await ctx.db
       .query("staff")

@@ -17,8 +17,14 @@ import { regACapStatus } from "./eligibility";
 //
 // adjudicate/setTokenAclState SCHEDULE attestEligibilityOnChain via scheduler.runAfter(0). Fake timers +
 // finishAllScheduledFunctions drain that job inside the test (same idiom as eligibility.mutations.test).
-beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubEnv("NODE_ENV", "test");
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 const modules = (
   import.meta as unknown as { glob: (p: string) => Record<string, () => Promise<unknown>> }
@@ -262,7 +268,7 @@ describe("screenAml — stub-guarded AML input", () => {
     await seedEligibility(t, userId, propertyId);
 
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("VESPER_ENABLE_UNSAFE_STUBS", "");
+    vi.stubEnv("VESPER_ENABLE_AML_STUB", "true");
     try {
       await expect(
         asCompliance(t).mutation(api.compliance.screenAml, { userId, propertyId, flag: "flagged" }),
@@ -270,6 +276,19 @@ describe("screenAml — stub-guarded AML input", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  test("production refuses AML input even when its dedicated flag is true", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, userId } = await seed(t);
+    await seedStaff(t, { workosId: "user_compliance", roles: ["compliance"] });
+    await seedEligibility(t, userId, propertyId);
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VESPER_ENABLE_AML_STUB", "true");
+    await expect(
+      asCompliance(t).mutation(api.compliance.screenAml, { userId, propertyId, flag: "flagged" }),
+    ).rejects.toThrow("AML screening is disabled");
   });
 
   test("with the flag on (test env) records amlFlag + audits compliance.aml.screened", async () => {

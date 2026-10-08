@@ -14,8 +14,29 @@ export default defineSchema({
     walletAddress: v.optional(v.string()), // Privy embedded Solana wallet
     regAInvestedThisYear: v.optional(v.number()), // for Reg A+ cap (I5)
     regAAnnualLimit: v.optional(v.number()), // E3.2: computed Reg A+ per-investor cap (10% of greater of income/net worth)
+    regARegulatoryYear: v.optional(v.number()), // UTC calendar year owning both Reg A accumulator fields
+    regAInvestedByYear: v.optional(
+      v.array(v.object({ year: v.number(), amount: v.number() })),
+    ), // durable year buckets; prevents late confirmations from relabeling the current accumulator
     createdAt: v.number(),
   }).index("by_privyId", ["privyId"]).index("by_wallet", ["walletAddress"]), // by_wallet: E1.3 chain-event routing
+
+  // One-time, server-issued wallet ownership challenges. The challenge binds the authenticated
+  // identity, canonical Solana address, relying-party domain and expiry. Consumed rows are retained
+  // for replay detection and audit correlation; only the hashed/signature-free challenge metadata is
+  // persisted here.
+  walletLinkChallenges: defineTable({
+    userId: v.id("users"),
+    identityKey: v.string(),
+    walletAddress: v.string(),
+    domain: v.string(),
+    message: v.string(),
+    expiresAt: v.number(),
+    consumedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_wallet", ["walletAddress"]),
 
   // --- Admin Story 1.1: staff identity, kept STRICTLY separate from consumer `users` ---
   // Staff sign in via WorkOS SSO and are keyed on `workosId` (the WorkOS token `sub`); consumers are
@@ -179,6 +200,7 @@ export default defineSchema({
     mintStatus: v.optional(
       v.union(v.literal("none"), v.literal("minting"), v.literal("confirmed")),
     ),
+    mintSlot: v.optional(v.number()),
     firstDistributionDate: v.optional(v.string()), // E4.5: YYYY-MM-DD; optional so existing docs stay valid (no migration)
     // Admin Story 6.3: the sponsor↔property OPERATOR link. When set, this is the ONE sponsor org that
     // operates the property and may author its monthly updates; `sponsorUpdates` scopes every read/write
@@ -217,15 +239,67 @@ export default defineSchema({
     propertyId: v.id("properties"),
     amount: v.number(),
     platformFee: v.number(),
-    status: v.union(v.literal("pending"), v.literal("settled"), v.literal("failed")),
+    status: v.union(
+      // Legacy demo states. Production code may read them but never creates them.
+      v.literal("pending"),
+      v.literal("settled"),
+      v.literal("failed"),
+      // Durable production purchase-operation states.
+      v.literal("prepared"),
+      v.literal("awaiting_authorization"),
+      v.literal("submitted"),
+      v.literal("confirmed_on_chain"),
+      v.literal("reconciling"),
+      v.literal("complete"),
+      v.literal("blocked"),
+      v.literal("failed_safe"),
+      v.literal("outcome_unknown"),
+      v.literal("expired"),
+    ),
     dvpTxSig: v.optional(v.string()), // Convex never self-settles; set only on on-chain DvP confirm (I2)
+    walletAddress: v.optional(v.string()),
+    propertyMint: v.optional(v.string()),
+    tokenAmountRaw: v.optional(v.string()),
+    principalBaseUnits: v.optional(v.string()),
+    platformFeeBaseUnits: v.optional(v.string()),
+    totalBaseUnits: v.optional(v.string()),
+    paymentDecimals: v.optional(v.number()),
+    regulatoryYear: v.optional(v.number()),
+    acknowledgedRiskIds: v.optional(v.array(v.string())),
+    teachBackOwnership: v.optional(v.string()),
+    teachBackLiquidity: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    authorizationClaimId: v.optional(v.string()),
+    authorizationClaimExpiresAt: v.optional(v.number()),
+    authorizedTransaction: v.optional(v.string()), // immutable authority-signed transaction, base64
+    authorizedBlockhash: v.optional(v.string()),
+    authorizedLastValidBlockHeight: v.optional(v.number()),
+    authorizedChain: v.optional(
+      v.union(v.literal("solana:devnet"), v.literal("solana:testnet"), v.literal("solana:mainnet")),
+    ),
+    authorizationIssuedAt: v.optional(v.number()),
+    submittedAt: v.optional(v.number()),
+    confirmedAt: v.optional(v.number()),
+    reconciledAt: v.optional(v.number()),
+    consumerAcknowledgedAt: v.optional(v.number()),
+    chainSlot: v.optional(v.number()),
+    failureCode: v.optional(v.string()),
+    lastCheckpoint: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_user", ["userId"]).index("by_property", ["propertyId"]),
+  })
+    .index("by_user", ["userId"])
+    .index("by_property", ["propertyId"])
+    .index("by_user_property", ["userId", "propertyId"])
+    .index("by_signature", ["dvpTxSig"]),
 
   holdings: defineTable({
     userId: v.id("users"),
     propertyId: v.id("properties"),
     tokenAmount: v.number(),
+    tokenAmountRaw: v.optional(v.string()),
+    tokenDecimals: v.optional(v.number()),
+    chainSlot: v.optional(v.number()),
     ownershipPct: v.number(),
     costBasis: v.number(),
   })
@@ -248,7 +322,44 @@ export default defineSchema({
     reviewReason: v.optional(v.string()), // Admin 5.1: the recorded reason for the compliance override (mandatory on adjudication)
   })
     .index("by_user_property", ["userId", "propertyId"])
+    .index("by_user", ["userId"])
     .index("by_property", ["propertyId"]),
+
+  // Durable desired-state projection for the on-chain Eligibility PDA. A single row coalesces each
+  // (user, property) pair. `desiredVersion` changes whenever the desired ACL state changes, allowing
+  // completion handlers to reject stale workers. Missing wallet/mint dependencies remain pending.
+  eligibilityAttestations: defineTable({
+    userId: v.id("users"),
+    propertyId: v.id("properties"),
+    desiredEligible: v.boolean(),
+    desiredVersion: v.number(),
+    idempotencyKey: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("waiting_dependencies"),
+      v.literal("leased"),
+      v.literal("submitted"),
+      v.literal("confirmed"),
+      v.literal("applied"),
+      v.literal("failed"),
+      v.literal("unknown"),
+    ),
+    attemptCount: v.number(),
+    leaseUntil: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+    walletAddress: v.optional(v.string()),
+    mint: v.optional(v.string()),
+    signature: v.optional(v.string()),
+    appliedVersion: v.optional(v.number()),
+    retryEligible: v.boolean(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    submittedAt: v.optional(v.number()),
+    confirmedAt: v.optional(v.number()),
+    appliedAt: v.optional(v.number()),
+  }).index("by_user_property", ["userId", "propertyId"])
+    .index("by_status_next_attempt", ["status", "nextAttemptAt"]),
 
   // E3.2: restricted-jurisdiction waitlist — never a dead-end. One row per (user, property);
   // idempotent join via by_user_property. Fed only by joinWaitlist (audited).
@@ -282,6 +393,7 @@ export default defineSchema({
     netPaid: v.number(),
     txSig: v.optional(v.string()),
     paidAt: v.optional(v.number()), // E5.1: epoch ms a distribution row was observed paid — gives "fresh" a recency signal. Optional → no migration; pre-existing rows degrade to not-fresh.
+    paidSlot: v.optional(v.number()),
     status: v.union(v.literal("scheduled"), v.literal("paid"), v.literal("missed")),
     // Admin Story 4.3 — PAUSED-WITH-REASON (never silent). When a distribution can't proceed, the
     // period's `scheduled` rows are flipped to `missed` carrying a STRUCTURED, non-empty `pauseReason`
@@ -316,19 +428,73 @@ export default defineSchema({
     fundedAt: v.number(),
   }).index("by_property_period", ["propertyId", "period"]),
 
+  // Durable write-ahead records for every external custody or signer effect. The operation row is
+  // reserved transactionally before an Action contacts a provider. `idempotencyKey` is stable for the
+  // business consequence, while `leaseToken` only coordinates one worker attempt. A submitted or
+  // unknown operation is never automatically replayed; chain/provider reconciliation must resolve it.
+  externalOperations: defineTable({
+    kind: v.union(
+      v.literal("mint"),
+      v.literal("escrow_funding"),
+      v.literal("distribution_payout"),
+    ),
+    idempotencyKey: v.string(),
+    status: v.union(
+      v.literal("reserved"),
+      v.literal("leased"),
+      v.literal("submitted"),
+      v.literal("failed"),
+      v.literal("unknown"),
+      v.literal("reconciled"),
+    ),
+    actor: v.string(),
+    subject: v.string(),
+    propertyId: v.id("properties"),
+    period: v.optional(v.string()),
+    recipientUserId: v.optional(v.id("users")),
+    recipientAddress: v.optional(v.string()),
+    // Decimal strings keep base-unit values exact and JSON-safe across Convex Actions/providers.
+    amountBaseUnits: v.string(),
+    desiredConsequence: v.string(),
+    attemptCount: v.number(),
+    leaseToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    providerReference: v.optional(v.string()),
+    submittedSignature: v.optional(v.string()),
+    lastCheckpoint: v.string(),
+    lastError: v.optional(v.string()),
+    retrySafe: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    submittedAt: v.optional(v.number()),
+    reconciledAt: v.optional(v.number()),
+  })
+    .index("by_idempotency_key", ["idempotencyKey"])
+    .index("by_property_period", ["propertyId", "period"])
+    .index("by_status", ["status"]),
+
   // --- E1.3: on-chain reconciliation (chain-wins mirror sync) ---
-  // Append-only record of every processed on-chain event. `by_signature` is the idempotency key
-  // (a tx signature is applied at most once) and the store for any Convex↔chain discrepancy.
+  // Append-only record of every processed on-chain event. A signature may contain many transfers;
+  // `eventKey` identifies one instruction/transfer while `targetKey` protects projection ordering.
   reconciliations: defineTable({
-    signature: v.string(), // on-chain tx signature — unique per processed event
+    signature: v.string(),
+    eventKey: v.optional(v.string()),
+    eventIndex: v.optional(v.number()),
+    targetKey: v.optional(v.string()),
     eventType: v.string(), // "mint" | "transfer" | "distribution"
     mint: v.optional(v.string()),
     slot: v.optional(v.number()),
-    status: v.union(v.literal("applied"), v.literal("unresolved")),
+    status: v.union(v.literal("applied"), v.literal("unresolved"), v.literal("quarantined")),
+    reason: v.optional(v.string()),
+    projectionValue: v.optional(v.string()),
     discrepancy: v.optional(v.any()), // {before, after} when chain overwrote a divergent Convex value
     raw: v.optional(v.any()), // the normalized/enriched source event, for audit
     processedAt: v.number(),
-  }).index("by_signature", ["signature"]),
+  })
+    .index("by_signature", ["signature"])
+    .index("by_event_key", ["eventKey"])
+    .index("by_target_slot", ["targetKey", "slot"])
+    .index("by_target_status_slot", ["targetKey", "status", "slot"]),
 
   propertyUpdates: defineTable({
     propertyId: v.id("properties"),

@@ -52,4 +52,12 @@ mod vesper_dvp {
     pub fn freeze(ctx: Ctx<Freeze>) -> Result<(), ProgramError> {
         ctx.accounts.freeze()
     }
+
+    #[instruction(discriminator = 5)]
+    pub fn set_offering_closed(
+        ctx: Ctx<SetOfferingClosed>,
+        closed: bool,
+    ) -> Result<(), ProgramError> {
+        ctx.accounts.set_offering_closed(closed)
+    }
 }

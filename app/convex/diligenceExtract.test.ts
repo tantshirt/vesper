@@ -16,8 +16,14 @@ import type { Id } from "./_generated/dataModel";
 //
 // runExtraction is SCHEDULED by startExtraction; fake timers + finishAllScheduledFunctions drain the
 // scheduled action (which awaits its own model + write sub-calls) so we can read the results after.
-beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubEnv("NODE_ENV", "test");
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
 
 const modules = (
   import.meta as unknown as { glob: (p: string) => Record<string, () => Promise<unknown>> }
@@ -304,7 +310,7 @@ describe("the model seam refuses without the stub flag and is internal-only", ()
     // vi.stubEnv (over a raw process.env assignment) both avoids TS2540 on the read-only NODE_ENV and
     // auto-restores via unstubAllEnvs — so the "stubs off" window is scoped strictly to this test.
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("VESPER_ENABLE_UNSAFE_STUBS", "");
+    vi.stubEnv("VESPER_ENABLE_EXTRACTION_STUB", "true");
     try {
       await expect(
         t.action(internal.diligenceExtract.runExtractionModel, { text: "noi: 1 @p1" }),
@@ -312,6 +318,15 @@ describe("the model seam refuses without the stub flag and is internal-only", ()
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  test("production refuses extraction even when its dedicated flag is true", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VESPER_ENABLE_EXTRACTION_STUB", "true");
+    await expect(
+      t.action(internal.diligenceExtract.runExtractionModel, { text: "noi: 1 @p1" }),
+    ).rejects.toThrow("AI extraction is disabled");
   });
 
   test("with the flag on (test env), the seam extracts structured data", async () => {

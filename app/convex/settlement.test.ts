@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   PLATFORM_FEE_RATE,
   MAX_PURCHASE,
@@ -14,6 +14,7 @@ import {
   businessGateDecision,
   settlementDecision,
   dvpSettle,
+  deriveWholeTokenPurchaseQuote,
 } from "./settlement";
 import { platformFee, totalChargedToday } from "../app/app/invest/[id]/order.helpers";
 import { ownershipFraction } from "../app/app/invest/[id]/calculator.helpers";
@@ -77,6 +78,30 @@ describe("platformFeeCents / totalChargedCents — charge math", () => {
       const investment = Math.round(Math.max(0, amount) * 100) / 100;
       expect(totalChargedCents(amount)).toBeCloseTo(investment + platformFeeCents(amount), 10);
     }
+  });
+});
+
+describe("live Offering quote — dollars never become token count", () => {
+  test("a $100 order at $50/token prepares 2 tokens with exact 90-bps fee", () => {
+    const result = deriveWholeTokenPurchaseQuote(100, 50_000_000n, 1_000n);
+    expect(result.tokenAmount).toBe(2n);
+    expect(result.quote).toEqual({
+      principalUsdcAmount: 100_000_000n,
+      platformFeeUsdcAmount: 900_000n,
+      totalUsdcAmount: 100_900_000n,
+    });
+  });
+
+  test("rejects a requested amount that cannot buy a whole token", () => {
+    expect(() => deriveWholeTokenPurchaseQuote(125, 50_000_000n, 1_000n)).toThrow(
+      "whole-token multiple of $50.00",
+    );
+  });
+
+  test("rejects a quote beyond live remaining inventory", () => {
+    expect(() => deriveWholeTokenPurchaseQuote(150, 50_000_000n, 2n)).toThrow(
+      "Offering inventory unavailable",
+    );
   });
 });
 
@@ -192,18 +217,14 @@ describe("dvpSettle — the stub seam", () => {
   });
 
   test("fails closed when unsafe stubs are not enabled", () => {
-    const oldNodeEnv = process.env.NODE_ENV;
-    const oldStubFlag = process.env.VESPER_ENABLE_UNSAFE_STUBS;
-    process.env.NODE_ENV = "production";
-    delete process.env.VESPER_ENABLE_UNSAFE_STUBS;
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VESPER_ENABLE_DVP_STUB", "");
     try {
       const result = dvpSettle("order_abc" as Id<"orders">);
       expect(result.confirmed).toBe(false);
       expect(result.dvpTxSig).toBe("");
     } finally {
-      process.env.NODE_ENV = oldNodeEnv;
-      if (oldStubFlag === undefined) delete process.env.VESPER_ENABLE_UNSAFE_STUBS;
-      else process.env.VESPER_ENABLE_UNSAFE_STUBS = oldStubFlag;
+      vi.unstubAllEnvs();
     }
   });
 });

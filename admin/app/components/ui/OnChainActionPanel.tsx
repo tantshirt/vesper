@@ -2,97 +2,107 @@
 
 import type { ReactNode } from "react";
 
-// OnChainActionPanel — the SHELL for an irreversible on-chain action (mint / freeze /
-// thaw / distribute). Before any confirm it states, plainly and together:
-//   • consequence — exactly what this does, in named terms
-//   • cost — network / fee cost
-//   • finality — that it is irreversible and permanent on Solana
-// The midnight/dusk framing signals "this touches the chain." It also surfaces the
-// action's lifecycle (optimistic-intent → chain-confirm → reconciled) so state is
-// never ambiguous. The confirm handler here is a PLACEHOLDER — the real step-up-auth
-// and on-chain wiring land in a later story.
-
-export type OnChainPhase = "idle" | "intent" | "confirmed" | "reconciled";
+export type OnChainPhase =
+  | "idle"
+  | "submitting"
+  | "awaiting_confirmation"
+  | "unknown"
+  | "partial"
+  | "failed_safe"
+  | "reconciled"
+  | "intent"
+  | "confirmed";
 
 const PHASE_LABEL: Record<Exclude<OnChainPhase, "idle">, string> = {
-  intent: "Optimistic intent — awaiting the chain",
-  confirmed: "Confirmed on-chain",
-  reconciled: "Reconciled with Convex",
+  submitting: "Submitting to the provider",
+  awaiting_confirmation: "Submitted; waiting for network confirmation",
+  unknown: "Outcome unknown; reconciliation is required",
+  partial: "Partially complete; unresolved items require review",
+  failed_safe: "Stopped before a confirmed external effect",
+  reconciled: "Complete; records match verified external evidence",
+  intent: "Submitting to the provider",
+  confirmed: "Submitted; waiting for records to update",
 };
 
 export function OnChainActionPanel({
-  eyebrow = "On-chain action",
+  eyebrow = "External action",
   title,
   consequence,
   meta = [],
-  finality = "Irreversible · permanent on Solana",
+  finality = "Once submitted, this action may be irreversible",
   confirmLabel,
   onConfirm,
   onCancel,
   phase = "idle",
   disabled = false,
+  details,
 }: {
   eyebrow?: ReactNode;
-  /** Named, consequence-stated title, e.g. "Mint The Monroe (1,000,000 units)". */
   title: ReactNode;
   consequence: ReactNode;
-  /** Exact values shown before confirm — always include cost. */
   meta?: { label: ReactNode; value: ReactNode }[];
   finality?: ReactNode;
-  confirmLabel: string;
-  /** Placeholder handler — real step-up / on-chain wiring is a later story. */
+  confirmLabel?: string;
   onConfirm?: () => void;
   onCancel?: () => void;
   phase?: OnChainPhase;
   disabled?: boolean;
+  details?: ReactNode;
 }) {
+  const terminal = phase === "unknown" || phase === "partial" || phase === "reconciled";
+
   return (
-    <section className="a-onchain" aria-label="On-chain action">
-      <p className="a-onchain-eyebrow">
-        <span aria-hidden>⛓</span>
-        {eyebrow}
-      </p>
+    <section className={`a-onchain phase-${phase}`} aria-label="External operation">
+      <p className="a-onchain-eyebrow">{eyebrow}</p>
       <h3 className="a-onchain-title">{title}</h3>
       <p className="a-onchain-consequence">{consequence}</p>
 
       {meta.length > 0 && (
-        <div className="a-onchain-meta">
-          {meta.map((m, i) => (
-            <div className="a-onchain-meta-item" key={i}>
-              <span className="a-onchain-meta-k">{m.label}</span>
-              <span className="a-onchain-meta-v">{m.value}</span>
+        <dl className="a-onchain-meta">
+          {meta.map((item, index) => (
+            <div className="a-onchain-meta-item" key={index}>
+              <dt className="a-onchain-meta-k">{item.label}</dt>
+              <dd className="a-onchain-meta-v">{item.value}</dd>
             </div>
           ))}
-        </div>
+        </dl>
       )}
 
-      <span className="a-onchain-finality">
-        <span aria-hidden>⚠</span>
-        {finality}
-      </span>
+      <p className="a-onchain-finality">{finality}</p>
 
       {phase !== "idle" && (
-        <span className={`a-onchain-status${phase === "confirmed" || phase === "reconciled" ? " is-confirmed" : ""}`}>
+        <p className="a-onchain-status" role="status" aria-live="polite">
           <span className="a-onchain-dot" aria-hidden />
           {PHASE_LABEL[phase]}
-        </span>
+        </p>
       )}
 
-      <div className="a-onchain-actions">
-        <button
-          type="button"
-          className="a-onchain-confirm"
-          onClick={onConfirm}
-          disabled={disabled || phase === "intent"}
-        >
-          {confirmLabel}
-        </button>
-        {onCancel && (
-          <button type="button" className="a-onchain-cancel" onClick={onCancel}>
-            Cancel
-          </button>
-        )}
-      </div>
+      {details && (
+        <details className="a-technical-details">
+          <summary>Technical details</summary>
+          <div>{details}</div>
+        </details>
+      )}
+
+      {!terminal && (onConfirm || onCancel) && (
+        <div className="a-onchain-actions">
+          {onConfirm && confirmLabel && (
+            <button
+              type="button"
+              className="a-onchain-confirm"
+              onClick={onConfirm}
+              disabled={disabled || phase === "submitting" || phase === "intent" || phase === "awaiting_confirmation"}
+            >
+              {confirmLabel}
+            </button>
+          )}
+          {onCancel && phase !== "awaiting_confirmation" && (
+            <button type="button" className="a-onchain-cancel" onClick={onCancel} disabled={disabled}>
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

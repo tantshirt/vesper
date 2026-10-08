@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
 import { requirePermission } from "./rbac";
-import { requireUnsafeStubs } from "./security";
+import { requireDevelopmentStub } from "./security";
 
 // Admin Story 2.1 — the AI extraction ENGINE + the injection-isolation boundary + the cite-or-refuse
 // contract, with a STUBBED model seam. This module is ISOLATED by construction:
@@ -68,7 +68,8 @@ export function extractFieldsFromText(text: string): ExtractedFieldOut[] {
   return out;
 }
 
-// runExtractionModel — the ONLY model seam. An internalAction guarded by requireUnsafeStubs so that,
+// runExtractionModel — the ONLY model seam. An internalAction guarded by its dedicated development
+// feature flag so that,
 // with no server-attested model configured, it REFUSES rather than fabricating a live call (same posture
 // as the Persona/Middesk/DvP stubs). Internal-only: absent from the public `api`, unreachable from any
 // browser.
@@ -80,7 +81,7 @@ export function extractFieldsFromText(text: string): ExtractedFieldOut[] {
 export const runExtractionModel = internalAction({
   args: { text: v.string() },
   handler: async (_ctx, args): Promise<ExtractedFieldOut[]> => {
-    requireUnsafeStubs("AI extraction");
+    requireDevelopmentStub("extraction", "AI extraction");
     return extractFieldsFromText(args.text);
   },
 });

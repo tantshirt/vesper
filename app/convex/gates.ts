@@ -42,6 +42,45 @@ export const GATE_DEFINITIONS: ReadonlyArray<{ gateNo: number; label: string; mu
   { gateNo: 7, label: "Continuous monitoring", multiParty: false },
 ];
 
+function evidenceMatchesGateIdentity(
+  evidence: Doc<"evidencePackages"> | null,
+  propertyId: Id<"properties">,
+  gateNo: number,
+  now: number,
+): boolean {
+  return Boolean(
+    evidence &&
+      evidence.status === "assembled" &&
+      evidence.propertyId === propertyId &&
+      evidence.gateNo === gateNo &&
+      evidence.assembledAt <= now,
+  );
+}
+
+async function gateEvidenceIsCurrent(
+  ctx: QueryCtx | MutationCtx,
+  evidencePackageId: Id<"evidencePackages">,
+  propertyId: Id<"properties">,
+  gateNo: number,
+  now = Date.now(),
+): Promise<boolean> {
+  const evidence = await ctx.db.get(evidencePackageId);
+  if (!evidence || !evidenceMatchesGateIdentity(evidence, propertyId, gateNo, now)) return false;
+
+  const propertyPackages = await ctx.db
+    .query("evidencePackages")
+    .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
+    .collect();
+  return !propertyPackages.some(
+    (candidate) =>
+      candidate._id !== evidencePackageId &&
+      candidate.status === "assembled" &&
+      candidate.gateNo === gateNo &&
+      candidate.assembledAt <= now &&
+      candidate.assembledAt > evidence.assembledAt,
+  );
+}
+
 // requiredSigners — the passing threshold for a gate: 2 for a multi-party gate, else 1. One definition
 // so signGate's write and any reader agree on what "signed" means.
 function requiredSigners(multiParty: boolean | undefined): number {
@@ -59,8 +98,24 @@ export async function allGatesSigned(
     .query("diligenceGates")
     .withIndex("by_property", (q) => q.eq("propertyId", propertyId))
     .collect();
-  const passed = new Set(gates.filter((g) => g.status === "passed").map((g) => g.gateNo));
-  return GATE_DEFINITIONS.every((d) => passed.has(d.gateNo));
+  const now = Date.now();
+  const byGateNo = new Map(gates.map((gate) => [gate.gateNo, gate]));
+  for (const definition of GATE_DEFINITIONS) {
+    const gate = byGateNo.get(definition.gateNo);
+    if (!gate || gate.status !== "passed" || !gate.evidencePackageId) return false;
+    if (
+      !(await gateEvidenceIsCurrent(
+        ctx,
+        gate.evidencePackageId,
+        propertyId,
+        definition.gateNo,
+        now,
+      ))
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // seedGates — the SINGLE gate-creation helper, shared by `beginGating` and `createPropertyFromDeal` so
@@ -215,6 +270,7 @@ export const loadGate = internalQuery({
     status: Doc<"diligenceGates">["status"];
     multiParty: boolean;
     signerWorkosIds: string[];
+    evidencePackageId?: Id<"evidencePackages">;
   } | null> => {
     const gate = await ctx.db
       .query("diligenceGates")
@@ -227,7 +283,24 @@ export const loadGate = internalQuery({
       status: gate.status,
       multiParty: gate.multiParty ?? false,
       signerWorkosIds: gate.signerWorkosIds ?? [],
+      evidencePackageId: gate.evidencePackageId,
     };
+  },
+});
+
+export const validateGateEvidence = internalQuery({
+  args: {
+    propertyId: v.id("properties"),
+    gateNo: v.number(),
+    evidencePackageId: v.id("evidencePackages"),
+  },
+  handler: async (ctx, args): Promise<boolean> => {
+    return await gateEvidenceIsCurrent(
+      ctx,
+      args.evidencePackageId,
+      args.propertyId,
+      args.gateNo,
+    );
   },
 });
 
@@ -246,7 +319,7 @@ export const recordSignature = internalMutation({
     gateId: v.id("diligenceGates"),
     signerWorkosId: v.string(),
     signerActor: v.string(), // email/name for the audit actor (the named human, never a system)
-    evidencePackageId: v.optional(v.id("evidencePackages")),
+    evidencePackageId: v.id("evidencePackages"),
   },
   handler: async (ctx, args): Promise<{ passed: boolean; signerCount: number }> => {
     const gate = await ctx.db.get(args.gateId);
@@ -254,6 +327,21 @@ export const recordSignature = internalMutation({
     if (gate.status === "passed") {
       // Already fully signed — nothing to add. Never regress or double-count.
       return { passed: true, signerCount: (gate.signerWorkosIds ?? []).length };
+    }
+
+    if (!args.evidencePackageId) throw new Error("Current gate evidence is required");
+    if (
+      !(await gateEvidenceIsCurrent(
+        ctx,
+        args.evidencePackageId,
+        gate.propertyId,
+        gate.gateNo,
+      ))
+    ) {
+      throw new Error("Evidence package is not current for this property and gate");
+    }
+    if (gate.evidencePackageId && gate.evidencePackageId !== args.evidencePackageId) {
+      throw new Error("All signers must sign the same evidence package");
     }
 
     // Append the caller's IDENTITY if not already present (the SoD distinct-signer wall already ran in the
@@ -267,7 +355,7 @@ export const recordSignature = internalMutation({
     const patch: Partial<Doc<"diligenceGates">> = {
       signerWorkosIds: signers,
     };
-    if (args.evidencePackageId) patch.evidencePackageId = args.evidencePackageId;
+    patch.evidencePackageId = args.evidencePackageId;
 
     if (passed) {
       // Resolve the distinct human names for attribution — signedByHuman is NEVER an AI/system.
@@ -317,7 +405,7 @@ export const signGate = action({
   args: {
     propertyId: v.id("properties"),
     gateNo: v.number(),
-    evidencePackageId: v.optional(v.id("evidencePackages")),
+    evidencePackageId: v.id("evidencePackages"),
   },
   handler: async (
     ctx: ActionCtx,
@@ -330,6 +418,17 @@ export const signGate = action({
     if (!gate) throw new Error("Gate not found");
     if (gate.status === "passed") {
       throw new Error("Gate is already fully signed");
+    }
+    if (gate.evidencePackageId && gate.evidencePackageId !== args.evidencePackageId) {
+      throw new Error("All signers must sign the same evidence package");
+    }
+    const evidenceValid = await ctx.runQuery(internal.gates.validateGateEvidence, {
+      propertyId: args.propertyId,
+      gateNo: args.gateNo,
+      evidencePackageId: args.evidencePackageId,
+    });
+    if (!evidenceValid) {
+      throw new Error("Evidence package is not current for this property and gate");
     }
 
     // 1-2's SINGLE SoD entry point — permission (platform_admin denied), fee conflict, distinct signer.

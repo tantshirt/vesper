@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import schema from "./schema";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
 // Admin Story 4.1 — the DISTRIBUTION BUILDER + matches-target. These prove the story's core claims, not
@@ -232,6 +232,43 @@ describe("buildDistribution — idempotent rebuild (updates in place, never dupl
     const paid = rows.find((r) => r.status === "paid");
     expect(paid?.txSig).toBe("sig_paid_u1"); // unchanged — chain truth preserved
     expect(paid?.netPaid).toBe(300);
+  });
+
+  test("rebuild is rejected immediately once escrow funding is reserved", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedDistributable(t);
+    await t.withIdentity(workos("user_ops1")).mutation(api.distributionBuild.buildDistribution, {
+      propertyId,
+      period: PERIOD,
+      grossRentDollars: 900,
+      costsDollars: 300,
+    });
+    const before = await ledgerRows(t, propertyId, PERIOD);
+
+    const reservation = await t.mutation(internal.distributionPay.reserveEscrowFunding, {
+      propertyId,
+      period: PERIOD,
+      actor: "user_ops1@vesper.co",
+    });
+    expect(reservation.execute).toBe(true);
+
+    await expect(
+      t.withIdentity(workos("user_ops1")).mutation(api.distributionBuild.buildDistribution, {
+        propertyId,
+        period: PERIOD,
+        grossRentDollars: 1200,
+        costsDollars: 0,
+      }),
+    ).rejects.toThrow("Cannot rebuild a distribution draft after escrow funding has been reserved");
+
+    const after = await ledgerRows(t, propertyId, PERIOD);
+    expect(after.map((row) => ({ id: row._id, netPaid: row.netPaid, status: row.status }))).toEqual(
+      before.map((row) => ({ id: row._id, netPaid: row.netPaid, status: row.status })),
+    );
+    const buildAudits = await t.run(async (ctx) =>
+      (await ctx.db.query("auditLog").collect()).filter((row) => row.action === "distribution.built"),
+    );
+    expect(buildAudits).toHaveLength(1);
   });
 });
 

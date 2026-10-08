@@ -47,6 +47,19 @@ if ("WORKOS_CLIENT_ID" in process.env) {
   });
 }
 
+const runtimeEnvironment = process.env.VESPER_RUNTIME_ENV;
+const devAdminAuthFlag = process.env.VESPER_ENABLE_DEV_ADMIN_AUTH;
+const devAdminJwksUrl = process.env.VESPER_DEV_ADMIN_JWKS_URL;
+if (runtimeEnvironment === "development" && devAdminAuthFlag === "true" && devAdminJwksUrl) {
+  providers.push({
+    type: "customJwt",
+    applicationID: "vesper-admin-preview",
+    issuer: "https://dev-admin.vesper.local",
+    jwks: devAdminJwksUrl,
+    algorithm: "RS256",
+  });
+}
+
 const authConfig = { providers };
 
 export default authConfig;

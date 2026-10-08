@@ -118,9 +118,19 @@ describe("createPropertyFromDeal — the sponsor-deal → gating-property chain 
     expect(funding.map((r) => r.propertyId)).toContain(res.propertyId);
 
     // And a gate signer can sign the freshly-created property's gates (the ceremony works on it).
+    const evidencePackageId = await t.run(async (ctx) =>
+      ctx.db.insert("evidencePackages", {
+        propertyId: res.propertyId,
+        gateNo: 0,
+        fieldIds: [],
+        status: "assembled",
+        assembledBy: "reviewer@vesper.co",
+        assembledAt: Date.now(),
+      }),
+    );
     const signed = await t
       .withIdentity(workos("user_ops1"))
-      .action(api.gates.signGate, { propertyId: res.propertyId, gateNo: 0 });
+      .action(api.gates.signGate, { propertyId: res.propertyId, gateNo: 0, evidencePackageId });
     expect(signed.passed).toBe(true);
   });
 

@@ -1,56 +1,39 @@
 "use client";
 
-/**
- * PurchaseButton — minimal end-to-end wiring of the `usePurchase` flow.
- *
- * A single button that builds → signs (via the Privy embedded wallet) → submits
- * → confirms → mirrors a primary purchase, with plain status text. This is the
- * prototype surface; real screens compose the hook with the design system.
- *
- * Copy stays fiat-native (shares, dollars) — never "USDC".
- */
-
+import type { Id } from "@/convex/_generated/dataModel";
 import { usePurchase } from "@/lib/solana/usePurchase";
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "",
-  building: "Preparing your purchase…",
-  signing: "Confirm your purchase…",
-  confirming: "Completing your purchase…",
-  confirmed: "Purchase complete.",
-  error: "Something went wrong.",
+  building: "Preparing your order...",
+  signing: "Waiting for your authorization...",
+  submitted: "Submitted. Payment may be processing.",
+  checking: "Checking the submitted payment...",
+  reconciling: "Payment confirmed. Ownership records are updating.",
+  complete: "Purchase complete.",
+  failed_safe: "No payment was submitted.",
+  outcome_unknown: "Payment may have completed. Check the saved reference before taking action.",
 };
 
-export function PurchaseButton({
-  propertyMint,
-  tokenAmount = 1,
-}: {
-  propertyMint: string;
-  tokenAmount?: number;
-}) {
-  const { purchase, status, signature, error } = usePurchase();
-  const busy =
-    status === "building" || status === "signing" || status === "confirming";
-
-  const shares = tokenAmount === 1 ? "share" : "shares";
+export function PurchaseButton({ operationId }: { operationId: Id<"orders"> }) {
+  const { purchase, checkStatus, status, signature, error } = usePurchase();
+  const busy = ["building", "signing", "submitted", "checking"].includes(status);
+  const submitted = Boolean(signature) || ["submitted", "checking", "reconciling", "complete", "outcome_unknown"].includes(status);
 
   return (
-    <div>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void purchase(propertyMint, tokenAmount)}
-      >
-        {busy ? "Working…" : `Buy ${tokenAmount} ${shares}`}
-      </button>
-
-      {status !== "idle" && (
-        <p role="status">{STATUS_LABEL[status] ?? status}</p>
+    <div aria-live="polite">
+      {!submitted && (
+        <button type="button" disabled={busy} onClick={() => void purchase(operationId)}>
+          {busy ? "Working..." : "Authorize purchase"}
+        </button>
       )}
+      {status === "outcome_unknown" && signature && (
+        <button type="button" disabled={busy} onClick={() => void checkStatus(operationId, signature)}>
+          Check status
+        </button>
+      )}
+      {status !== "idle" && <p role="status">{STATUS_LABEL[status] ?? status}</p>}
       {error && <p role="alert">{error}</p>}
-      {signature && (
-        <p>Confirmation saved to your account.</p>
-      )}
     </div>
   );
 }

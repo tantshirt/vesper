@@ -80,15 +80,46 @@ async function reconciliations(t: ReturnType<typeof convexTest>) {
   return await t.run(async (ctx) => ctx.db.query("reconciliations").collect());
 }
 
+async function seedSubmittedMintOperation(
+  t: ReturnType<typeof convexTest>,
+  propertyId: Id<"properties">,
+  signature: string,
+  mint = "MintMonroe111",
+) {
+  await t.run(async (ctx) => {
+    const now = Date.now();
+    await ctx.db.insert("externalOperations", {
+      kind: "mint",
+      idempotencyKey: `mint:${propertyId}`,
+      status: "submitted",
+      actor: "test-operator",
+      subject: String(propertyId),
+      propertyId,
+      amountBaseUnits: "1240000",
+      desiredConsequence: "create_property_mint_and_initialize_offering",
+      attemptCount: 1,
+      providerReference: mint,
+      submittedSignature: signature,
+      lastCheckpoint: "mint_provider_accepted_awaiting_chain_confirmation",
+      retrySafe: false,
+      createdAt: now,
+      updatedAt: now,
+      submittedAt: now,
+    });
+  });
+}
+
 describe("mint_confirmed reconcile — flips minting→confirmed, audits mint.confirmed", () => {
   test("a mint-confirmation event confirms the property and writes an applied reconciliation", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await seedProperty(t, { mint: "MintMonroe111", mintStatus: "minting" });
+    await seedSubmittedMintOperation(t, propertyId, "SIG-CONFIRM-1");
 
     const res = await t.mutation(internal.reconcile.applyChainEvent, {
       type: "mint_confirmed",
       signature: "SIG-CONFIRM-1",
       mint: "MintMonroe111",
+      slot: 100,
     });
     expect(res.status).toBe("applied");
 
@@ -109,17 +140,20 @@ describe("mint_confirmed reconcile — flips minting→confirmed, audits mint.co
 
   test("a duplicate signature is a no-op (idempotent — no second flip, audit, or row)", async () => {
     const t = convexTest(schema, modules);
-    await seedProperty(t, { mint: "MintMonroe111", mintStatus: "minting" });
+    const propertyId = await seedProperty(t, { mint: "MintMonroe111", mintStatus: "minting" });
+    await seedSubmittedMintOperation(t, propertyId, "SIG-CONFIRM-1");
 
     await t.mutation(internal.reconcile.applyChainEvent, {
       type: "mint_confirmed",
       signature: "SIG-CONFIRM-1",
       mint: "MintMonroe111",
+      slot: 101,
     });
     const again = await t.mutation(internal.reconcile.applyChainEvent, {
       type: "mint_confirmed",
       signature: "SIG-CONFIRM-1",
       mint: "MintMonroe111",
+      slot: 101,
     });
     expect(again.status).toBe("duplicate");
 
@@ -181,11 +215,13 @@ describe("chain wins — a divergent Convex value is overwritten with a logged d
     // Convex diverged: the property carries the mint but never advanced past "none" (e.g. a rolled-back
     // recordMint), while the chain reports the mint confirmed.
     const propertyId = await seedProperty(t, { mint: "MintMonroe111", mintStatus: "none" });
+    await seedSubmittedMintOperation(t, propertyId, "SIG-CONFIRM-DRIFT");
 
     const res = await t.mutation(internal.reconcile.applyChainEvent, {
       type: "mint_confirmed",
       signature: "SIG-CONFIRM-DRIFT",
       mint: "MintMonroe111",
+      slot: 102,
     });
     expect(res.status).toBe("applied");
     expect((res as { discrepancy?: unknown }).discrepancy).toEqual({
@@ -214,19 +250,22 @@ describe("reconciliationStatus — surfaces unresolved/discrepancy; gated read",
   test("surfaces an unresolved row and a discrepancy row for a permitted caller", async () => {
     const t = convexTest(schema, modules);
     await seedStaff(t, { workosId: "user_ops1", roles: ["ops_diligence"] });
-    await seedProperty(t, { mint: "MintMonroe111", mintStatus: "none" });
+    const propertyId = await seedProperty(t, { mint: "MintMonroe111", mintStatus: "none" });
+    await seedSubmittedMintOperation(t, propertyId, "SIG-DRIFT");
 
     // A discrepancy (drift) row.
     await t.mutation(internal.reconcile.applyChainEvent, {
       type: "mint_confirmed",
       signature: "SIG-DRIFT",
       mint: "MintMonroe111",
+      slot: 103,
     });
     // An unresolved row — a confirmation for a mint no property carries.
     await t.mutation(internal.reconcile.applyChainEvent, {
       type: "mint_confirmed",
       signature: "SIG-UNRESOLVED",
       mint: "MintUnknown999",
+      slot: 104,
     });
 
     const status = await t
@@ -261,11 +300,12 @@ describe("real Helius path (INV3) — an ownerless property-mint event normalize
   test("normalizeHeliusEvent promotes an ownerless mint event, and applyChainEvent confirms the mint", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await seedProperty(t, { mint: "MintMonroe111", mintStatus: "minting" });
+    await seedSubmittedMintOperation(t, propertyId, "HELIUS-MINT-CREATE-1");
 
     // A property-mint CREATION event as Helius would deliver it: a mint-ish type naming the property mint,
     // but with NO holder (no owner, no tokenAmount) — i.e. NOT a user token transfer.
     const events = normalizeHeliusEvent([
-      { type: "TOKEN_MINT", signature: "HELIUS-MINT-CREATE-1", mint: "MintMonroe111" },
+      { type: "TOKEN_MINT", signature: "HELIUS-MINT-CREATE-1", mint: "MintMonroe111", slot: 105 },
     ]);
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("mint_confirmed"); // promoted by the ownerless-mint rule
@@ -288,8 +328,7 @@ describe("real Helius path (INV3) — an ownerless property-mint event normalize
     expect(await reconciliations(t)).toHaveLength(1);
   });
 
-  test("a mint event WITH a holder stays 'mint' (a user-holding reconcile), never mint_confirmed", async () => {
-    // A mint event carrying an owner + tokenAmount is a holding transfer — it must NOT be promoted.
+  test("a mint delta WITH a holder stays mint but is quarantined for post-balance refetch", async () => {
     const events = normalizeHeliusEvent([
       {
         type: "mint",
@@ -301,7 +340,23 @@ describe("real Helius path (INV3) — an ownerless property-mint event normalize
     ]);
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("mint");
-    expect(events[0].tokenAmount).toBe(42);
+    expect(events[0].tokenAmount).toBeUndefined();
+    expect(events[0].quarantineReason).toContain("post-balance");
+  });
+
+  test("an unrelated mint signature cannot confirm a reserved mint operation", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await seedProperty(t, { mint: "MintMonroe111", mintStatus: "minting" });
+    await seedSubmittedMintOperation(t, propertyId, "EXPECTED-MINT-SIGNATURE");
+
+    const result = await t.mutation(internal.reconcile.applyChainEvent, {
+      type: "mint_confirmed",
+      signature: "UNRELATED-MINT-SIGNATURE",
+      mint: "MintMonroe111",
+      slot: 106,
+    });
+    expect(result.status).toBe("quarantined");
+    expect((await property(t, propertyId))?.mintStatus).toBe("minting");
   });
 });
 

@@ -213,16 +213,21 @@ describe("CAPSTONE — the whole assembled admin chain composes end-to-end", () 
 
     // ══ 3. GATE CEREMONY (3.1 + 1-2 SoD) ═══════════════════════════════════════════════════════════
     // Attach a REAL assembled evidence package to gate 1 — evidence with citations, NEVER an approval.
-    const pkgId = await t.run(async (ctx) =>
-      ctx.db.insert("evidencePackages", {
-        propertyId,
-        gateNo: 1,
-        fieldIds: [],
-        status: "assembled",
-        assembledBy: "marcus@vesper.co",
-        assembledAt: Date.now(),
-      }),
-    );
+    const packageIds = new Map<number, Id<"evidencePackages">>();
+    for (const gateNo of GATE_DEFINITIONS.map((gate) => gate.gateNo)) {
+      const packageId = await t.run(async (ctx) =>
+        ctx.db.insert("evidencePackages", {
+          propertyId,
+          gateNo,
+          fieldIds: [],
+          status: "assembled",
+          assembledBy: "marcus@vesper.co",
+          assembledAt: Date.now(),
+        }),
+      );
+      packageIds.set(gateNo, packageId);
+    }
+    const pkgId = packageIds.get(1)!;
 
     const gateStatus = async () =>
       await ops1.query(api.gates.propertyGateStatus, { propertyId });
@@ -232,18 +237,19 @@ describe("CAPSTONE — the whole assembled admin chain composes end-to-end", () 
       const res = await ops1.action(api.gates.signGate, {
         propertyId,
         gateNo,
-        ...(gateNo === 1 ? { evidencePackageId: pkgId } : {}),
+        evidencePackageId: packageIds.get(gateNo)!,
       });
       expect(res.passed).toBe(true);
       expect((await gateStatus()).allGatesSigned).toBe(false);
     }
 
     // Gate 6 is multi-party: one distinct signer leaves it pending, a DISTINCT second signer passes it.
-    const g6first = await ops1.action(api.gates.signGate, { propertyId, gateNo: 6 });
+    const gate6Evidence = packageIds.get(6)!;
+    const g6first = await ops1.action(api.gates.signGate, { propertyId, gateNo: 6, evidencePackageId: gate6Evidence });
     expect(g6first.passed).toBe(false);
     expect((await gateStatus()).allGatesSigned).toBe(false); // still false — needs a 2nd distinct human
 
-    const g6second = await ops2.action(api.gates.signGate, { propertyId, gateNo: 6 });
+    const g6second = await ops2.action(api.gates.signGate, { propertyId, gateNo: 6, evidencePackageId: gate6Evidence });
     expect(g6second.passed).toBe(true);
     expect(g6second.signerCount).toBe(2);
 
@@ -320,7 +326,7 @@ describe("CAPSTONE — the whole assembled admin chain composes end-to-end", () 
     expect(ledger[0].txSig).toBeUndefined();
 
     // Fund the escrow (B1 custody stub) — fund BEFORE push.
-    const funded = await ops1.mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    const funded = await ops1.action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
     expect(funded.funded).toBe(true);
     expect(funded.fundedAmount).toBe(300);
 

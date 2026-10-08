@@ -1,8 +1,13 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
-import { findUserByIdentity, identityKey, requireUnsafeStubs } from "./security";
+import {
+  developmentStubEnabled,
+  findUserByIdentity,
+  identityKey,
+  requireDevelopmentStub,
+} from "./security";
+import { enqueueEligibilityAttestation } from "./eligibilityAttest";
 
 // Story 3.2 — KYC + Reg A+ eligibility.
 //
@@ -24,6 +29,10 @@ export function computeRegALimit(input: { annualIncome: number; netWorth: number
   const income = Number.isFinite(input.annualIncome) ? Math.max(0, input.annualIncome) : 0;
   const netWorth = Number.isFinite(input.netWorth) ? Math.max(0, input.netWorth) : 0;
   return 0.1 * Math.max(income, netWorth);
+}
+
+export function regulatoryYear(now = Date.now()): number {
+  return new Date(now).getUTCFullYear();
 }
 
 // Reg A+ per-investor cap STATUS for the compliance-oversight view (Admin 5.2). Pure + ctx-free.
@@ -108,6 +117,23 @@ export const getEligibility = query({
   },
 });
 
+// The self-service identity form is only a development simulation. Expose that capability explicitly
+// so production renders a truthful blocked state instead of offering a submission that must fail.
+export const getIdentityRailStatus = query({
+  args: {},
+  handler: async () => {
+    const developmentSimulation = developmentStubEnabled("kyc");
+    return {
+      available: developmentSimulation,
+      verifiedProvider: false,
+      developmentSimulation,
+      blocker: developmentSimulation
+        ? "Development identity simulation"
+        : "Verified identity provider is not configured",
+    };
+  },
+});
+
 // --- Mutations --------------------------------------------------------------------------------
 
 // Records the (stubbed-Persona) KYC result and mirrors eligibility into the Token-ACL state.
@@ -129,15 +155,37 @@ export const recordEligibility = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
     const actor = identityKey(identity);
-    requireUnsafeStubs("Stub KYC");
+    requireDevelopmentStub("kyc", "Stub KYC");
 
     const user = await findUserByIdentity(ctx, identity);
     if (!user) throw new Error("User not provisioned");
 
-    // Identity-check failure: mark failed (idempotently) and audit. No thaw, no throw — retryable.
+    // Identity-check failure revokes every prior property entitlement. Leaving an old row thawed
+    // after a failed recheck would let the failed identity continue purchasing on chain.
     if (!args.verified) {
       if (user.kycStatus !== "failed") {
         await ctx.db.patch(user._id, { kycStatus: "failed" });
+      }
+      const existingRows = await ctx.db
+        .query("eligibility")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect();
+      for (const row of existingRows) {
+        if (row.eligible || row.tokenAclState !== "frozen") {
+          await ctx.db.patch(row._id, { eligible: false, tokenAclState: "frozen" });
+          await writeAudit(ctx, {
+            actor,
+            action: "acl.frozen",
+            target: user._id,
+            meta: { propertyId: row.propertyId, reason: "kyc-failed" },
+          });
+        }
+        await enqueueEligibilityAttestation(ctx, {
+          userId: user._id,
+          propertyId: row.propertyId,
+          eligible: false,
+          forceRetry: true,
+        });
       }
       await writeAudit(ctx, {
         actor,
@@ -156,13 +204,27 @@ export const recordEligibility = mutation({
     });
     // Audit the verification only on an actual transition (status or cap change), so idempotent
     // re-submits of identical data don't spam kyc.verified rows with no matching eligibility change.
-    if (user.kycStatus !== "verified" || user.regAAnnualLimit !== regAAnnualLimit) {
-      await ctx.db.patch(user._id, { kycStatus: "verified", regAAnnualLimit });
+    const year = regulatoryYear();
+    const yearChanged =
+      user.regARegulatoryYear !== undefined && user.regARegulatoryYear !== year;
+    if (
+      user.kycStatus !== "verified" ||
+      user.regAAnnualLimit !== regAAnnualLimit ||
+      user.regARegulatoryYear !== year
+    ) {
+      await ctx.db.patch(user._id, {
+        kycStatus: "verified",
+        regAAnnualLimit,
+        regARegulatoryYear: year,
+        // Legacy rows without a year are conservatively assigned to the current year and retain
+        // their accumulator. A known prior year resets at the UTC year boundary.
+        ...(yearChanged ? { regAInvestedThisYear: 0 } : {}),
+      });
       await writeAudit(ctx, {
         actor,
         action: "kyc.verified",
         target: user._id,
-        meta: { propertyId: args.propertyId, regAAnnualLimit },
+        meta: { propertyId: args.propertyId, regAAnnualLimit, regulatoryYear: year },
       });
     }
 
@@ -230,7 +292,7 @@ export const recordEligibility = mutation({
       // Without this, buildSettlePurchaseTransaction injects a thaw that the program reverts (NotEligible),
       // breaking first-time on-chain purchases. Scheduled (not awaited) — attestation is an async chain
       // effect, not part of this mutation's atomic Convex write. Only fires on a real state transition.
-      await ctx.scheduler.runAfter(0, internal.eligibilityAttest.attestEligibilityOnChain, {
+      await enqueueEligibilityAttestation(ctx, {
         userId: user._id,
         propertyId: args.propertyId,
         eligible,

@@ -27,6 +27,13 @@ export interface InvestUser {
   walletAddress?: string | null;
 }
 
+export function shouldHoldForPurchaseRestore(
+  isAuthenticated: boolean,
+  operation: unknown | null | undefined,
+): boolean {
+  return isAuthenticated && operation === undefined;
+}
+
 function isNonEmpty(value?: string | null): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -165,6 +172,11 @@ export const INVEST_COPY = {
   kycCta: "Begin identity check",
   kycSubmitting: "Checking…",
   kycRetryNote: "That didn't go through. No harm done — you can try the check again.",
+  kycUnavailableTitle: "Identity checks are temporarily unavailable",
+  kycUnavailableBody:
+    "We cannot verify your identity securely right now, so investing is paused. Your account and this property remain available while we connect our verification provider.",
+  kycUnavailableCta: "Back to property",
+  kycDevelopmentNote: "Development identity simulation — no provider verification occurs.",
 
   // --- Story 3.2: restricted jurisdiction (restricted state) ---
   restrictedTitle: "We're not open in your area just yet",

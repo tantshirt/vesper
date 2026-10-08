@@ -166,7 +166,7 @@ describe("pauseDistribution — never silent (structured reason required)", () =
     const t = convexTest(schema, modules);
     const { propertyId } = await seedBuiltDraft(t);
     // Fund → push → confirm so the period is chain-paid, then a pause must refuse.
-    await t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
     await t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
     await t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.confirmDistributionStub, { propertyId, period: PERIOD });
 
@@ -184,8 +184,6 @@ describe("a paused period cannot be pushed (4-2) until resumed", () => {
   test("push refuses a paused period; resume flips it back to scheduled and the push proceeds", async () => {
     const t = convexTest(schema, modules);
     const { propertyId } = await seedBuiltDraft(t);
-    await t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
-
     // Pause — rows go missed.
     await t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.pauseDistribution, {
       propertyId,
@@ -208,7 +206,8 @@ describe("a paused period cannot be pushed (4-2) until resumed", () => {
     const resumedAudit = (await auditRows(t)).filter((a) => a.action === "distribution.resumed");
     expect(resumedAudit).toHaveLength(1);
 
-    // With the period resumed, the push now proceeds normally.
+    // With the period resumed, lock the final draft by funding it, then push normally.
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
     const res = await t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
     expect(res.pushed).toBe(2);
   });
@@ -253,7 +252,7 @@ describe("reconcile is unchanged — a pushed + confirmed distribution still rec
   test("fund → push → confirm flips scheduled → paid via income.reconciled (chain owns the flip)", async () => {
     const t = convexTest(schema, modules);
     const { propertyId } = await seedBuiltDraft(t);
-    await t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
     await t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
     const confirm = await t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.confirmDistributionStub, { propertyId, period: PERIOD });
     expect(confirm.confirmed).toBe(true);

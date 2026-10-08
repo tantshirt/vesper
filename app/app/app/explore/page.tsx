@@ -74,7 +74,6 @@ function PropertyCard({ p }: { p: Doc<"properties"> }) {
       <div className="pcard-img">
         <img className="pcard-photo" src={propertyImage(p.name, p._id)} alt={p.name} loading="lazy" />
         <span className="badge">FUNDING · {funded}%</span>
-        <span className="yield">{pct(p.targetNetYield)}</span>
       </div>
       <div className="pcard-b">
         <div className="pn">{p.name}</div>
@@ -83,6 +82,11 @@ function PropertyCard({ p }: { p: Doc<"properties"> }) {
           <span className="ptag">${p.minInvestment} min</span>
           <span className="ptag">Monthly income</span>
         </div>
+        <div className="fundmeta">
+          <span>Target net yield</span>
+          <b>{pct(p.targetNetYield)}</b>
+        </div>
+        <p className="pd-note">Target, not guaranteed.</p>
         <div className="fundbar"><i style={{ width: `${funded}%` }} /></div>
         <div className="fundmeta"><span>{p.spvName}</span><span>{funded}%</span></div>
       </div>

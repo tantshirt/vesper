@@ -3,7 +3,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { writeAudit } from "./audit";
-import { isWorkosIdentity, requireUnsafeStubs } from "./security";
+import { isWorkosIdentity, requireDevelopmentStub } from "./security";
 import { requireStaff, requirePermission, applyGrant } from "./rbac";
 import { isSponsorRole, sponsorRoleValidator } from "./roles";
 import { missingRequiredKinds, DOC_KIND_LABELS, type DocKind } from "./sponsorIntake";
@@ -166,7 +166,7 @@ export const startDeal = mutation({
 
 // recordKyb — Gate 0. The STUBBED Middesk result boundary (same posture as eligibility.ts / the Persona
 // stub): this mutation IS the KYB-result seam — the live Middesk hosted flow + webhook that would call
-// it is deferred. `requireUnsafeStubs`-guarded so it is disabled outside test / an explicit flag until a
+// it is deferred. Its dedicated development guard disables it outside test / an explicit flag until a
 // real vendor is wired. Sets the org's `kybStatus`, records the (stubbed) `kybRef`, audits
 // `sponsor.kyb.recorded` to the sponsor human. Only a sponsor_principal (sponsor.manage) may record it.
 export const recordKyb = mutation({
@@ -180,7 +180,7 @@ export const recordKyb = mutation({
     await requirePermission(ctx, "sponsor.manage");
     // Live Middesk is not wired — this seam is disabled outside test / an explicit flag, exactly as the
     // Persona KYC stub in eligibility.ts. Do NOT fabricate a live vendor call.
-    requireUnsafeStubs("Stub KYB");
+    requireDevelopmentStub("kyb", "Stub KYB");
 
     const org = await ctx.db.get(orgId);
     if (!org) throw new Error("Sponsor org not found");

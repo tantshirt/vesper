@@ -91,9 +91,9 @@ async function holdersByUser(
 // Refuses unless the property is `open` (a gating/unlisted property cannot be built against); resolves
 // holders by the SAME ownershipPct weighting the push uses; apportions the net pool with `computeShares`;
 // writes each holder's `splitDistribution` waterfall as a `scheduled` incomeLedger row (idempotent upsert
-// per (user, property, period) — rebuild updates, never duplicates; a `paid` row is chain truth and is
-// left untouched); computes matchesTarget vs targetNetYield (a variance surfaces, never throws); audits
-// `distribution.built` (aggregate counts only, no PII). NO money moves; no row is `paid`.
+// per (user, property, period) until escrow funding is reserved; a funded draft is immutable and a
+// `paid` row is chain truth); computes matchesTarget vs targetNetYield (a variance surfaces, never
+// throws); audits `distribution.built` (aggregate counts only, no PII). NO money moves; no row is `paid`.
 export const buildDistribution = mutation({
   args: {
     propertyId: v.id("properties"),
@@ -113,6 +113,20 @@ export const buildDistribution = mutation({
       throw new Error(
         `Cannot build a distribution for a ${property.status} property — only a listed (open) property`,
       );
+    }
+
+    // Funding reserves an external custody consequence before contacting the provider. From that first
+    // durable reservation onward, changing any row could make the scheduled aggregate diverge from the
+    // exact base units reserved in escrow. Every operation status therefore locks the draft, including
+    // leased/unknown/failed states; only explicit custody reconciliation may resolve that consequence.
+    const escrowOperation = await ctx.db
+      .query("externalOperations")
+      .withIndex("by_idempotency_key", (q) =>
+        q.eq("idempotencyKey", `escrow:${args.propertyId}:${args.period}`),
+      )
+      .unique();
+    if (escrowOperation) {
+      throw new Error("Cannot rebuild a distribution draft after escrow funding has been reserved");
     }
 
     const { weightByUser, basis } = await holdersByUser(ctx, args.propertyId);

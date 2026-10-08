@@ -5,7 +5,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { writeAudit } from "./audit";
 import { requirePermission } from "./rbac";
-import { requireUnsafeStubs } from "./security";
+import { requireDevelopmentStub } from "./security";
 import { regACapStatus, type RegACapState } from "./eligibility";
 
 // Admin Story 5.1 — the compliance officer's KYC/AML adjudication → Token-ACL surface.
@@ -193,7 +193,8 @@ export const setTokenAclState = mutation({
   },
 });
 
-// screenAml — the STUBBED AML screening input, gated on `compliance.review` AND `requireUnsafeStubs`
+// screenAml — the STUBBED AML screening input, gated on `compliance.review` and its dedicated
+// development-only feature flag
 // (same posture as the Persona/Middesk/DvP stubs — it REFUSES with no server-attested provider rather
 // than fabricating a live ComplyAdvantage/TRM call). Records an `amlFlag` on the case for the reviewer
 // and audits `compliance.aml.screened`. It only records a flag — it never itself changes the ACL.
@@ -205,7 +206,7 @@ export const screenAml = mutation({
   },
   handler: async (ctx, { userId, propertyId, flag }) => {
     const staff = await requirePermission(ctx, "compliance.review");
-    requireUnsafeStubs("AML screening");
+    requireDevelopmentStub("aml", "AML screening");
     const actor = staffActor(staff);
 
     const user = await ctx.db.get(userId);

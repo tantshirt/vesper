@@ -66,13 +66,28 @@ async function seedGatingProperty(t: ReturnType<typeof convexTest>): Promise<Id<
   return propertyId;
 }
 
+async function evidenceFor(t: ReturnType<typeof convexTest>, propertyId: Id<"properties">, gateNo: number) {
+  return await t.run(async (ctx) =>
+    ctx.db.insert("evidencePackages", {
+      propertyId,
+      gateNo,
+      fieldIds: [],
+      status: "assembled",
+      assembledBy: "reviewer@vesper.co",
+      assembledAt: Date.now(),
+    }),
+  );
+}
+
 // Sign all 8 gates: 0..5,7 single-party (ops1); gate 6 multi-party needs two DISTINCT humans.
 async function signAllGates(t: ReturnType<typeof convexTest>, propertyId: Id<"properties">) {
   for (const gateNo of [0, 1, 2, 3, 4, 5, 7]) {
-    await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo });
+    const evidencePackageId = await evidenceFor(t, propertyId, gateNo);
+    await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo, evidencePackageId });
   }
-  await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo: 6 });
-  await t.withIdentity(workos("user_ops2")).action(api.gates.signGate, { propertyId, gateNo: 6 });
+  const evidencePackageId = await evidenceFor(t, propertyId, 6);
+  await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo: 6, evidencePackageId });
+  await t.withIdentity(workos("user_ops2")).action(api.gates.signGate, { propertyId, gateNo: 6, evidencePackageId });
 }
 
 async function fullyGatedProperty(t: ReturnType<typeof convexTest>): Promise<Id<"properties">> {
@@ -105,7 +120,8 @@ describe("mintOffering — the GATE WALL (3-1): an unsigned gate refuses the min
     const propertyId = await seedGatingProperty(t);
     // Sign every single-party gate but leave the multi-party gate 6 unsigned.
     for (const gateNo of [0, 1, 2, 3, 4, 5, 7]) {
-      await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo });
+      const evidencePackageId = await evidenceFor(t, propertyId, gateNo);
+      await t.withIdentity(workos("user_ops1")).action(api.gates.signGate, { propertyId, gateNo, evidencePackageId });
     }
     await expect(
       t.withIdentity(workos("user_ops1")).action(api.mint.mintOffering, { propertyId }),
@@ -139,14 +155,15 @@ describe("mintOffering — a fully-gated property mints, and re-mint is refused 
     expect((executed[0].meta as { mint: string }).mint).toBe(res.mint);
   });
 
-  test("a second mint attempt refuses — no double-mint", async () => {
+  test("a second mint attempt returns the durable operation — no double-mint", async () => {
     const t = convexTest(schema, modules);
     const propertyId = await fullyGatedProperty(t);
 
     await t.withIdentity(workos("user_ops1")).action(api.mint.mintOffering, { propertyId });
-    await expect(
-      t.withIdentity(workos("user_ops1")).action(api.mint.mintOffering, { propertyId }),
-    ).rejects.toThrow("Property already minted");
+    const repeated = await t
+      .withIdentity(workos("user_ops1"))
+      .action(api.mint.mintOffering, { propertyId });
+    expect(repeated).toMatchObject({ alreadyReserved: true, minted: true, status: "submitted" });
 
     // Exactly ONE mint.executed audit — the second attempt wrote nothing.
     const executed = (await auditRows(t)).filter((a) => a.action === "mint.executed");
@@ -168,6 +185,48 @@ describe("mintOffering — a fully-gated property mints, and re-mint is refused 
       }),
     ).rejects.toThrow("Property already minted");
   });
+
+  test("concurrent requests reserve one provider operation and execute one attempt", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await fullyGatedProperty(t);
+
+    const results = await Promise.all([
+      t.withIdentity(workos("user_ops1")).action(api.mint.mintOffering, { propertyId }),
+      t.withIdentity(workos("user_ops1")).action(api.mint.mintOffering, { propertyId }),
+    ]);
+    expect(results.some((result) => result.minted)).toBe(true);
+    expect(results.every((result) => result.minted || result.alreadyReserved)).toBe(true);
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    expect(operations).toHaveLength(1);
+    expect(operations[0]).toMatchObject({
+      kind: "mint",
+      status: "submitted",
+      attemptCount: 1,
+      amountBaseUnits: "1240000",
+      retrySafe: false,
+    });
+    expect((await auditRows(t)).filter((row) => row.action === "mint.executed")).toHaveLength(1);
+  });
+
+  test("an expired mint lease becomes unknown and is never automatically replayed", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await fullyGatedProperty(t);
+    const reservation = await t.mutation(internal.mint.reserveMintOperation, {
+      propertyId,
+      actor: "user_ops1@vesper.co",
+    });
+    expect(reservation.execute).toBe(true);
+    await t.run(async (ctx) => ctx.db.patch(reservation.operationId, { leaseExpiresAt: 0 }));
+
+    const repeated = await t.mutation(internal.mint.reserveMintOperation, {
+      propertyId,
+      actor: "user_ops1@vesper.co",
+    });
+    expect(repeated).toMatchObject({ execute: false, status: "unknown" });
+    const operation = await t.run(async (ctx) => ctx.db.get(reservation.operationId));
+    expect(operation).toMatchObject({ status: "unknown", attemptCount: 1, retrySafe: false });
+    expect((await property(t, propertyId))?.mint).toBeUndefined();
+  });
 });
 
 describe("mintOffering — the requireStepUp stub gates the irreversible act", () => {
@@ -188,6 +247,49 @@ describe("mintOffering — the requireStepUp stub gates the irreversible act", (
     const p = await property(t, propertyId);
     expect(p?.mint).toBeUndefined();
     expect(p?.mintStatus ?? "none").toBe("none");
+  });
+
+  test("production cannot enable the mint stub even when its feature flag is true", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await fullyGatedProperty(t);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VESPER_ENABLE_UNSAFE_STUBS", "true");
+    vi.stubEnv("VESPER_ENABLE_MINT_STUB", "true");
+
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.mint.mintOffering, { propertyId }),
+    ).rejects.toThrow("Step-up authentication is required");
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    expect(operations).toHaveLength(0);
+  });
+
+  test("an exception after mint dispatch is unknown and cannot replay", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await fullyGatedProperty(t);
+    vi.stubEnv("VESPER_STUB_MINT_PROVIDER_THROW", "true");
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.mint.mintOffering, { propertyId }),
+    ).rejects.toThrow("after dispatch");
+    vi.stubEnv("VESPER_STUB_MINT_PROVIDER_THROW", "");
+
+    const repeated = await t
+      .withIdentity(workos("user_ops1"))
+      .action(api.mint.mintOffering, { propertyId });
+    expect(repeated).toMatchObject({ minted: false, alreadyReserved: true, status: "unknown" });
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    expect(operations).toHaveLength(1);
+    expect(operations[0]).toMatchObject({ status: "unknown", attemptCount: 1, retrySafe: false });
+
+    await t.mutation(internal.mint.applyVerifiedMintProviderLookup, {
+      propertyId,
+      mint: "LOOKUP-MINT",
+      signature: "LOOKUP-SIGNATURE",
+      amountBaseUnits: "1240000",
+    });
+    expect(await property(t, propertyId)).toMatchObject({ mint: "LOOKUP-MINT", mintStatus: "minting" });
+    await t.withIdentity(workos("user_ops1")).mutation(api.mint.confirmMintStub, { propertyId });
+    const reconciled = await t.run(async (ctx) => ctx.db.get(operations[0]._id));
+    expect(reconciled).toMatchObject({ status: "reconciled", lastCheckpoint: "verified_chain_event_reconciled" });
   });
 });
 
@@ -233,6 +335,17 @@ describe("listOffering — list ONLY after the mint is confirmed on-chain (3-3)"
     await expect(
       t.withIdentity(workos("user_ops1")).mutation(api.mint.confirmMintStub, { propertyId }),
     ).rejects.toThrow("Cannot confirm a mint that has not been executed");
+  });
+
+  test("production cannot enable the mint confirmation stub", async () => {
+    const t = convexTest(schema, modules);
+    const propertyId = await fullyGatedProperty(t);
+    await t.withIdentity(workos("user_ops1")).action(api.mint.mintOffering, { propertyId });
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VESPER_ENABLE_MINT_CONFIRM_STUB", "true");
+    await expect(
+      t.withIdentity(workos("user_ops1")).mutation(api.mint.confirmMintStub, { propertyId }),
+    ).rejects.toThrow("Mint confirmation stub is disabled");
   });
 });
 

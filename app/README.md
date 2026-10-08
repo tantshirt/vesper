@@ -37,10 +37,22 @@ npm run dev                               # http://localhost:3000
 - **I7** UI uses design-system tokens (`app/globals.css`, sourced from `D-Design-System`).
 
 ## Safety switches
-- `VESPER_ENABLE_UNSAFE_STUBS=true` enables demo-only KYC, funding, and DvP stubs. Leave unset for production.
+- Provider seams use separate development-only flags: `VESPER_ENABLE_KYC_STUB`,
+  `VESPER_ENABLE_FUNDING_STUB`, `VESPER_ENABLE_KYB_STUB`, `VESPER_ENABLE_AML_STUB`,
+  `VESPER_ENABLE_EXTRACTION_STUB`, `VESPER_ENABLE_DVP_STUB`, and
+  `VESPER_ENABLE_STEP_UP_STUB`. They are always refused when `NODE_ENV=production`; there is no global
+  bypass. Leave all unset outside an intentional local/non-production test deployment.
 - `VESPER_ENABLE_DEMO_SEED=true` enables seed mutations. The rich portfolio seed also requires an explicit `privyId` and `unsafeConfirm`.
 - `VESPER_ENABLE_SOLANA_PAY=true` enables the prototype Solana Pay transaction builder route.
 - `VESPER_ENABLE_PUBLIC_ONCHAIN_CONFIRM=true` enables the prototype client-triggered on-chain confirmation action.
+
+Both Next.js apps enforce HSTS, clickjacking, MIME-sniffing, referrer, permissions, opener, and legacy
+cross-domain-policy headers. A Content Security Policy is not yet enforced because the production
+Convex, Privy, WorkOS, wallet, and Solana RPC origins have not been finalized. Finalize those origins,
+deploy a report-only policy, resolve violations, then promote it to enforcing before production launch.
+Gate evidence has no hardcoded age expiry. Evidence is structurally stale only when it is mismatched,
+future-dated, or superseded by a newer assembled package for the same property and gate. Any legal or
+compliance age limit remains an external policy blocker and must be ratified before implementation.
 
 ## Next stories
 - **E1.2** self-host Fraunces + Inter as `@font-face`; full token pass.

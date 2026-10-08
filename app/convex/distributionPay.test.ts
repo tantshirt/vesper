@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import schema from "./schema";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
 // Admin Story 4.2 — FUND ESCROW + PUSH DISTRIBUTION (no self-settle). These prove the story's
@@ -136,11 +136,54 @@ describe("pushDistribution — FUND BEFORE PUSH", () => {
     const propertyId = await seedProperty(t);
 
     await expect(
-      t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.fundDistributionEscrow, {
+      t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, {
         propertyId,
         period: PERIOD,
       }),
     ).rejects.toThrow("No scheduled distribution draft to fund");
+  });
+
+  test("production cannot enable the custody stub even when its feature flag is true", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VESPER_ENABLE_ESCROW_STUB", "true");
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, {
+        propertyId,
+        period: PERIOD,
+      }),
+    ).rejects.toThrow("Distribution escrow is disabled");
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    expect(operations).toHaveLength(0);
+  });
+
+  test("development stubs require the explicit Vesper runtime environment", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VESPER_RUNTIME_ENV", "");
+    vi.stubEnv("VESPER_ENABLE_ESCROW_STUB", "true");
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, {
+        propertyId,
+        period: PERIOD,
+      }),
+    ).rejects.toThrow("Distribution escrow is disabled");
+  });
+
+  test("development custody stub requires its dedicated feature flag", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VESPER_RUNTIME_ENV", "development");
+    vi.stubEnv("VESPER_ENABLE_ESCROW_STUB", "");
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, {
+        propertyId,
+        period: PERIOD,
+      }),
+    ).rejects.toThrow("Distribution escrow is disabled");
   });
 });
 
@@ -152,7 +195,7 @@ describe("pushDistribution — NO self-settle (push records txSig, leaves rows s
     // Fund the escrow (B1 stub), audited.
     const funded = await t
       .withIdentity(workos("user_ops1"))
-      .mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+      .action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
     expect(funded.funded).toBe(true);
     expect(funded.fundedAmount).toBe(600); // the full built net pool
     const escrowAudit = (await auditRows(t)).filter((a) => a.action === "distribution.escrow.funded");
@@ -176,6 +219,131 @@ describe("pushDistribution — NO self-settle (push records txSig, leaves rows s
     const pushedAudit = (await auditRows(t)).filter((a) => a.action === "distribution.pushed");
     expect(pushedAudit).toHaveLength(1);
   });
+
+  test("escrow funding is exact and repeated requests reuse one custody operation", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    const first = await t
+      .withIdentity(workos("user_ops1"))
+      .action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    const second = await t
+      .withIdentity(workos("user_ops1"))
+      .action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    expect(first).toMatchObject({ funded: true, fundedAmount: 600 });
+    expect(second).toMatchObject({ funded: true, alreadyReserved: true, status: "submitted" });
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    const escrow = operations.filter((operation) => operation.kind === "escrow_funding");
+    expect(escrow).toHaveLength(1);
+    expect(escrow[0]).toMatchObject({ amountBaseUnits: "600000000", attemptCount: 1 });
+    expect((await auditRows(t)).filter((row) => row.action === "distribution.escrow.funded")).toHaveLength(1);
+  });
+
+  test("custody completion must match the exact reserved base-unit amount", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    const reservation = await t.mutation(internal.distributionPay.reserveEscrowFunding, {
+      propertyId,
+      period: PERIOD,
+      actor: "user_ops1@vesper.co",
+    });
+    expect(reservation.execute).toBe(true);
+    if (!reservation.execute) throw new Error("Expected a new escrow reservation");
+
+    await expect(
+      t.mutation(internal.distributionPay.recordEscrowFunding, {
+        operationId: reservation.operationId,
+        leaseToken: reservation.leaseToken,
+        custodyRef: "custody-wrong-amount",
+        fundedAmount: 599.99,
+      }),
+    ).rejects.toThrow("does not match the reserved escrow amount");
+
+    expect(await t.run(async (ctx) => ctx.db.query("distributionEscrow").collect())).toHaveLength(0);
+  });
+
+  test("push rejects a draft whose scheduled aggregate changed after escrow funding", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, {
+      propertyId,
+      period: PERIOD,
+    });
+    const rows = await ledgerRows(t, propertyId, PERIOD);
+    await t.run(async (ctx) => ctx.db.patch(rows[0]._id, { netPaid: rows[0].netPaid + 0.01 }));
+
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, {
+        propertyId,
+        period: PERIOD,
+      }),
+    ).rejects.toThrow("funded escrow no longer matches the locked distribution draft");
+
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    expect(operations.filter((operation) => operation.kind === "distribution_payout")).toHaveLength(0);
+  });
+
+  test("internal payout preparation independently enforces the funded draft invariant", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, {
+      propertyId,
+      period: PERIOD,
+    });
+    const rows = await ledgerRows(t, propertyId, PERIOD);
+    await t.run(async (ctx) => ctx.db.patch(rows[0]._id, { netPaid: rows[0].netPaid - 0.01 }));
+
+    await expect(
+      t.mutation(internal.distributionPush.preparePayoutOperations, {
+        propertyId,
+        period: PERIOD,
+        actor: "user_ops1@vesper.co",
+      }),
+    ).rejects.toThrow("Funded escrow does not match the locked distribution draft");
+  });
+
+  test("pause cannot mutate a draft after escrow funding is reserved", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, {
+      propertyId,
+      period: PERIOD,
+    });
+
+    await expect(
+      t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.pauseDistribution, {
+        propertyId,
+        period: PERIOD,
+        reason: "insufficient_cash_flow",
+      }),
+    ).rejects.toThrow("Cannot mutate a distribution draft after escrow funding has been reserved");
+    expect((await ledgerRows(t, propertyId, PERIOD)).every((row) => row.status === "scheduled")).toBe(true);
+  });
+
+  test("a verified custody lookup resolves an unknown escrow operation", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    const reservation = await t.mutation(internal.distributionPay.reserveEscrowFunding, {
+      propertyId,
+      period: PERIOD,
+      actor: "user_ops1@vesper.co",
+    });
+    expect(reservation.execute).toBe(true);
+    if (!reservation.execute) throw new Error("Expected a new escrow reservation");
+    await t.mutation(internal.distributionPay.markEscrowUnknown, {
+      operationId: reservation.operationId,
+      leaseToken: reservation.leaseToken,
+      message: "connection closed after dispatch",
+    });
+    const resolved = await t.mutation(internal.distributionPay.applyVerifiedEscrowProviderLookup, {
+      propertyId,
+      period: PERIOD,
+      amountBaseUnits: reservation.amountBaseUnits,
+      custodyRef: "custody-verified-1",
+    });
+    expect(resolved).toMatchObject({ status: "reconciled", fundedAmount: 600 });
+    const operation = await t.run(async (ctx) => ctx.db.get(reservation.operationId));
+    expect(operation).toMatchObject({ status: "reconciled", providerReference: "custody-verified-1" });
+  });
 });
 
 describe("confirmDistributionStub — CHAIN owns the paid flip (scheduled → paid)", () => {
@@ -184,7 +352,7 @@ describe("confirmDistributionStub — CHAIN owns the paid flip (scheduled → pa
     const { propertyId } = await seedBuiltDraft(t);
     await t
       .withIdentity(workos("user_ops1"))
-      .mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+      .action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
     await t
       .withIdentity(workos("user_ops1"))
       .action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
@@ -227,6 +395,18 @@ describe("confirmDistributionStub — CHAIN owns the paid flip (scheduled → pa
       }),
     ).rejects.toThrow("No pushed distribution to confirm");
   });
+
+  test("production cannot enable the distribution confirmation stub", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VESPER_ENABLE_DISTRIBUTION_CONFIRM_STUB", "true");
+    await expect(
+      t.withIdentity(workos("user_ops1")).mutation(api.distributionPay.confirmDistributionStub, { propertyId, period: PERIOD }),
+    ).rejects.toThrow("Distribution confirmation stub is disabled");
+  });
 });
 
 describe("pushDistribution — failure is safe + audited + retryable, no double-pay", () => {
@@ -235,7 +415,7 @@ describe("pushDistribution — failure is safe + audited + retryable, no double-
     const { propertyId } = await seedBuiltDraft(t);
     await t
       .withIdentity(workos("user_ops1"))
-      .mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+      .action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
 
     // Inject a seam failure (the real Privy signAndSend rejecting).
     vi.stubEnv("VESPER_STUB_DIST_PUSH_FAIL", "true");
@@ -268,7 +448,7 @@ describe("pushDistribution — failure is safe + audited + retryable, no double-
     const { propertyId } = await seedBuiltDraft(t);
     await t
       .withIdentity(workos("user_ops1"))
-      .mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+      .action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
 
     // First push, then a redundant second push BEFORE confirm — idempotent (same deterministic sigs).
     await t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
@@ -293,6 +473,42 @@ describe("pushDistribution — failure is safe + audited + retryable, no double-
     expect(rows.every((r) => r.status === "paid")).toBe(true);
     expect(rows.map((r) => r.txSig)).toEqual(paidSigs);
   });
+
+  test("an unknown recipient is not replayed while other recipients complete", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId, u1 } = await seedBuiltDraft(t);
+    await t
+      .withIdentity(workos("user_ops1"))
+      .action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    const prepared = await t.mutation(internal.distributionPush.preparePayoutOperations, {
+      propertyId,
+      period: PERIOD,
+      actor: "user_ops1@vesper.co",
+    });
+    const first = prepared.prepared.find((item) => item.userId === u1)!;
+    const claim = await t.mutation(internal.distributionPush.claimPayoutOperation, {
+      operationId: first.operationId,
+    });
+    expect(claim.execute).toBe(true);
+    await t.run(async (ctx) => ctx.db.patch(first.operationId, { leaseExpiresAt: 0 }));
+
+    const result = await t
+      .withIdentity(workos("user_ops1"))
+      .action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
+    expect(result).toMatchObject({ pushed: 1, alreadyHandled: 1, unresolved: 1 });
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    const payouts = operations.filter((operation) => operation.kind === "distribution_payout");
+    expect(payouts.map((operation) => operation.status).sort()).toEqual(["submitted", "unknown"]);
+    const unknown = payouts.find((operation) => operation.recipientUserId === u1);
+    expect(unknown).toMatchObject({
+      attemptCount: 1,
+      retrySafe: false,
+    });
+    expect(unknown?.submittedSignature).toBeUndefined();
+    const rows = await ledgerRows(t, propertyId, PERIOD);
+    expect(rows.filter((row) => row.txSig)).toHaveLength(1);
+    expect(rows.every((row) => row.status === "scheduled")).toBe(true);
+  });
 });
 
 describe("pushDistribution — the step-up stub gates the irreversible push", () => {
@@ -301,7 +517,7 @@ describe("pushDistribution — the step-up stub gates the irreversible push", ()
     const { propertyId } = await seedBuiltDraft(t);
     await t
       .withIdentity(workos("user_ops1"))
-      .mutation(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+      .action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
 
     // Disable step-up AND stubs the way the mint tests do — via vi.stubEnv (auto-restored in afterEach).
     vi.stubEnv("NODE_ENV", "production");
@@ -317,6 +533,49 @@ describe("pushDistribution — the step-up stub gates the irreversible push", ()
     const rows = await ledgerRows(t, propertyId, PERIOD);
     expect(rows.every((r) => r.status === "scheduled" && r.txSig === undefined)).toBe(true);
   });
+
+  test("production cannot enable the payout stub and preflight creates no payout intent", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VESPER_ENABLE_UNSAFE_STUBS", "true");
+    vi.stubEnv("VESPER_ENABLE_DISTRIBUTION_STUB", "true");
+    await expect(
+      t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD }),
+    ).rejects.toThrow("Step-up authentication is required");
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    expect(operations.filter((operation) => operation.kind === "distribution_payout")).toHaveLength(0);
+  });
+
+  test("provider exceptions after payout dispatch become unknown and are not replayed", async () => {
+    const t = convexTest(schema, modules);
+    const { propertyId } = await seedBuiltDraft(t);
+    await t.withIdentity(workos("user_ops1")).action(api.distributionPay.fundDistributionEscrow, { propertyId, period: PERIOD });
+    vi.stubEnv("VESPER_STUB_DIST_PROVIDER_THROW", "true");
+    const first = await t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
+    expect(first).toMatchObject({ pushed: 0, unresolved: 2 });
+    vi.stubEnv("VESPER_STUB_DIST_PROVIDER_THROW", "");
+    const repeated = await t.withIdentity(workos("user_ops1")).action(api.distributionPay.pushDistribution, { propertyId, period: PERIOD });
+    expect(repeated).toMatchObject({ pushed: 0, alreadyHandled: 2, unresolved: 2 });
+    const operations = await t.run(async (ctx) => ctx.db.query("externalOperations").collect());
+    const payouts = operations.filter((operation) => operation.kind === "distribution_payout");
+    expect(payouts.every((operation) => operation.status === "unknown" && operation.attemptCount === 1)).toBe(true);
+    const restored = payouts[0];
+    await t.mutation(internal.distributionPush.applyVerifiedPayoutProviderLookup, {
+      operationId: restored._id,
+      recipientAddress: restored.recipientAddress!,
+      amountBaseUnits: restored.amountBaseUnits,
+      signature: "verified-payout-signature",
+      providerReference: "verified-provider-reference",
+    });
+    const afterLookup = await t.run(async (ctx) => ctx.db.get(restored._id));
+    expect(afterLookup).toMatchObject({
+      status: "submitted",
+      submittedSignature: "verified-payout-signature",
+      lastCheckpoint: "verified_provider_lookup_restored_submission",
+    });
+  });
 });
 
 describe("distribution.execute wall — platform_admin holds no operational power", () => {
@@ -326,7 +585,7 @@ describe("distribution.execute wall — platform_admin holds no operational powe
     await seedStaff(t, { workosId: "user_pa", roles: ["platform_admin"], name: "Sam Lee" });
 
     await expect(
-      t.withIdentity(workos("user_pa")).mutation(api.distributionPay.fundDistributionEscrow, {
+      t.withIdentity(workos("user_pa")).action(api.distributionPay.fundDistributionEscrow, {
         propertyId,
         period: PERIOD,
       }),

@@ -11,4 +11,10 @@ pub enum DvpError {
     InvalidVault,
     InvalidTreasury,
     InvalidTokenAccount,
+    InvalidPropertyMint,
+    InvalidPaymentMint,
+    UnsupportedMintExtension,
+    InsufficientVaultInventory,
+    TokenAccountMustBeFrozen,
+    PublicThawDisabled,
 }

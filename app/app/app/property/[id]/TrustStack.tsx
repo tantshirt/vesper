@@ -12,6 +12,9 @@ export default function TrustStack({ gates }: { gates: Doc<"diligenceGates">[] }
         <p className="pd-eb">Who checked it</p>
         <h2 className="pd-h" id="trust-stack-h">Diligence gates — signed by people.</h2>
         <p className="gate-empty">Diligence gates are being prepared. A named human signs each one.</p>
+        <p className="pd-note">
+          No completed review is shown yet. Diligence does not guarantee income, future value, or resale.
+        </p>
       </section>
     );
   }
@@ -25,8 +28,12 @@ export default function TrustStack({ gates }: { gates: Doc<"diligenceGates">[] }
         {gates.length}-point diligence gate
       </h2>
       <p className="pd-thead">
-        AI accelerated the review.{" "}
-        <b>{allSigned ? "A named human signed every gate." : "Each gate shows its current signer status."}</b>
+        The checks below cover the evidence named in each diligence gate.{" "}
+        <b>{allSigned ? "A named human signed every gate." : "Each gate shows its current review and signer status."}</b>
+      </p>
+      <p className="pd-note">
+        Diligence review confirms only the checks and evidence shown here. It does not guarantee income,
+        future value, or the ability to resell.
       </p>
 
       <ul className="gate-list">

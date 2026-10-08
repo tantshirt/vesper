@@ -15,8 +15,10 @@
     "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
     "@workos-inc/authkit-nextjs": "^2.9.0",
     "convex": "^1.17.0",
+    "jose": "^5.10.0",
     "next": "^16.2.10",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
